@@ -1,0 +1,17 @@
+# Example 1: Basic test against example.com
+#
+# Navigates to https://example.com, clicks "More information…",
+# then asserts the text "Example Domain" is visible.
+#
+# Run with:
+#   npx ts-node src/cli.ts run tests/example.yaml
+
+test:
+  name: "Example Domain — basic navigation test"
+  steps:
+    - navigate: "https://example.com"
+    - assert:
+        text: "Example Domain"
+    - click: "More information..."
+    - assert:
+        url: "iana.org"

@@ -1,0 +1,18 @@
+# Example 2: Variables + fill demo against duckduckgo.com
+#
+# Demonstrates template variable resolution: {{ query }} in fill value.
+#
+# Run with:
+#   npx ts-node src/cli.ts run tests/search.yaml
+
+test:
+  name: "DuckDuckGo — search using variables"
+  variables:
+    query: "Playwright testing"
+  steps:
+    - navigate: "https://duckduckgo.com"
+    - fill:
+        target: "Search the web"
+        value: "{{ query }}"
+    - assert:
+        text: "DuckDuckGo"
