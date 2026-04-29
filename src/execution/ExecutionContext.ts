@@ -26,16 +26,27 @@ export class ExecutionContext {
   }
 
   /**
-   * Resolve a template string, replacing {{ var }} with stored values.
-   * Example: "Hello {{ name }}!" → "Hello World!" if name = "World"
-   * Unknown variables are left as-is.
+   * Resolve a template string, replacing {{ var }} and {{ obj.path }} expressions.
+   * Dot-notation traverses stored objects: {{ user.address.city }} walks into a
+   * stored "user" object. Unknown paths are left as-is.
    */
   resolve(template: string): string {
     return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
-      const value = this.variables.get(key);
-      if (value === undefined || value === null) return _match; // leave unresolved
-      return String(value);
+      const value = this.getPath(key);
+      if (value === undefined || value === null) return _match;
+      return typeof value === "object" ? JSON.stringify(value) : String(value);
     });
+  }
+
+  /** Walk a dot-separated path into stored variables. */
+  private getPath(path: string): unknown {
+    const parts = path.split(".");
+    let value: unknown = this.variables.get(parts[0]);
+    for (let i = 1; i < parts.length; i++) {
+      if (value === null || value === undefined || typeof value !== "object") return undefined;
+      value = (value as Record<string, unknown>)[parts[i]];
+    }
+    return value;
   }
 
   /** Convenience: update the tracked current_url */

@@ -1,22 +1,25 @@
 /**
  * DslParser — reads a YAML test file and converts it to a TestDefinition.
  *
- * Supported YAML shape:
+ * Supported step shapes:
  *
- * test:
- *   name: my test
- *   variables:
- *     base_url: https://example.com
- *   steps:
- *     - navigate: https://example.com
- *     - click: "More information"
- *     - fill:
- *         target: "#search"
- *         value: "hello"
- *     - assert:
- *         text: "Example Domain"
- *     - assert:
- *         url: "example.com"
+ *   - navigate: https://example.com
+ *   - click: "Submit"
+ *   - fill:
+ *       target: "#email"
+ *       value: "user@example.com"
+ *   - assert:
+ *       text: "Welcome"          # text visible on page
+ *   - assert:
+ *       url: "dashboard"         # current URL contains substring
+ *   - assert:
+ *       value: "{{ user.name }}" # resolved value equals expected
+ *       equals: "Alice"
+ *   - api:
+ *       method: GET
+ *       url: "https://api.example.com/users/1"
+ *       assert_status: 200
+ *       store_as: user
  */
 import * as fs from "fs";
 import * as yaml from "js-yaml";
@@ -24,11 +27,12 @@ import { TestDefinition, StepAction } from "./types";
 
 // Raw YAML shapes (what js-yaml returns before we normalize)
 type RawStep =
-  | string                                             // e.g. "navigate: https://..."  — scalar form not used
+  | string
   | { navigate: string }
   | { click: string }
   | { fill: { target: string; value: string } | string }
-  | { assert: { text?: string; url?: string } }
+  | { assert: { text?: string; url?: string; value?: string; equals?: string } }
+  | { api: { method: string; url: string; headers?: Record<string, string>; body?: unknown; store_as?: string; assert_status?: number } }
   | Record<string, unknown>;
 
 interface RawTestFile {
@@ -94,7 +98,7 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     throw new Error(`Step[${idx}] fill: expected an object with target/value`);
   }
 
-  // assert — two sub-forms: text or url
+  // assert — sub-forms: text, url, value+equals
   if ("assert" in raw) {
     const assert = raw.assert as Record<string, string> | undefined;
     if (!assert) throw new Error(`Step[${idx}] assert: empty`);
@@ -105,10 +109,31 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     if ("url" in assert && typeof assert.url === "string") {
       return { action: "assert", kind: "url", value: assert.url };
     }
-    throw new Error(`Step[${idx}] assert: must have "text" or "url" key`);
+    if ("value" in assert && typeof assert.value === "string") {
+      if (!assert.equals) throw new Error(`Step[${idx}] assert.value: missing "equals"`);
+      return { action: "assert", kind: "equals", value: assert.value, equals: assert.equals };
+    }
+    throw new Error(`Step[${idx}] assert: must have "text", "url", or "value+equals" key`);
+  }
+
+  // api
+  if ("api" in raw) {
+    const api = raw.api as Record<string, unknown> | undefined;
+    if (!api) throw new Error(`Step[${idx}] api: empty`);
+    if (typeof api.method !== "string") throw new Error(`Step[${idx}] api: missing "method"`);
+    if (typeof api.url    !== "string") throw new Error(`Step[${idx}] api: missing "url"`);
+    return {
+      action:        "api",
+      method:        api.method,
+      url:           api.url,
+      headers:       api.headers as Record<string, string> | undefined,
+      body:          api.body,
+      store_as:      typeof api.store_as === "string" ? api.store_as : undefined,
+      assert_status: typeof api.assert_status === "number" ? api.assert_status : undefined,
+    };
   }
 
   throw new Error(
-    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert. Got: ${JSON.stringify(raw)}`
+    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api. Got: ${JSON.stringify(raw)}`
   );
 }

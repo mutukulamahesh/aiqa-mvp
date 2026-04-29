@@ -21,9 +21,9 @@ export interface PlaywrightAdapterOptions {
 }
 
 export class PlaywrightAdapter implements AdapterActions {
-  private browser!: Browser;
-  private context!: BrowserContext;
-  private page!: Page;
+  private browser: Browser | undefined;
+  private context: BrowserContext | undefined;
+  private page: Page | undefined;
   private timeout: number;
 
   constructor(private opts: PlaywrightAdapterOptions) {
@@ -32,7 +32,9 @@ export class PlaywrightAdapter implements AdapterActions {
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
+  /** Launch the browser. Called lazily on first UI action if not called explicitly. */
   async launch(): Promise<void> {
+    if (this.browser) return;
     this.browser = await chromium.launch({
       headless: this.opts.headless,
       slowMo: this.opts.slowMo ?? 0,
@@ -46,10 +48,17 @@ export class PlaywrightAdapter implements AdapterActions {
     await this.browser?.close();
   }
 
+  /** Ensure the browser is running before any UI operation. */
+  private async ensureLaunched(): Promise<Page> {
+    if (!this.page) await this.launch();
+    return this.page!;
+  }
+
   // ── AdapterActions ───────────────────────────────────────────────────────
 
   async navigate(url: string): Promise<void> {
-    await this.page.goto(url, { waitUntil: "domcontentloaded" });
+    const page = await this.ensureLaunched();
+    await page.goto(url, { waitUntil: "domcontentloaded" });
   }
 
   async click(locator: string): Promise<void> {
@@ -63,8 +72,8 @@ export class PlaywrightAdapter implements AdapterActions {
   }
 
   async assertTextVisible(text: string): Promise<void> {
-    // getByText with exact:false so substring matches work
-    const el = this.page.getByText(text, { exact: false });
+    const page = await this.ensureLaunched();
+    const el = page.getByText(text, { exact: false });
     await el
       .first()
       .waitFor({ state: "visible", timeout: this.timeout })
@@ -74,7 +83,8 @@ export class PlaywrightAdapter implements AdapterActions {
   }
 
   async assertUrlContains(substring: string): Promise<void> {
-    const current = this.page.url();
+    const page = await this.ensureLaunched();
+    const current = page.url();
     if (!current.includes(substring)) {
       throw new Error(
         `assertUrlContains: expected URL to contain "${substring}", got "${current}"`
@@ -85,38 +95,35 @@ export class PlaywrightAdapter implements AdapterActions {
   // ── Private helpers ──────────────────────────────────────────────────────
 
   private async resolveLocator(descriptor: string): Promise<Locator> {
+    const page = await this.ensureLaunched();
+
     // Strategy 1 — CSS or XPath (starts with # . [ // @)
     if (/^[#.\[/@]/.test(descriptor)) {
-      return this.page.locator(descriptor);
+      return page.locator(descriptor);
     }
 
     const strategies: Locator[] = [
-      this.page.getByRole("button", { name: descriptor, exact: true }),
-      this.page.getByRole("link", { name: descriptor, exact: true }),
-      this.page.getByLabel(descriptor, { exact: true }),
-      this.page.getByPlaceholder(descriptor, { exact: true }),
-      this.page.getByText(descriptor, { exact: true }),
-      
-      this.page.getByLabel(descriptor, { exact: false }),
-      this.page.getByPlaceholder(descriptor, { exact: false }),
-      this.page.getByRole("button", { name: descriptor, exact: false }),
-      this.page.getByRole("link", { name: descriptor, exact: false }),
-      this.page.getByText(descriptor, { exact: false }),
+      page.getByRole("button", { name: descriptor, exact: true }),
+      page.getByRole("link",   { name: descriptor, exact: true }),
+      page.getByLabel(descriptor,       { exact: true }),
+      page.getByPlaceholder(descriptor, { exact: true }),
+      page.getByText(descriptor,        { exact: true }),
+      page.getByLabel(descriptor,       { exact: false }),
+      page.getByPlaceholder(descriptor, { exact: false }),
+      page.getByRole("button", { name: descriptor, exact: false }),
+      page.getByRole("link",   { name: descriptor, exact: false }),
+      page.getByText(descriptor,        { exact: false }),
     ];
 
     const start = Date.now();
-    // Poll through strategies in priority order until one finds an element or timeout is reached
     while (Date.now() - start < this.timeout) {
       for (const loc of strategies) {
         try {
-          if ((await loc.count()) > 0) {
-            return loc.first();
-          }
+          if ((await loc.count()) > 0) return loc.first();
         } catch {
-          // ignore parsing errors (e.g. if we add a raw css fallback that throws)
+          // ignore locator parse errors
         }
       }
-      // Wait 100ms before checking again
       await new Promise((r) => setTimeout(r, 100));
     }
 

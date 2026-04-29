@@ -35,6 +35,16 @@ export class AssertionHandler implements StepHandler {
         break;
       }
 
+      case "equals": {
+        if (!step.equals) throw new Error(`AssertionHandler: assert kind "equals" is missing the "equals" field`);
+        const expected = ctx.resolve(step.equals);
+        console.log(`  ▶ assert    → "${value}" equals "${expected}"`);
+        if (value !== expected) {
+          throw new Error(`assertEquals: expected "${expected}", got "${value}"`);
+        }
+        break;
+      }
+
       default: {
         throw new Error(`AssertionHandler: unknown assert kind: "${(step as { kind: string }).kind}"`);
       }

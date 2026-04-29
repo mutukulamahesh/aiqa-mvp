@@ -5,6 +5,7 @@
 import { HandlerRegistry } from "./HandlerRegistry";
 import { UIActionHandler } from "../handlers/UIActionHandler";
 import { AssertionHandler } from "../handlers/AssertionHandler";
+import { APIActionHandler } from "../handlers/APIActionHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
@@ -15,7 +16,8 @@ export class StepInterpreter {
   constructor() {
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
-      .register(new AssertionHandler());
+      .register(new AssertionHandler())
+      .register(new APIActionHandler());
   }
 
   async execute(

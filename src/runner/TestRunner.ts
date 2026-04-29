@@ -2,11 +2,10 @@
  * TestRunner — orchestrates a full test run end-to-end.
  *
  * Flow:
- *   1. Launch PlaywrightAdapter
- *   2. Build ExecutionContext with test variables
- *   3. Feed each step into StepInterpreter
- *   4. Collect pass/fail result
- *   5. Close the browser
+ *   1. Build ExecutionContext with test variables
+ *   2. Feed each step into StepInterpreter
+ *   3. Collect pass/fail result
+ *   4. Close the adapter (no-op if no browser was opened)
  */
 import { PlaywrightAdapter } from "../adapter/PlaywrightAdapter";
 import { ExecutionContext } from "../execution/ExecutionContext";
@@ -60,7 +59,6 @@ export class TestRunner {
     console.log();
 
     try {
-      await adapter.launch();
 
       for (let i = 0; i < test.steps.length; i++) {
         const step = test.steps[i];
