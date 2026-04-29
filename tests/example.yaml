@@ -12,6 +12,6 @@ test:
     - navigate: "https://example.com"
     - assert:
         text: "Example Domain"
-    - click: "More information..."
+    - click: "Learn more"
     - assert:
         url: "iana.org"
