@@ -7,6 +7,7 @@
  *   3. Collect pass/fail result
  *   4. Close the adapter (no-op if no browser was opened)
  */
+import * as path from "path";
 import { PlaywrightAdapter } from "../adapter/PlaywrightAdapter";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { StepInterpreter } from "../execution/StepInterpreter";
@@ -17,6 +18,7 @@ export interface RunnerOptions {
   headless: boolean;
   slowMo?: number;
   timeout?: number;
+  screenshotsDir?: string;
 }
 
 export interface TestResult {
@@ -89,6 +91,12 @@ export class TestRunner {
             error_message: msg,
           });
           console.log(`  🔍 [${debugResult.failure_class}] ${debugResult.suggested_fix}`);
+
+          if (this.opts.screenshotsDir) {
+            const screenshotPath = path.join(this.opts.screenshotsDir, `step-${i + 1}-fail.png`);
+            await adapter.screenshot(screenshotPath).catch(() => undefined);
+            console.log(`  📸 Screenshot → ${screenshotPath}`);
+          }
 
           stepResults.push({
             index: i,

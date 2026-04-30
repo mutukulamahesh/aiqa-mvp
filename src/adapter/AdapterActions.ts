@@ -8,4 +8,5 @@ export interface AdapterActions {
   fill(locator: string, value: string): Promise<void>;
   assertTextVisible(text: string): Promise<void>;
   assertUrlContains(substring: string): Promise<void>;
+  screenshot(filePath: string): Promise<void>;
 }

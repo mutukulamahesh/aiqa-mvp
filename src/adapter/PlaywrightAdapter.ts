@@ -11,6 +11,8 @@
  * This smart fallback means DSL authors can write human-readable
  * names ("More information", "Submit") instead of brittle CSS selectors.
  */
+import * as fs from "fs";
+import * as path from "path";
 import { chromium, Browser, BrowserContext, Page, Locator } from "playwright";
 import { AdapterActions } from "./AdapterActions";
 
@@ -90,6 +92,12 @@ export class PlaywrightAdapter implements AdapterActions {
         `assertUrlContains: expected URL to contain "${substring}", got "${current}"`
       );
     }
+  }
+
+  async screenshot(filePath: string): Promise<void> {
+    if (!this.page) return;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    await this.page.screenshot({ path: filePath, fullPage: true });
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
