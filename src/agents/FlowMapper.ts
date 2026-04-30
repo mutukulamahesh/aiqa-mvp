@@ -29,6 +29,37 @@ export class FlowMapper {
     this.llm = llm ?? createLLMProvider();
   }
 
+  perPageFlows(exploration: ExplorationResult): UserFlow[] {
+    const seenSlugs = new Set<string>();
+    return exploration.pages.flatMap(page => {
+      const steps: FlowStep[] = [{ action: "navigate", target: page.url }];
+      page.headings.slice(0, 2).forEach(h => {
+        if (h) steps.push({ action: "assert", target: "text", value: h });
+      });
+      if (page.inputs.length > 0 && page.buttons.some(b => /submit|send|save/i.test(b))) {
+        for (const input of page.inputs.slice(0, 4)) {
+          const label = input.placeholder ?? input.name ?? input.type;
+          steps.push({ action: "fill", target: label, value: this.sampleValue(input.type, input.name) });
+        }
+      }
+      const pathname = (() => { try { return new URL(page.url).pathname.replace(/\/$/, "") || "/"; } catch { return "/"; } })();
+      const slug = pathname === "/" || pathname === "/index.html"
+        ? "home"
+        : pathname.replace(/^\//, "").replace(/\.html$/, "").replace(/[/\\]/g, " ");
+      if (seenSlugs.has(slug)) return [];
+      seenSlugs.add(slug);
+      const name = slug.charAt(0).toUpperCase() + slug.slice(1);
+      return [{
+        name:        `Page — ${name}`,
+        description: `Verify ${page.url} loads and displays expected content`,
+        type:        "navigation" as const,
+        priority:    "medium" as const,
+        pages:       [page.url],
+        steps,
+      }];
+    });
+  }
+
   async map(exploration: ExplorationResult): Promise<UserFlow[]> {
     const heuristic = this.heuristicFlows(exploration);
 

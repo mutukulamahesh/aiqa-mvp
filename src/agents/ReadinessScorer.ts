@@ -26,7 +26,7 @@ export class ReadinessScorer {
     const passRate = total > 0 ? passed / total : 0;
 
     // ── Coverage layers ────────────────────────────────────────────────────
-    const allSteps = results.flatMap(r => r.stepResults);
+    const allSteps = results.flatMap(r => r.stepResults ?? []);
     const coverageLayers: string[] = [];
     if (allSteps.some(s => ["navigate", "click", "fill"].includes(s.action))) coverageLayers.push("UI");
     if (allSteps.some(s => s.action === "api"))                               coverageLayers.push("API");

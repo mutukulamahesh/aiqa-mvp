@@ -9,6 +9,7 @@ import { FlowMapper } from "./agents/FlowMapper";
 import { ScenarioGenerator } from "./agents/ScenarioGenerator";
 import { ReadinessScorer } from "./agents/ReadinessScorer";
 import { JiraAdapter } from "./integrations/JiraAdapter";
+import { HTMLReporter } from "./reporters/HTMLReporter";
 
 const program = new Command();
 
@@ -23,7 +24,8 @@ program
   .command("run <file>")
   .description("Run a DSL test file")
   .option("--headless", "Run browser in headless mode", false)
-  .action(async (file: string, opts: { headless: boolean }) => {
+  .option("--report <file>", "Write an HTML report to this path")
+  .action(async (file: string, opts: { headless: boolean; report?: string }) => {
     const testFilePath = path.resolve(process.cwd(), file);
 
     console.log(`\n🚀 AIQA Runner`);
@@ -50,6 +52,13 @@ program
       console.log(`   Reason: ${result.error}`);
     }
     console.log(`─────────────────────────────────────────\n`);
+
+    if (opts.report) {
+      const reporter  = new HTMLReporter();
+      const reportPath = path.resolve(process.cwd(), opts.report);
+      reporter.generate([result], reportPath);
+      console.log(`📄 Report saved → ${reportPath}\n`);
+    }
 
     process.exit(result.passed ? 0 : 1);
   });
@@ -95,7 +104,8 @@ program
   .description("Generate YAML test scenarios from an exploration JSON file")
   .option("--output <dir>", "Output directory for generated YAML files", "generated")
   .option("--jira <projectKey>", "Also pull stories from Jira (mock) and generate scenarios")
-  .action(async (explorationFile: string, opts: { output: string; jira?: string }) => {
+  .option("--per-page", "Generate one test file per discovered page instead of per flow")
+  .action(async (explorationFile: string, opts: { output: string; jira?: string; perPage?: boolean }) => {
     console.log(`\n⚙️  AIQA Generator`);
     console.log(`   Input : ${explorationFile}`);
     console.log(`   Output: ${opts.output}/`);
@@ -115,7 +125,9 @@ program
     const generator = new ScenarioGenerator();
 
     // Flows from exploration
-    let flows = await mapper.map(exploration);
+    let flows = opts.perPage
+      ? mapper.perPageFlows(exploration)
+      : await mapper.map(exploration);
 
     // Optionally merge flows from Jira mock stories
     if (opts.jira) {
@@ -174,6 +186,76 @@ program
     }
     console.log(`\n   ${report.recommendation}`);
     console.log(`─────────────────────────────────────────\n`);
+  });
+
+// ── run-all ───────────────────────────────────────────────────────────────────
+
+program
+  .command("run-all <dir>")
+  .description("Run every YAML test file in a directory and generate an HTML report")
+  .option("--headless", "Run browser in headless mode", false)
+  .option("--report <file>", "HTML report output path", "report/index.html")
+  .option("--results <file>", "Save raw JSON results to this path")
+  .option("--base-url <url>", "Base URL shown in the report header")
+  .action(async (dir: string, opts: { headless: boolean; report: string; results?: string; baseUrl?: string }) => {
+    const dirPath = path.resolve(process.cwd(), dir);
+    if (!fs.existsSync(dirPath)) {
+      console.error(`❌ Directory not found: ${dirPath}`);
+      process.exit(1);
+    }
+
+    const files = fs.readdirSync(dirPath)
+      .filter(f => f.endsWith(".yaml") || f.endsWith(".yml"))
+      .map(f => path.join(dirPath, f));
+
+    if (files.length === 0) {
+      console.error(`❌ No YAML files found in ${dirPath}`);
+      process.exit(1);
+    }
+
+    console.log(`\n🚀 AIQA Run-All`);
+    console.log(`   Directory: ${dirPath}`);
+    console.log(`   Files    : ${files.length}`);
+    console.log(`   Headless : ${opts.headless}`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    const runner  = new TestRunner({ headless: opts.headless });
+    const allResults = [];
+    let passed = 0;
+
+    for (const file of files) {
+      let testDef;
+      try {
+        testDef = parseTestFile(file);
+      } catch (err) {
+        console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
+        continue;
+      }
+      const result = await runner.run(testDef);
+      allResults.push(result);
+      if (result.passed) passed++;
+      console.log();
+    }
+
+    const failed = allResults.length - passed;
+    console.log(`─────────────────────────────────────────`);
+    console.log(`   Ran   : ${allResults.length} test(s)`);
+    console.log(`   Passed: ${passed}   Failed: ${failed}`);
+
+    if (opts.results) {
+      const rPath = path.resolve(process.cwd(), opts.results);
+      fs.mkdirSync(path.dirname(rPath), { recursive: true });
+      fs.writeFileSync(rPath, JSON.stringify(allResults, null, 2));
+      console.log(`   JSON  → ${rPath}`);
+    }
+
+    const reportPath = path.resolve(process.cwd(), opts.report);
+    const reporter   = new HTMLReporter();
+    reporter.generate(allResults, reportPath, { baseUrl: opts.baseUrl ?? dir });
+    console.log(`   HTML  → ${reportPath}`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    process.exit(failed > 0 ? 1 : 0);
   });
 
 program.parse(process.argv);
