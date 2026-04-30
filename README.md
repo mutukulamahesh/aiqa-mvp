@@ -8,11 +8,13 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 
 ## What it does
 
-- **Run tests** defined in YAML — web UI, API, or mixed
+- **Init a project** in one command — folder structure, sample test, ready to run
 - **Explore any app** autonomously and map its pages and flows
-- **Generate test files** from the exploration — no manual test writing
-- **Diagnose failures** automatically with AI-powered root-cause analysis
+- **Generate test files** per page or per flow — no manual test writing
+- **Run tests** defined in YAML — web UI, API, or mixed
+- **Diagnose failures** automatically with AI root-cause analysis and screenshots
 - **Score readiness** — get a 0–100 grade on your test coverage
+- **HTML reports** generated automatically after every run
 - **Plug in real LLM** (Claude) at any time — no code changes needed
 
 ---
@@ -35,23 +37,42 @@ npx playwright install
 
 ---
 
-## CLI Reference
-
-### `aiqa run <file>` — Run a test file
+## Quickstart — test any app in 4 commands
 
 ```bash
-npx ts-node src/cli.ts run tests/example.yaml --headless
-npx ts-node src/cli.ts run tests/api_example.yaml
+npx ts-node src/cli.ts init myproject
+npx ts-node src/cli.ts explore https://yourapp.com --out myproject
+npx ts-node src/cli.ts generate --out myproject --per-page
+npx ts-node src/cli.ts run-all --out myproject --headless
 ```
 
-Options:
-- `--headless` — run browser in headless mode (required in CI / no display)
+This creates a complete project folder:
 
-On failure the DebuggerAgent automatically classifies the error and suggests a fix:
 ```
-✗ FAILED: assertTextVisible: text "Submit" not found on page
-🔍 [locator_failure] Check that the button/link text matches what is rendered.
+myproject/
+  exploration.json          ← live page map from the crawl
+  tests/
+    page_home.yaml          ← one test file per discovered page
+    page_about.yaml
+    page_contact.yaml
+  results/
+    run-2026-01-15T10-30-45.json   ← auto-saved after every run
+    report.html                    ← HTML report auto-saved after every run
+  screenshots/
+    step-3-fail.png         ← captured automatically on any step failure
 ```
+
+---
+
+## CLI Reference
+
+### `aiqa init <project>` — Create a project workspace
+
+```bash
+npx ts-node src/cli.ts init myproject
+```
+
+Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starter `tests/sample.yaml`.
 
 ---
 
@@ -60,43 +81,106 @@ On failure the DebuggerAgent automatically classifies the error and suggests a f
 Navigates the app, maps all pages, forms, buttons, and internal links into a structured JSON file.
 
 ```bash
-npx ts-node src/cli.ts explore https://yourapp.com --max-pages 10 --output exploration.json
+# Save into a project folder
+npx ts-node src/cli.ts explore https://yourapp.com --out myproject --max-pages 20
+
+# Or save to an explicit path
+npx ts-node src/cli.ts explore https://yourapp.com --output exploration.json
 ```
 
 Options:
+- `--out <folder>` — project folder; saves to `<folder>/exploration.json`
+- `--output <file>` — explicit output file path
 - `--max-pages <n>` — maximum pages to crawl (default: 10)
-- `--output <file>` — output file path (default: `exploration.json`)
 
 Output:
 ```
-✅ Explored 6 page(s), 24 internal link(s)
+✅ Explored 5 page(s), 17 internal link(s)
    • https://yourapp.com          — Home
-   • https://yourapp.com/login    — Login
-   • https://yourapp.com/register — Register
+   • https://yourapp.com/about    — About
+   • https://yourapp.com/contact  — Contact
+
+   Saved → myproject/exploration.json
 ```
 
 ---
 
-### `aiqa generate <exploration.json>` — Generate test scenarios
+### `aiqa generate [exploration]` — Generate test scenarios
 
-Reads an exploration file, identifies user flows (auth, forms, navigation), and generates ready-to-run YAML test files.
+Reads an exploration file, identifies user flows or individual pages, and generates ready-to-run YAML test files.
 
 ```bash
-npx ts-node src/cli.ts generate exploration.json --output generated/
+# Generate one test per page (recommended for new projects)
+npx ts-node src/cli.ts generate --out myproject --per-page
+
+# Generate one test per flow (auth, forms, navigation)
+npx ts-node src/cli.ts generate --out myproject
+
+# Explicit paths
+npx ts-node src/cli.ts generate exploration.json --output tests/
 ```
 
 Options:
-- `--output <dir>` — output directory (default: `generated/`)
-- `--jira <projectKey>` — also pull mock Jira stories and generate scenarios from them
+- `--out <folder>` — project folder; reads `<folder>/exploration.json`, writes to `<folder>/tests/`
+- `--output <dir>` — explicit output directory
+- `--per-page` — one test file per discovered page instead of per flow
+- `--jira <projectKey>` — also pull mock Jira stories and generate scenarios
 
 Output:
 ```
-   ✔ user_authentication.yaml     [authentication]
-   ✔ user_registration.yaml       [form_submission]
-   ✔ navigation_key_pages.yaml    [navigation]
+   ✔ page_home.yaml      [navigation]
+   ✔ page_about.yaml     [navigation]
+   ✔ page_contact.yaml   [navigation]
 
-✅ Generated 3 scenario(s) → generated/
-   Run them with: aiqa run generated/<file>.yaml --headless
+✅ Generated 3 scenario(s) → myproject/tests/
+```
+
+---
+
+### `aiqa run <file>` — Run a single test file
+
+```bash
+npx ts-node src/cli.ts run tests/example.yaml --headless
+npx ts-node src/cli.ts run tests/example.yaml --out myproject --headless
+```
+
+Options:
+- `--headless` — run browser in headless mode (required in CI / no display)
+- `--out <folder>` — saves screenshots, results JSON, and HTML report into the project folder
+- `--report <file>` — explicit HTML report output path
+
+On failure the DebuggerAgent automatically classifies the error, suggests a fix, and captures a screenshot:
+```
+✗ FAILED: assertTextVisible: text "Submit" not found on page
+🔍 [locator_failure] Check that the selector matches what is rendered.
+📸 Screenshot → myproject/screenshots/step-3-fail.png
+```
+
+---
+
+### `aiqa run-all [dir]` — Run all tests in a directory
+
+```bash
+# Using project folder (recommended)
+npx ts-node src/cli.ts run-all --out myproject --headless
+
+# Explicit directory
+npx ts-node src/cli.ts run-all myproject/tests/ --headless --report myproject/results/report.html
+```
+
+Options:
+- `--out <folder>` — project folder; runs `<folder>/tests/`, saves results + HTML to `<folder>/results/`
+- `--headless` — run browser in headless mode
+- `--report <file>` — explicit HTML report output path
+- `--results <file>` — explicit JSON results output path
+- `--base-url <url>` — base URL shown in the report header
+
+Output:
+```
+   Ran   : 4 test(s)
+   Passed: 4   Failed: 0
+   JSON  → myproject/results/run-2026-01-15T10-30-45.json
+   HTML  → myproject/results/report.html
 ```
 
 ---
@@ -106,7 +190,7 @@ Output:
 Computes a 0–100 readiness score from saved test results.
 
 ```bash
-npx ts-node src/cli.ts score results.json
+npx ts-node src/cli.ts score myproject/results/run-2026-01-15T10-30-45.json
 ```
 
 Output:
@@ -114,8 +198,8 @@ Output:
 📊 Readiness Report
    Score   : 88/100  (B)
    Tests   : 7/8 passed  (87%)
-   Coverage: UI, API, Assertions
-   Issues  : 1× locator failure
+   Coverage: UI, Assertions
+   Issues  : 1 test failed
 
    Good coverage. Address failing tests before releasing.
 ```
@@ -225,7 +309,7 @@ No code changes required — the factory picks it up automatically.
 
 ```
 src/
-  cli.ts                        # CLI entry point (run, explore, generate, score)
+  cli.ts                        # CLI entry point (init, run, explore, generate, run-all, score)
   dsl/
     types.ts                    # DSL type definitions
     DslParser.ts                # YAML → TestDefinition parser
@@ -239,10 +323,12 @@ src/
     AssertionHandler.ts         # assert (text, url, equals)
     APIActionHandler.ts         # api step execution
   adapter/
-    AdapterActions.ts           # Browser adapter interface
-    PlaywrightAdapter.ts        # Playwright implementation (lazy launch)
+    AdapterActions.ts           # Browser adapter interface (includes screenshot)
+    PlaywrightAdapter.ts        # Playwright implementation (lazy launch + screenshots)
   runner/
-    TestRunner.ts               # End-to-end test orchestration
+    TestRunner.ts               # End-to-end test orchestration + failure screenshots
+  reporters/
+    HTMLReporter.ts             # Self-contained HTML report generator
   llm/
     LLMProvider.ts              # Interface + factory
     MockLLMProvider.ts          # Rule-based, no API key needed
@@ -250,7 +336,7 @@ src/
   agents/
     DebuggerAgent.ts            # Failure classification + fix suggestions
     AppExplorer.ts              # Playwright-based app crawler
-    FlowMapper.ts               # Heuristic user flow identification
+    FlowMapper.ts               # Heuristic flow identification + per-page flows
     ScenarioGenerator.ts        # Flow → YAML test file generator
     ReadinessScorer.ts          # 0–100 readiness score
   integrations/
@@ -274,7 +360,7 @@ npm run build        # compile TypeScript → dist/
 ## Technologies
 
 - [TypeScript](https://www.typescriptlang.org/)
-- [Playwright](https://playwright.dev/) — web automation + app crawling
+- [Playwright](https://playwright.dev/) — web automation, app crawling, and screenshots
 - [js-yaml](https://github.com/nodeca/js-yaml) — YAML test file parsing
 - [Commander.js](https://github.com/tj/commander.js) — CLI interface
 
