@@ -11,6 +11,7 @@ import { PlaywrightAdapter } from "../adapter/PlaywrightAdapter";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { StepInterpreter } from "../execution/StepInterpreter";
 import { TestDefinition } from "../dsl/types";
+import { DebuggerAgent, DebugResult } from "../agents/DebuggerAgent";
 
 export interface RunnerOptions {
   headless: boolean;
@@ -19,11 +20,12 @@ export interface RunnerOptions {
 }
 
 export interface TestResult {
-  testName: string;
-  passed: boolean;
-  durationMs: number;
-  error?: string;
+  testName:    string;
+  passed:      boolean;
+  durationMs:  number;
+  error?:      string;
   stepResults: StepResult[];
+  debugResult?: DebugResult;
 }
 
 export interface StepResult {
@@ -36,6 +38,7 @@ export interface StepResult {
 
 export class TestRunner {
   private interpreter = new StepInterpreter();
+  private debugger    = new DebuggerAgent();
 
   constructor(private opts: RunnerOptions) {}
 
@@ -78,6 +81,15 @@ export class TestRunner {
         } catch (err) {
           const msg = (err as Error).message;
           console.log(`\n  ✗ FAILED: ${msg}`);
+
+          const debugResult = await this.debugger.analyze({
+            test_name:     test.name,
+            step_action:   step.action,
+            step_index:    i,
+            error_message: msg,
+          });
+          console.log(`  🔍 [${debugResult.failure_class}] ${debugResult.suggested_fix}`);
+
           stepResults.push({
             index: i,
             action: step.action,
@@ -86,13 +98,13 @@ export class TestRunner {
             error: msg,
           });
 
-          // Stop on first failure (MVP: no retry logic)
           return {
-            testName: test.name,
-            passed: false,
-            durationMs: Date.now() - totalStart,
-            error: `Step ${i + 1} (${step.action}) failed: ${msg}`,
+            testName:    test.name,
+            passed:      false,
+            durationMs:  Date.now() - totalStart,
+            error:       `Step ${i + 1} (${step.action}) failed: ${msg}`,
             stepResults,
+            debugResult,
           };
         }
       }
