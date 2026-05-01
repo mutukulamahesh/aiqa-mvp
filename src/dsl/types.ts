@@ -6,8 +6,8 @@ export type StepAction =
   | { action: "navigate"; target: string }
   | { action: "click";    target: string }
   | { action: "fill";     target: string; value: string }
-  | { action: "assert"; kind: "text" | "url"; value: string }
-  | { action: "assert"; kind: "equals";       value: string; equals: string }
+  | { action: "assert"; kind: "text" | "url" | "visible"; value: string }
+  | { action: "assert"; kind: "equals";                   value: string; equals: string }
   | {
       action:        "api";
       method:        string;

@@ -35,6 +35,12 @@ export class AssertionHandler implements StepHandler {
         break;
       }
 
+      case "visible": {
+        console.log(`  ▶ assert    → element visible: "${value}"`);
+        await adapter.assertElementVisible(value);
+        break;
+      }
+
       case "equals": {
         if (!step.equals) throw new Error(`AssertionHandler: assert kind "equals" is missing the "equals" field`);
         const expected = ctx.resolve(step.equals);

@@ -10,8 +10,13 @@ export interface ReportOptions {
 
 export class HTMLReporter {
   generate(results: TestResult[], outputPath: string, opts: ReportOptions = {}): void {
-    const scorer  = new ReadinessScorer();
-    const report  = scorer.score(results);
+    const scorer   = new ReadinessScorer();
+    const debugMap = new Map(
+      results
+        .filter(r => r.debugResult)
+        .map(r => [r.testName, r.debugResult!])
+    );
+    const report  = scorer.score(results, debugMap);
     const html    = this.buildHtml(results, report, opts);
     const dir     = path.dirname(outputPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

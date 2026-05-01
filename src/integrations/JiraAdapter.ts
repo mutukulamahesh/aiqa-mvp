@@ -45,10 +45,9 @@ export class JiraAdapter {
     // const data = await response.json();
     // return this.parseJiraResponse(data);
 
-    throw new Error(
-      "[JiraAdapter] Real Jira integration not yet implemented. " +
-      "Set useMock: true or provide baseUrl, email, and apiToken."
-    );
+    // TODO: implement real Jira REST API call using this.config credentials
+    console.warn("[JiraAdapter] Real Jira integration not yet implemented — falling back to mock data.");
+    return this.mockStories(projectKey ?? this.config.projectKey ?? "DEMO");
   }
 
   // ── Convert stories → flows ───────────────────────────────────────────────

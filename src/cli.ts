@@ -289,8 +289,9 @@ program
   .option("--report <file>",   "Explicit HTML report output path (overrides --out)")
   .option("--results <file>",  "Explicit JSON results output path (overrides --out)")
   .option("--base-url <url>",  "Base URL shown in the report header")
+  .option("--workers <n>",     "Number of tests to run in parallel (default: 1)", "1")
   .action(async (dir: string | undefined, opts: {
-    headless: boolean; out?: string; report?: string; results?: string; baseUrl?: string;
+    headless: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers: string;
   }) => {
     const outRoot = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
@@ -320,31 +321,43 @@ program
     }
 
     const screenshotsDir = outRoot ? path.join(outRoot, "screenshots") : undefined;
+    const workers        = Math.max(1, parseInt(opts.workers, 10) || 1);
 
     console.log(`\n🚀 AIQA Run-All`);
     console.log(`   Directory: ${testsDir}`);
     console.log(`   Files    : ${files.length}`);
     console.log(`   Headless : ${opts.headless}`);
+    console.log(`   Workers  : ${workers}`);
     if (outRoot) console.log(`   Out      : ${outRoot}`);
     console.log(`─────────────────────────────────────────\n`);
 
-    const runner     = new TestRunner({ headless: opts.headless, screenshotsDir });
-    const allResults = [];
-    let passed = 0;
+    const runnerOpts = { headless: opts.headless, screenshotsDir };
 
-    for (const file of files) {
-      let testDef;
-      try {
-        testDef = parseTestFile(file);
-      } catch (err) {
-        console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
-        continue;
+    // concurrency-limited runner — each slot picks the next file from a shared queue
+    const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
+    let cursor = 0;
+
+    const runSlot = async () => {
+      while (cursor < files.length) {
+        const idx  = cursor++;
+        const file = files[idx];
+        let testDef;
+        try {
+          testDef = parseTestFile(file);
+        } catch (err) {
+          console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
+          continue;
+        }
+        const result = await new TestRunner(runnerOpts).run(testDef);
+        orderedResults[idx] = result;
+        console.log();
       }
-      const result = await runner.run(testDef);
-      allResults.push(result);
-      if (result.passed) passed++;
-      console.log();
-    }
+    };
+
+    await Promise.all(Array.from({ length: workers }, runSlot));
+
+    const allResults = orderedResults.filter((r): r is NonNullable<typeof r> => r !== null);
+    const passed = allResults.filter(r => r.passed).length;
 
     const failed = allResults.length - passed;
     console.log(`─────────────────────────────────────────`);

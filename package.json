@@ -4,7 +4,7 @@
   "description": "Enterprise AI QA Platform — Minimal Working MVP",
   "main": "dist/cli.js",
   "bin": {
-    "aiqa": "dist/cli.js"
+    "aiqa": "bin/aiqa.js"
   },
   "scripts": {
     "build": "tsc",

@@ -94,6 +94,13 @@ export class PlaywrightAdapter implements AdapterActions {
     }
   }
 
+  async assertElementVisible(locator: string): Promise<void> {
+    const el = await this.resolveLocator(locator);
+    await el.first().waitFor({ state: "visible", timeout: this.timeout }).catch(() => {
+      throw new Error(`assertElementVisible: element "${locator}" not visible on page`);
+    });
+  }
+
   async screenshot(filePath: string): Promise<void> {
     if (!this.page) return;
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -123,18 +130,10 @@ export class PlaywrightAdapter implements AdapterActions {
       page.getByText(descriptor,        { exact: false }),
     ];
 
-    const start = Date.now();
-    while (Date.now() - start < this.timeout) {
-      for (const loc of strategies) {
-        try {
-          if ((await loc.count()) > 0) return loc.first();
-        } catch {
-          // ignore locator parse errors
-        }
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    throw new Error(`Timeout ${this.timeout}ms exceeded. Could not resolve locator for: "${descriptor}"`);
+    const union = strategies.reduce((acc, loc) => acc.or(loc));
+    await union.first().waitFor({ state: "visible", timeout: this.timeout }).catch(() => {
+      throw new Error(`Timeout ${this.timeout}ms exceeded. Could not resolve locator for: "${descriptor}"`);
+    });
+    return union.first();
   }
 }

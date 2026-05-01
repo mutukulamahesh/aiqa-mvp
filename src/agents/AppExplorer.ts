@@ -1,4 +1,4 @@
-import { chromium, Browser, Page } from "playwright";
+import { chromium, Page } from "playwright";
 
 export interface InputField {
   type:         string;
@@ -75,8 +75,8 @@ export class AppExplorer {
               queue.push(link);
             }
           }
-        } catch {
-          // Skip pages that fail to load (auth walls, errors, etc.)
+        } catch (err) {
+          console.warn(`  [Explorer] Skipped ${current}: ${(err as Error).message}`);
         } finally {
           await page.close();
         }
