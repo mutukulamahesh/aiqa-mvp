@@ -1,0 +1,27 @@
+environment: staging
+
+urls:
+  base: "https://staging.example.com"
+  api:  "https://staging.example.com/api"
+
+timeouts:
+  action:     15000
+  navigation: 45000
+  api:        20000
+
+execution:
+  workers:    4
+  retries:    2
+  headless:   true
+  maxPages:   50
+  maxDepth:   4
+
+screenshots:
+  onFailure:  true
+  dir:        "results/screenshots"
+
+results:
+  dir:        "results"
+
+features:
+  llmEnabled: true

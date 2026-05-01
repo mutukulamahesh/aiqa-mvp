@@ -1,0 +1,27 @@
+environment: prod
+
+urls:
+  base: "https://example.com"
+  api:  "https://example.com/api"
+
+timeouts:
+  action:     20000
+  navigation: 60000
+  api:        25000
+
+execution:
+  workers:    4
+  retries:    2
+  headless:   true
+  maxPages:   100
+  maxDepth:   5
+
+screenshots:
+  onFailure:  true
+  dir:        "results/screenshots"
+
+results:
+  dir:        "results"
+
+features:
+  llmEnabled: true

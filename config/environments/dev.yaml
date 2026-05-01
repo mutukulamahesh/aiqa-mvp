@@ -1,0 +1,27 @@
+environment: dev
+
+urls:
+  base: "http://localhost:3000"
+  api:  "http://localhost:3000/api"
+
+timeouts:
+  action:     10000   # ms — per Playwright action (click, fill, assert)
+  navigation: 30000   # ms — page.goto / waitForURL
+  api:        15000   # ms — HTTP request timeout
+
+execution:
+  workers:    1
+  retries:    0
+  headless:   false
+  maxPages:   20
+  maxDepth:   3
+
+screenshots:
+  onFailure:  true
+  dir:        "results/screenshots"
+
+results:
+  dir:        "results"
+
+features:
+  llmEnabled: true

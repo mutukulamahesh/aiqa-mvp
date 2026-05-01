@@ -10,13 +10,34 @@ import { ScenarioGenerator } from "./agents/ScenarioGenerator";
 import { ReadinessScorer } from "./agents/ReadinessScorer";
 import { JiraAdapter } from "./integrations/JiraAdapter";
 import { HTMLReporter } from "./reporters/HTMLReporter";
+import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 
 const program = new Command();
 
+// Global env flag — parsed before subcommands run
+let _envName = "dev";
+
 program
   .name("aiqa")
-  .description("Enterprise AI QA Platform — MVP")
-  .version("1.0.0");
+  .description("Enterprise AI QA Platform")
+  .version("1.0.0")
+  .option("--env <environment>", "Environment profile to load (dev | staging | prod)", "dev")
+  .hook("preAction", (thisCommand) => {
+    _envName = (thisCommand.opts() as { env: string }).env ?? "dev";
+    try {
+      loadConfig(_envName);
+    } catch (err) {
+      console.error(`\n❌ Config error: ${(err as Error).message}\n`);
+      process.exit(1);
+    }
+    const { missing, warnings } = checkSecrets();
+    for (const w of warnings) console.warn(`⚠️  ${w}`);
+    for (const m of missing)  console.warn(`⚠️  Missing secret: ${m}`);
+  });
+
+function cfg(): EnvConfig {
+  return loadConfig(_envName);
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,16 +100,18 @@ program
 program
   .command("run <file>")
   .description("Run a single DSL test file")
-  .option("--headless", "Run browser in headless mode", false)
+  .option("--headless", "Run browser in headless mode (default: from env config)")
   .option("--out <folder>", "Project folder — saves screenshots, results JSON, and HTML report here")
   .option("--report <file>", "Explicit HTML report output path (overrides --out)")
-  .action(async (file: string, opts: { headless: boolean; out?: string; report?: string }) => {
+  .action(async (file: string, opts: { headless?: boolean; out?: string; report?: string }) => {
+    const config       = cfg();
+    const headless     = opts.headless ?? config.execution.headless;
     const testFilePath = path.resolve(process.cwd(), file);
     const outRoot      = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
-    console.log(`\n🚀 AIQA Runner`);
+    console.log(`\n🚀 AIQA Runner  [env: ${config.environment}]`);
     console.log(`   File    : ${testFilePath}`);
-    console.log(`   Headless: ${opts.headless}`);
+    console.log(`   Headless: ${headless}`);
     if (outRoot) console.log(`   Out     : ${outRoot}`);
     console.log(`─────────────────────────────────────────\n`);
 
@@ -101,7 +124,8 @@ program
     }
 
     const runner = new TestRunner({
-      headless: opts.headless,
+      headless,
+      timeout:        config.timeouts.action,
       screenshotsDir: outRoot ? path.join(outRoot, "screenshots") : undefined,
     });
     const result = await runner.run(testDef);
@@ -139,29 +163,34 @@ program
 program
   .command("explore <url>")
   .description("Crawl an application and save a structured page map to JSON")
-  .option("--max-pages <n>", "Maximum pages to crawl", "10")
-  .option("--depth <n>",     "Maximum BFS link depth (default: 3)", "3")
+  .option("--max-pages <n>", "Maximum pages to crawl (default: from env config)")
+  .option("--depth <n>",     "Maximum BFS link depth (default: from env config)")
   .option("--out <folder>",  "Project folder — saves exploration.json inside it")
   .option("--output <file>", "Explicit output file path (overrides --out)")
-  .action(async (url: string, opts: { maxPages: string; depth: string; out?: string; output?: string }) => {
+  .action(async (url: string, opts: { maxPages?: string; depth?: string; out?: string; output?: string }) => {
+    const config   = cfg();
+    const maxPages = opts.maxPages ? parseInt(opts.maxPages, 10) : config.execution.maxPages;
+    const maxDepth = opts.depth    ? parseInt(opts.depth, 10)    : config.execution.maxDepth;
+
     const outPath = opts.output
       ? path.resolve(process.cwd(), opts.output)
       : opts.out
         ? path.join(path.resolve(process.cwd(), opts.out), "exploration.json")
         : path.resolve(process.cwd(), "exploration.json");
 
-    console.log(`\n🔍 AIQA Explorer`);
+    console.log(`\n🔍 AIQA Explorer  [env: ${config.environment}]`);
     console.log(`   URL      : ${url}`);
-    console.log(`   Max pages: ${opts.maxPages}`);
-    console.log(`   Max depth: ${opts.depth}`);
+    console.log(`   Max pages: ${maxPages}`);
+    console.log(`   Max depth: ${maxDepth}`);
     console.log(`─────────────────────────────────────────\n`);
 
     const explorer = new AppExplorer();
     try {
       const result = await explorer.explore(url, {
-        headless: true,
-        maxPages: parseInt(opts.maxPages, 10),
-        maxDepth: parseInt(opts.depth, 10),
+        headless: config.execution.headless,
+        maxPages,
+        maxDepth,
+        timeout: config.timeouts.navigation,
       });
 
       ensureDir(path.dirname(outPath));
@@ -300,17 +329,20 @@ program
 program
   .command("run-all [dir]")
   .description("Run every YAML test file in a directory and generate an HTML report")
-  .option("--headless",        "Run browser in headless mode", false)
+  .option("--headless",        "Run browser in headless mode (default: from env config)")
   .option("--out <folder>",    "Project folder — runs <folder>/tests/, saves results to <folder>/results/")
   .option("--report <file>",   "Explicit HTML report output path (overrides --out)")
   .option("--results <file>",  "Explicit JSON results output path (overrides --out)")
   .option("--base-url <url>",  "Base URL shown in the report header")
-  .option("--workers <n>",     "Number of tests to run in parallel (default: 1)", "1")
+  .option("--workers <n>",     "Number of tests to run in parallel (default: from env config)")
   .option("--tags <tags>",     "Only run tests whose tags include at least one of these (comma-separated)")
   .action(async (dir: string | undefined, opts: {
-    headless: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers: string; tags?: string;
+    headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string;
   }) => {
-    const outRoot = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
+    const config  = cfg();
+    const headless = opts.headless ?? config.execution.headless;
+    const workers  = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
+    const outRoot  = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
     const testsDir = dir
       ? path.resolve(process.cwd(), dir)
@@ -354,17 +386,16 @@ program
     }
 
     const screenshotsDir = outRoot ? path.join(outRoot, "screenshots") : undefined;
-    const workers        = Math.max(1, parseInt(opts.workers, 10) || 1);
 
-    console.log(`\n🚀 AIQA Run-All`);
+    console.log(`\n🚀 AIQA Run-All  [env: ${config.environment}]`);
     console.log(`   Directory: ${testsDir}`);
     console.log(`   Files    : ${files.length}`);
-    console.log(`   Headless : ${opts.headless}`);
+    console.log(`   Headless : ${headless}`);
     console.log(`   Workers  : ${workers}`);
     if (outRoot) console.log(`   Out      : ${outRoot}`);
     console.log(`─────────────────────────────────────────\n`);
 
-    const runnerOpts = { headless: opts.headless, screenshotsDir };
+    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir };
 
     // concurrency-limited runner — each slot picks the next file from a shared queue
     const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
