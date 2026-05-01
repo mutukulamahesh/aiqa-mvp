@@ -32,6 +32,7 @@ export interface ExplorationResult {
 export interface ExplorerOptions {
   headless?:       boolean;
   maxPages?:       number;
+  maxDepth?:       number;   // BFS depth limit (default: 3)
   timeout?:        number;
   ignorePatterns?: RegExp[];
 }
@@ -48,6 +49,7 @@ export class AppExplorer {
     const {
       headless       = true,
       maxPages       = 10,
+      maxDepth       = 3,
       timeout        = 10_000,
       ignorePatterns = DEFAULT_IGNORE,
     } = opts;
@@ -56,11 +58,11 @@ export class AppExplorer {
     try {
       const baseUrl = new URL(url).origin;
       const visited = new Set<string>();
-      const queue   = [this.normalise(url)];
-      const pages:   ExploredPage[] = [];
+      const queue: Array<{ url: string; depth: number }> = [{ url: this.normalise(url), depth: 0 }];
+      const pages:  ExploredPage[] = [];
 
       while (queue.length > 0 && pages.length < maxPages) {
-        const current = queue.shift()!;
+        const { url: current, depth } = queue.shift()!;
         if (visited.has(current)) continue;
         visited.add(current);
 
@@ -70,9 +72,11 @@ export class AppExplorer {
           const explored = await this.extractPage(page, baseUrl, ignorePatterns);
           pages.push({ url: current, ...explored });
 
-          for (const link of explored.internalLinks) {
-            if (!visited.has(link) && !queue.includes(link)) {
-              queue.push(link);
+          if (depth < maxDepth) {
+            for (const link of explored.internalLinks) {
+              if (!visited.has(link) && !queue.some(q => q.url === link)) {
+                queue.push({ url: link, depth: depth + 1 });
+              }
             }
           }
         } catch (err) {

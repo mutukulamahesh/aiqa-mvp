@@ -38,6 +38,7 @@ type RawStep =
 interface RawTestFile {
   test: {
     name: string;
+    tags?: string | string[];
     variables?: Record<string, string>;
     steps: RawStep[];
   };
@@ -64,8 +65,15 @@ export function parseTestFile(filePath: string): TestDefinition {
     return parseStep(rawStep as Record<string, unknown>, idx);
   });
 
+  // tags: accept "smoke" or ["smoke", "regression"]
+  const rawTags = raw.test.tags;
+  const tags: string[] = rawTags
+    ? (Array.isArray(rawTags) ? rawTags : [rawTags]).map(t => String(t).trim()).filter(Boolean)
+    : [];
+
   return {
     name: raw.test.name,
+    tags,
     variables: raw.test.variables ?? {},
     steps,
   };

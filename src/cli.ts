@@ -51,6 +51,7 @@ program
     const sampleYaml = [
       `test:`,
       `  name: "Sample — Page Load"`,
+      `  tags: [smoke]`,
       `  steps:`,
       `    - navigate: "https://example.com"`,
       `    - assert:`,
@@ -139,9 +140,10 @@ program
   .command("explore <url>")
   .description("Crawl an application and save a structured page map to JSON")
   .option("--max-pages <n>", "Maximum pages to crawl", "10")
+  .option("--depth <n>",     "Maximum BFS link depth (default: 3)", "3")
   .option("--out <folder>",  "Project folder — saves exploration.json inside it")
   .option("--output <file>", "Explicit output file path (overrides --out)")
-  .action(async (url: string, opts: { maxPages: string; out?: string; output?: string }) => {
+  .action(async (url: string, opts: { maxPages: string; depth: string; out?: string; output?: string }) => {
     const outPath = opts.output
       ? path.resolve(process.cwd(), opts.output)
       : opts.out
@@ -151,6 +153,7 @@ program
     console.log(`\n🔍 AIQA Explorer`);
     console.log(`   URL      : ${url}`);
     console.log(`   Max pages: ${opts.maxPages}`);
+    console.log(`   Max depth: ${opts.depth}`);
     console.log(`─────────────────────────────────────────\n`);
 
     const explorer = new AppExplorer();
@@ -158,6 +161,7 @@ program
       const result = await explorer.explore(url, {
         headless: true,
         maxPages: parseInt(opts.maxPages, 10),
+        maxDepth: parseInt(opts.depth, 10),
       });
 
       ensureDir(path.dirname(outPath));
@@ -236,14 +240,26 @@ program
     const scenarios = await generator.generate(flows, exploration_data.baseUrl ?? "");
 
     ensureDir(outDir);
+    let validCount = 0;
+    let invalidCount = 0;
     scenarios.forEach(s => {
       const filePath = path.join(outDir, `${s.fileName}.yaml`);
       fs.writeFileSync(filePath, s.yaml);
-      console.log(`   ✔ ${s.fileName}.yaml  [${s.flowType}]`);
+      try {
+        parseTestFile(filePath);
+        console.log(`   ✔ ${s.fileName}.yaml  [${s.flowType}]`);
+        validCount++;
+      } catch (err) {
+        console.warn(`   ⚠ ${s.fileName}.yaml  [${s.flowType}] — DSL validation failed: ${(err as Error).message}`);
+        invalidCount++;
+      }
     });
+    if (invalidCount > 0) {
+      console.warn(`\n   ⚠  ${invalidCount} file(s) failed validation — review before running`);
+    }
 
     console.log(`\n─────────────────────────────────────────`);
-    console.log(`✅ Generated ${scenarios.length} scenario(s) → ${outDir}/`);
+    console.log(`✅ Generated ${validCount} valid / ${scenarios.length} total scenario(s) → ${outDir}/`);
     console.log(`   Run them with: aiqa run-all --out ${opts.out ?? outDir} --headless`);
     console.log(`─────────────────────────────────────────\n`);
   });
@@ -290,8 +306,9 @@ program
   .option("--results <file>",  "Explicit JSON results output path (overrides --out)")
   .option("--base-url <url>",  "Base URL shown in the report header")
   .option("--workers <n>",     "Number of tests to run in parallel (default: 1)", "1")
+  .option("--tags <tags>",     "Only run tests whose tags include at least one of these (comma-separated)")
   .action(async (dir: string | undefined, opts: {
-    headless: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers: string;
+    headless: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers: string; tags?: string;
   }) => {
     const outRoot = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
@@ -311,12 +328,28 @@ program
       process.exit(1);
     }
 
-    const files = fs.readdirSync(testsDir)
+    const filterTags = opts.tags
+      ? opts.tags.split(",").map(t => t.trim()).filter(Boolean)
+      : [];
+
+    let files = fs.readdirSync(testsDir)
       .filter(f => f.endsWith(".yaml") || f.endsWith(".yml"))
       .map(f => path.join(testsDir, f));
 
+    if (filterTags.length > 0) {
+      files = files.filter(f => {
+        try {
+          const def = parseTestFile(f);
+          return filterTags.some(tag => (def.tags ?? []).includes(tag));
+        } catch {
+          return false;
+        }
+      });
+      console.log(`   Tag filter: [${filterTags.join(", ")}] → ${files.length} matching file(s)`);
+    }
+
     if (files.length === 0) {
-      console.error(`❌ No YAML files found in ${testsDir}`);
+      console.error(`❌ No YAML files found in ${testsDir}${filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : ""}`);
       process.exit(1);
     }
 
@@ -364,20 +397,16 @@ program
     console.log(`   Ran   : ${allResults.length} test(s)`);
     console.log(`   Passed: ${passed}   Failed: ${failed}`);
 
-    const resultsDir   = outRoot ? path.join(outRoot, "results") : undefined;
-    const jsonPath     = opts.results
-      ? path.resolve(process.cwd(), opts.results)
-      : resultsDir
-        ? saveResults(allResults, resultsDir)
-        : null;
-    if (jsonPath && !opts.results) {
-      console.log(`   JSON  → ${jsonPath}`);
-    } else if (opts.results && jsonPath) {
-      const dir2 = path.dirname(jsonPath);
-      ensureDir(dir2);
+    const resultsDir = outRoot ? path.join(outRoot, "results") : undefined;
+    let jsonPath: string | null = null;
+    if (opts.results) {
+      jsonPath = path.resolve(process.cwd(), opts.results);
+      ensureDir(path.dirname(jsonPath));
       fs.writeFileSync(jsonPath, JSON.stringify(allResults, null, 2));
-      console.log(`   JSON  → ${jsonPath}`);
+    } else if (resultsDir) {
+      jsonPath = saveResults(allResults, resultsDir);
     }
+    if (jsonPath) console.log(`   JSON  → ${jsonPath}`);
 
     const reportPath = opts.report
       ? path.resolve(process.cwd(), opts.report)
@@ -392,6 +421,108 @@ program
     console.log(`─────────────────────────────────────────\n`);
 
     process.exit(failed > 0 ? 1 : 0);
+  });
+
+// ── help ──────────────────────────────────────────────────────────────────────
+
+program
+  .command("help")
+  .description("Show a quick-start guide and command reference")
+  .action(() => {
+    console.log(`
+╔══════════════════════════════════════════════════════╗
+║          AIQA — Enterprise AI QA Platform            ║
+╚══════════════════════════════════════════════════════╝
+
+QUICK START
+  1. aiqa init my-project          Create project workspace
+  2. aiqa explore <url> --out .    Crawl app → exploration.json
+  3. aiqa generate --out .         Generate YAML tests from crawl
+  4. aiqa run-all --out . --headless  Run all tests + HTML report
+
+COMMANDS
+  init <project>        Create workspace (tests/, results/, screenshots/)
+  explore <url>         Crawl app and save page map
+    --max-pages <n>       Max pages to visit  (default: 10)
+    --depth <n>           BFS link depth       (default: 3)
+    --out <folder>        Project folder
+  generate [file]       Generate YAML tests from exploration
+    --per-page            One test per discovered page
+    --jira <key>          Also pull Jira stories (mock)
+    --out <folder>        Project folder
+  run <file>            Run a single YAML test
+    --headless            Run browser headlessly
+    --out <folder>        Save results + report here
+  run-all [dir]         Run every YAML test in a directory
+    --headless            Run browser headlessly
+    --workers <n>         Parallel workers        (default: 1)
+    --tags <tag,...>      Only run tests with these tags
+    --out <folder>        Project folder
+  score <results.json>  Compute 0-100 readiness score
+  doctor                Check environment and dependencies
+  help                  Show this guide
+
+EXAMPLES
+  aiqa explore https://example.com --out my-app --max-pages 20 --depth 4
+  aiqa generate --out my-app --per-page
+  aiqa run-all --out my-app --headless --workers 4
+  aiqa run-all --out my-app --tags smoke
+  aiqa score my-app/results/run-2024-01-01.json
+`);
+  });
+
+// ── doctor ────────────────────────────────────────────────────────────────────
+
+program
+  .command("doctor")
+  .description("Check your environment and print a diagnostic report")
+  .action(async () => {
+    console.log(`\n🩺 AIQA Doctor — environment check`);
+    console.log(`─────────────────────────────────────────`);
+
+    // Node.js version
+    const nodeVer = process.versions.node;
+    const [nodeMajor] = nodeVer.split(".").map(Number);
+    const nodeOk = nodeMajor >= 18;
+    console.log(`${nodeOk ? "✅" : "❌"} Node.js  ${nodeVer}${nodeOk ? "" : "  (need ≥18)"}`);
+
+    // Anthropic API key
+    const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+    console.log(`${hasKey ? "✅" : "⚠️ "} ANTHROPIC_API_KEY  ${hasKey ? "set (real LLM enabled)" : "not set (using mock LLM)"}`);
+
+    // @anthropic-ai/sdk installed
+    let sdkInstalled = false;
+    try {
+      require.resolve("@anthropic-ai/sdk");
+      sdkInstalled = true;
+    } catch { /* not installed */ }
+    console.log(`${sdkInstalled ? "✅" : "⚠️ "} @anthropic-ai/sdk  ${sdkInstalled ? "installed" : "not installed — run: npm install @anthropic-ai/sdk"}`);
+
+    // Playwright browsers
+    let playwrightOk = false;
+    try {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({ headless: true });
+      await browser.close();
+      playwrightOk = true;
+    } catch { /* not installed */ }
+    console.log(`${playwrightOk ? "✅" : "❌"} Playwright Chromium  ${playwrightOk ? "ready" : "not found — run: npx playwright install chromium"}`);
+
+    // js-yaml
+    let yamlOk = false;
+    try {
+      require.resolve("js-yaml");
+      yamlOk = true;
+    } catch { /* not installed */ }
+    console.log(`${yamlOk ? "✅" : "❌"} js-yaml  ${yamlOk ? "installed" : "not installed — run: npm install"}`);
+
+    console.log(`─────────────────────────────────────────`);
+    const allGood = nodeOk && playwrightOk && yamlOk;
+    if (allGood) {
+      console.log(`✅ All critical checks passed. Run "aiqa help" for usage.\n`);
+    } else {
+      console.log(`⚠️  Fix the issues above, then re-run: aiqa doctor\n`);
+    }
   });
 
 program.parse(process.argv);

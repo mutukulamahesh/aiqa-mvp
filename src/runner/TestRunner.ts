@@ -23,6 +23,7 @@ export interface RunnerOptions {
 
 export interface TestResult {
   testName:    string;
+  tags:        string[];
   passed:      boolean;
   durationMs:  number;
   error?:      string;
@@ -36,6 +37,7 @@ export interface StepResult {
   passed: boolean;
   durationMs: number;
   error?: string;
+  screenshotPath?: string;
 }
 
 export class TestRunner {
@@ -57,7 +59,9 @@ export class TestRunner {
 
     console.log(`📋 Test: "${test.name}"`);
     console.log(`   Steps: ${test.steps.length}`);
-
+    if (test.tags?.length) {
+      console.log(`   Tags:  [${test.tags.join(", ")}]`);
+    }
     if (test.variables && Object.keys(test.variables).length > 0) {
       console.log(`   Vars:  ${JSON.stringify(test.variables)}`);
     }
@@ -92,10 +96,12 @@ export class TestRunner {
           });
           console.log(`  🔍 [${debugResult.failure_class}] ${debugResult.suggested_fix}`);
 
+          let screenshotPath: string | undefined;
           if (this.opts.screenshotsDir) {
-            const screenshotPath = path.join(this.opts.screenshotsDir, `step-${i + 1}-fail.png`);
-            await adapter.screenshot(screenshotPath).catch(() => undefined);
-            console.log(`  📸 Screenshot → ${screenshotPath}`);
+            const safeName = test.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+            screenshotPath = path.join(this.opts.screenshotsDir, `${safeName}-step-${i + 1}-fail.png`);
+            await adapter.screenshot(screenshotPath).catch(() => { screenshotPath = undefined; });
+            if (screenshotPath) console.log(`  📸 Screenshot → ${screenshotPath}`);
           }
 
           stepResults.push({
@@ -104,10 +110,12 @@ export class TestRunner {
             passed: false,
             durationMs: Date.now() - stepStart,
             error: msg,
+            screenshotPath,
           });
 
           return {
             testName:    test.name,
+            tags:        test.tags ?? [],
             passed:      false,
             durationMs:  Date.now() - totalStart,
             error:       `Step ${i + 1} (${step.action}) failed: ${msg}`,
@@ -118,8 +126,9 @@ export class TestRunner {
       }
 
       return {
-        testName: test.name,
-        passed: true,
+        testName:   test.name,
+        tags:       test.tags ?? [],
+        passed:     true,
         durationMs: Date.now() - totalStart,
         stepResults,
       };

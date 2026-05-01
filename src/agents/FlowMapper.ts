@@ -43,11 +43,12 @@ export class FlowMapper {
         }
       }
       const pathname = (() => { try { return new URL(page.url).pathname.replace(/\/$/, "") || "/"; } catch { return "/"; } })();
+      // Dedup by full pathname — prevents /en/login and /fr/login from sharing slug "login"
+      if (seenSlugs.has(pathname)) return [];
+      seenSlugs.add(pathname);
       const slug = pathname === "/" || pathname === "/index.html"
         ? "home"
-        : pathname.replace(/^\//, "").replace(/\.html$/, "").replace(/[/\\]/g, " ");
-      if (seenSlugs.has(slug)) return [];
-      seenSlugs.add(slug);
+        : pathname.replace(/^\//, "").replace(/\.html$/, "").replace(/[^a-z0-9]+/gi, " ").trim();
       const name = slug.charAt(0).toUpperCase() + slug.slice(1);
       return [{
         name:        `Page — ${name}`,

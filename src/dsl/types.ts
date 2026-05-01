@@ -20,6 +20,7 @@ export type StepAction =
 
 export interface TestDefinition {
   name: string;
+  tags?: string[];
   variables?: Record<string, string>;
   steps: StepAction[];
 }

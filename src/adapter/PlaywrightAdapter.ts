@@ -86,12 +86,14 @@ export class PlaywrightAdapter implements AdapterActions {
 
   async assertUrlContains(substring: string): Promise<void> {
     const page = await this.ensureLaunched();
-    const current = page.url();
-    if (!current.includes(substring)) {
-      throw new Error(
-        `assertUrlContains: expected URL to contain "${substring}", got "${current}"`
-      );
-    }
+    // waitForURL polls until the URL matches, handling post-click navigation delays.
+    await page
+      .waitForURL(url => url.toString().includes(substring), { timeout: this.timeout })
+      .catch(() => {
+        throw new Error(
+          `assertUrlContains: expected URL to contain "${substring}", got "${page.url()}"`
+        );
+      });
   }
 
   async assertElementVisible(locator: string): Promise<void> {
@@ -99,6 +101,11 @@ export class PlaywrightAdapter implements AdapterActions {
     await el.first().waitFor({ state: "visible", timeout: this.timeout }).catch(() => {
       throw new Error(`assertElementVisible: element "${locator}" not visible on page`);
     });
+  }
+
+  async currentUrl(): Promise<string> {
+    const page = await this.ensureLaunched();
+    return page.url();
   }
 
   async screenshot(filePath: string): Promise<void> {

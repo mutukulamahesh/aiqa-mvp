@@ -19,7 +19,8 @@ export class UIActionHandler implements StepHandler {
         const url = ctx.resolve(step.target);
         console.log(`  ▶ navigate  → ${url}`);
         await adapter.navigate(url);
-        ctx.setCurrentUrl(url);
+        // Read back the actual landed URL (may differ from requested due to redirects)
+        ctx.setCurrentUrl(await adapter.currentUrl());
         break;
       }
 
