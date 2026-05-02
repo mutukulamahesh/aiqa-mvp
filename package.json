@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "ts-node src/cli.ts",
-    "run:test": "ts-node src/cli.ts run"
+    "run:test": "ts-node src/cli.ts run",
+    "stress": "bash scripts/stress-test.sh"
   },
   "dependencies": {
     "@playwright/test": "^1.42.1",
