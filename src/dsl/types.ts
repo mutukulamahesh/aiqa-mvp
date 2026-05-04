@@ -19,8 +19,9 @@ export type StepAction =
     };
 
 export interface TestDefinition {
-  name: string;
-  tags?: string[];
+  name:      string;
+  tags?:     string[];
+  retries?:  number;   // max retry attempts on transient failures (timeout/locator)
   variables?: Record<string, string>;
-  steps: StepAction[];
+  steps:     StepAction[];
 }

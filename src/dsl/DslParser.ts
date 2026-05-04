@@ -37,10 +37,11 @@ type RawStep =
 
 interface RawTestFile {
   test: {
-    name: string;
-    tags?: string | string[];
+    name:      string;
+    tags?:     string | string[];
+    retries?:  number;
     variables?: Record<string, string>;
-    steps: RawStep[];
+    steps:     RawStep[];
   };
 }
 
@@ -71,9 +72,14 @@ export function parseTestFile(filePath: string): TestDefinition {
     ? (Array.isArray(rawTags) ? rawTags : [rawTags]).map(t => String(t).trim()).filter(Boolean)
     : [];
 
+  const retries = typeof raw.test.retries === "number"
+    ? Math.max(0, Math.floor(raw.test.retries))
+    : 0;
+
   return {
     name: raw.test.name,
     tags,
+    retries,
     variables: raw.test.variables ?? {},
     steps,
   };

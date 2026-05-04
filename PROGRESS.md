@@ -1,6 +1,6 @@
 # AIQA — Sprint 1 Progress Report
 
-> Branch: `phase1` · Started: 2026-05-01 · Last updated: 2026-05-02
+> Branch: `phase1` · Started: 2026-05-01 · Last updated: 2026-05-04
 > Platform alignment at sprint start: **~35%** of vision
 
 ---
@@ -201,12 +201,71 @@ fail_bad_assert-1777674204691-d4ulmh-step-2-fail.png
 
 ---
 
+## EPIC-03 — Retry & Circuit Breaker ✅ DONE
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/dsl/types.ts` | `retries?: number` added to `TestDefinition` |
+| `src/dsl/DslParser.ts` | Parses `retries:` from YAML with floor/max(0) guard |
+| `src/config/ConfigLoader.ts` | `circuitBreaker: number` added to execution schema |
+| `config/environments/*.yaml` | All three profiles updated with `circuitBreaker: 5` |
+| `src/runner/TestRunner.ts` | Full rewrite: `isRetryable()`, `_runWithRetry()`, `_attempt()`, `retryCount` in result |
+| `src/cli.ts` | `--circuit-breaker <n>` flag, slot runner with `consecutiveFails`/`circuitOpen`/`skippedByCircuit` |
+
+### Key behaviour
+
+- Each test carries `retries?: number` — parsed from YAML, default 0
+- `isRetryable()` classifies failures: transient (timeout, net::ERR_*, locator) vs deterministic (assertXxx:, HTTP status)
+- Deterministic failures return immediately — never retry
+- Transient failures loop up to `retries` times, logging `↺ retry N/M — <error class> on step N`
+- Each retry spawns a fresh browser context (via `_attempt()`) — clean slate
+- Screenshot filenames include `-attemptN` suffix on retries for traceability
+- Circuit breaker: shared `consecutiveFails` counter increments on failure, resets to 0 on any pass
+- When `consecutiveFails >= cbThreshold`: prints `⚡ Circuit breaker open`, skips all remaining tests
+- Summary line shows `Retried: N` and `(N skipped by circuit breaker)` when non-zero
+
+### Definition of Done — verified (live tests, 2026-05-04)
+
+| Gate | Test | Result |
+|---|---|---|
+| Transient failures retry up to N times | `retry_test.yaml` (retries: 2) hitting port 9999 → `net::ERR_CONNECTION_REFUSED` | ✅ `↺ retry 1/2` and `↺ retry 2/2` logged, 3 total attempts |
+| Assertion failures do NOT retry | `assert_noretry.yaml` (retries: 2) with impossible `assertTextVisible` | ✅ Zero `↺ retry` lines — returned immediately after first failure |
+| Circuit breaker stops suite at N consecutive failures | 7 failing tests, `--circuit-breaker 3`, `--workers 1` | ✅ `⚡ Circuit breaker open — 3 consecutive failures`, `4 skipped by circuit breaker` in summary |
+| Env config `circuitBreaker` field used as default | No `--circuit-breaker` flag — reads from YAML profile | ✅ All three profiles carry `circuitBreaker: 5` |
+| `retries` parsed cleanly from YAML | Test file with `retries: 2` | ✅ Header shows `Retry: up to 2x on transient failures` |
+
+### Files changed
+- `src/dsl/types.ts` — `retries?` field added
+- `src/dsl/DslParser.ts` — parses `retries` with safety guard
+- `src/config/ConfigLoader.ts` — `circuitBreaker` in execution schema
+- `config/environments/dev.yaml` — `circuitBreaker: 5`
+- `config/environments/staging.yaml` — `circuitBreaker: 5`
+- `config/environments/prod.yaml` — `circuitBreaker: 5`
+- `src/runner/TestRunner.ts` — full rewrite (~220 lines)
+- `src/cli.ts` — circuit breaker option + slot runner + summary
+
+---
+
+## Platform Metrics — End of Sprint 1 (EPICs 01–03)
+
+| Metric | After EPIC-02 | After EPIC-03 |
+|---|---|---|
+| Source files | 25 | 25 (no new files — augmented existing) |
+| Retry capability | ❌ None | ✅ Per-test configurable |
+| Circuit breaker | ❌ None | ✅ Configurable threshold |
+| Error classification | ❌ None | ✅ Transient vs deterministic |
+| Suite resilience | Runs all tests regardless of cascading failures | Stops automatically after N consecutive failures |
+| Config coverage | Env URLs + timeouts + execution | + `circuitBreaker` threshold |
+
+---
+
 ## Pending — Sprint 1 Remaining
 
 | EPIC | Title | Status |
 |---|---|---|
-| EPIC-03 | Retry & Circuit Breaker | ⬜ Next |
-| EPIC-04 | CI/CD Pipeline (GitHub Actions) | ⬜ |
+| EPIC-04 | CI/CD Pipeline (GitHub Actions) | ⬜ Next |
 | EPIC-06 | Test Case Importer (Excel/CSV/Gherkin) | ⬜ |
 
 ## Sprint 2

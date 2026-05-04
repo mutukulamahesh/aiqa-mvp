@@ -334,14 +334,16 @@ program
   .option("--report <file>",   "Explicit HTML report output path (overrides --out)")
   .option("--results <file>",  "Explicit JSON results output path (overrides --out)")
   .option("--base-url <url>",  "Base URL shown in the report header")
-  .option("--workers <n>",     "Number of tests to run in parallel (default: from env config)")
-  .option("--tags <tags>",     "Only run tests whose tags include at least one of these (comma-separated)")
+  .option("--workers <n>",          "Number of tests to run in parallel (default: from env config)")
+  .option("--tags <tags>",          "Only run tests whose tags include at least one of these (comma-separated)")
+  .option("--circuit-breaker <n>",  "Abort suite after N consecutive failures (default: from env config)")
   .action(async (dir: string | undefined, opts: {
-    headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string;
+    headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
   }) => {
-    const config  = cfg();
-    const headless = opts.headless ?? config.execution.headless;
-    const workers  = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
+    const config       = cfg();
+    const headless     = opts.headless ?? config.execution.headless;
+    const workers      = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
+    const cbThreshold  = opts.circuitBreaker ? Math.max(1, parseInt(opts.circuitBreaker, 10)) : config.execution.circuitBreaker;
     const outRoot  = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
     const testsDir = dir
@@ -397,12 +399,29 @@ program
 
     const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir };
 
-    // concurrency-limited runner — each slot picks the next file from a shared queue
+    console.log(`   Circuit: stop after ${cbThreshold} consecutive failures`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    // ── Concurrency-limited runner with circuit breaker ──────────────────────
     const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
     let cursor = 0;
 
+    // Circuit breaker state — declared here so they reset fresh for every run-all
+    // invocation (new stack frame). Global across all worker slots for this run;
+    // JS single-threaded event loop guarantees safe reads/writes without a mutex.
+    let consecutiveFails = 0;
+    let circuitOpen      = false;
+    let skippedByCircuit = 0;
+
     const runSlot = async () => {
       while (cursor < files.length) {
+        if (circuitOpen) {
+          console.log(`  ⊘ Skipped: ${path.basename(files[cursor])} (circuit breaker open)`);
+          skippedByCircuit++;
+          cursor++;
+          continue;
+        }
+
         const idx  = cursor++;
         const file = files[idx];
         let testDef;
@@ -412,21 +431,33 @@ program
           console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
           continue;
         }
+
         const result = await new TestRunner(runnerOpts).run(testDef);
         orderedResults[idx] = result;
-        console.log();
+
+        if (result.passed) {
+          consecutiveFails = 0;
+        } else {
+          consecutiveFails++;
+          if (consecutiveFails >= cbThreshold && !circuitOpen) {
+            circuitOpen = true;
+            console.log(`\n⚡ Circuit breaker open — ${cbThreshold} consecutive failures, aborting remaining tests\n`);
+          }
+        }
       }
     };
 
     await Promise.all(Array.from({ length: workers }, runSlot));
 
     const allResults = orderedResults.filter((r): r is NonNullable<typeof r> => r !== null);
-    const passed = allResults.filter(r => r.passed).length;
+    const passed     = allResults.filter(r => r.passed).length;
+    const retried    = allResults.filter(r => r.retryCount > 0).length;
+    const failed     = allResults.length - passed;
 
-    const failed = allResults.length - passed;
     console.log(`─────────────────────────────────────────`);
-    console.log(`   Ran   : ${allResults.length} test(s)`);
-    console.log(`   Passed: ${passed}   Failed: ${failed}`);
+    console.log(`   Ran    : ${allResults.length} test(s)${skippedByCircuit ? `  (${skippedByCircuit} skipped by circuit breaker)` : ""}`);
+    console.log(`   Passed : ${passed}   Failed: ${failed}${retried ? `   Retried: ${retried}` : ""}`);
+    if (circuitOpen) console.log(`   ⚡ Suite aborted — circuit breaker triggered at ${cbThreshold} consecutive failures`);
 
     const resultsDir = outRoot ? path.join(outRoot, "results") : undefined;
     let jsonPath: string | null = null;

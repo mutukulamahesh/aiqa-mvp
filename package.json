@@ -10,7 +10,8 @@
     "build": "tsc",
     "dev": "ts-node src/cli.ts",
     "run:test": "ts-node src/cli.ts run",
-    "stress": "bash scripts/stress-test.sh"
+    "stress": "bash scripts/stress-test.sh",
+    "test:epic03": "ts-node scripts/test-epic-03.ts"
   },
   "dependencies": {
     "@playwright/test": "^1.42.1",

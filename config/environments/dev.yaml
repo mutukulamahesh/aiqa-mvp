@@ -10,11 +10,12 @@ timeouts:
   api:        15000   # ms — HTTP request timeout
 
 execution:
-  workers:    1
-  retries:    0
-  headless:   false
-  maxPages:   20
-  maxDepth:   3
+  workers:        1
+  retries:        0
+  headless:       false
+  maxPages:       20
+  maxDepth:       3
+  circuitBreaker: 5
 
 screenshots:
   onFailure:  true

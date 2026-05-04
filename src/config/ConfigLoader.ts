@@ -12,8 +12,8 @@ const EnvConfigSchema = z.object({
   environment: z.enum(["dev", "staging", "prod"]),
 
   urls: z.object({
-    base: z.string().url("urls.base must be a valid URL"),
-    api:  z.string().url("urls.api must be a valid URL"),
+    base: z.url("urls.base must be a valid URL"),
+    api:  z.url("urls.api must be a valid URL"),
   }),
 
   timeouts: z.object({
@@ -23,11 +23,12 @@ const EnvConfigSchema = z.object({
   }),
 
   execution: z.object({
-    workers:  z.number().int().min(1),
-    retries:  z.number().int().min(0),
-    headless: z.boolean(),
-    maxPages: z.number().int().positive(),
-    maxDepth: z.number().int().positive(),
+    workers:        z.number().int().min(1),
+    retries:        z.number().int().min(0),
+    headless:       z.boolean(),
+    maxPages:       z.number().int().positive(),
+    maxDepth:       z.number().int().positive(),
+    circuitBreaker: z.number().int().min(1),  // abort suite after N consecutive failures
   }),
 
   screenshots: z.object({

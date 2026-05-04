@@ -10,11 +10,12 @@ timeouts:
   api:        25000
 
 execution:
-  workers:    4
-  retries:    2
-  headless:   true
-  maxPages:   100
-  maxDepth:   5
+  workers:        4
+  retries:        2
+  headless:       true
+  maxPages:       100
+  maxDepth:       5
+  circuitBreaker: 5
 
 screenshots:
   onFailure:  true

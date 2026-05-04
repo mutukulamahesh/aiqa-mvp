@@ -15,6 +15,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { chromium, Browser, BrowserContext, Page, Locator } from "playwright";
 import { AdapterActions } from "./AdapterActions";
+import { AssertionError, TransientError } from "../errors";
 
 export interface PlaywrightAdapterOptions {
   headless: boolean;
@@ -60,17 +61,23 @@ export class PlaywrightAdapter implements AdapterActions {
 
   async navigate(url: string): Promise<void> {
     const page = await this.ensureLaunched();
-    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.goto(url, { waitUntil: "domcontentloaded" }).catch(err => {
+      throw new TransientError((err as Error).message);
+    });
   }
 
   async click(locator: string): Promise<void> {
     const el = await this.resolveLocator(locator);
-    await el.click();
+    await el.click().catch(err => {
+      throw new TransientError((err as Error).message);
+    });
   }
 
   async fill(locator: string, value: string): Promise<void> {
     const el = await this.resolveLocator(locator);
-    await el.fill(value);
+    await el.fill(value).catch(err => {
+      throw new TransientError((err as Error).message);
+    });
   }
 
   async assertTextVisible(text: string): Promise<void> {
@@ -80,17 +87,16 @@ export class PlaywrightAdapter implements AdapterActions {
       .first()
       .waitFor({ state: "visible", timeout: this.timeout })
       .catch(() => {
-        throw new Error(`assertTextVisible: text "${text}" not found on page`);
+        throw new AssertionError(`assertTextVisible: text "${text}" not found on page`);
       });
   }
 
   async assertUrlContains(substring: string): Promise<void> {
     const page = await this.ensureLaunched();
-    // waitForURL polls until the URL matches, handling post-click navigation delays.
     await page
       .waitForURL(url => url.toString().includes(substring), { timeout: this.timeout })
       .catch(() => {
-        throw new Error(
+        throw new AssertionError(
           `assertUrlContains: expected URL to contain "${substring}", got "${page.url()}"`
         );
       });
@@ -99,7 +105,7 @@ export class PlaywrightAdapter implements AdapterActions {
   async assertElementVisible(locator: string): Promise<void> {
     const el = await this.resolveLocator(locator);
     await el.first().waitFor({ state: "visible", timeout: this.timeout }).catch(() => {
-      throw new Error(`assertElementVisible: element "${locator}" not visible on page`);
+      throw new AssertionError(`assertElementVisible: element "${locator}" not visible on page`);
     });
   }
 
@@ -139,7 +145,7 @@ export class PlaywrightAdapter implements AdapterActions {
 
     const union = strategies.reduce((acc, loc) => acc.or(loc));
     await union.first().waitFor({ state: "visible", timeout: this.timeout }).catch(() => {
-      throw new Error(`Timeout ${this.timeout}ms exceeded. Could not resolve locator for: "${descriptor}"`);
+      throw new TransientError(`Timeout ${this.timeout}ms exceeded. Could not resolve locator for: "${descriptor}"`);
     });
     return union.first();
   }

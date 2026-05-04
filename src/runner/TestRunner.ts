@@ -6,6 +6,7 @@ import { workerStorage, wlog, wwrite, WorkerStore } from "../execution/WorkerCon
 import { TestDefinition } from "../dsl/types";
 import { DebuggerAgent, DebugResult } from "../agents/DebuggerAgent";
 import { getConfig } from "../config/ConfigLoader";
+import { AssertionError, TransientError } from "../errors";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -15,24 +16,53 @@ export interface RunnerOptions {
 }
 
 export interface TestResult {
-  testId:      string;
-  testName:    string;
-  tags:        string[];
-  passed:      boolean;
-  durationMs:  number;
-  error?:      string;
-  stepResults: StepResult[];
+  testId:       string;
+  testName:     string;
+  tags:         string[];
+  passed:       boolean;
+  durationMs:   number;
+  retryCount:   number;
+  error?:       string;
+  stepResults:  StepResult[];
   debugResult?: DebugResult;
 }
 
 export interface StepResult {
-  index:          number;
-  action:         string;
-  passed:         boolean;
-  durationMs:     number;
-  error?:         string;
+  index:           number;
+  action:          string;
+  passed:          boolean;
+  durationMs:      number;
+  error?:          string;
+  errorClass?:     string;
+  retryable?:      boolean;
   screenshotPath?: string;
 }
+
+// ── Error classifier ─────────────────────────────────────────────────────────
+
+/**
+ * Returns true only for transient failures that may succeed on a retry.
+ *
+ * Classification order:
+ *   1. instanceof check — AssertionError (never retry) or TransientError (always retry).
+ *      These cover every error our own handlers throw.
+ *   2. String fallback — for raw Playwright errors that bubble up unwrapped
+ *      (e.g. browserType.launch failures in unusual environments).
+ */
+export function isRetryable(err: Error): boolean {
+  if (err instanceof AssertionError) return false;
+  if (err instanceof TransientError)  return true;
+
+  // Fallback for any raw Playwright error not yet wrapped
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("timeout")    ||
+    msg.includes("net::err")   ||
+    msg.includes("navigation failed")
+  );
+}
+
+// ── TestRunner ───────────────────────────────────────────────────────────────
 
 export class TestRunner {
   private readonly interpreter = new StepInterpreter();
@@ -42,17 +72,15 @@ export class TestRunner {
 
   /**
    * Public entry point.
-   * Wraps the run in an AsyncLocalStorage worker context so all output is
-   * buffered per-test and flushed atomically — no interleaving under parallel execution.
+   * Wraps execution in AsyncLocalStorage so all output is buffered per-test
+   * and flushed atomically — no interleaving under parallel runs.
    */
   async run(test: TestDefinition): Promise<TestResult> {
     const testId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const store: WorkerStore = { testId, testName: test.name, logs: [] };
 
-    const result = await workerStorage.run(store, () => this._run(test, testId));
+    const result = await workerStorage.run(store, () => this._runWithRetry(test, testId));
 
-    // Atomic flush — workerStorage context has ended so we flush via the store
-    // reference directly, guaranteeing all lines for this test arrive together.
     if (store.logs.length) {
       process.stdout.write(store.logs.join(""));
       store.logs = [];
@@ -61,9 +89,46 @@ export class TestRunner {
     return result;
   }
 
-  // ── Internal run (always called inside a WorkerStore context) ──────────────
+  // ── Retry wrapper ─────────────────────────────────────────────────────────
 
-  private async _run(test: TestDefinition, testId: string): Promise<TestResult> {
+  private async _runWithRetry(test: TestDefinition, testId: string): Promise<TestResult> {
+    const maxRetries = test.retries ?? 0;
+
+    wlog(`\n📋 Test: "${test.name}"  [id: ${testId}]`);
+    wlog(`   Steps: ${test.steps.length}`);
+    if (test.tags?.length)   wlog(`   Tags:  [${test.tags.join(", ")}]`);
+    if (maxRetries > 0)      wlog(`   Retry: up to ${maxRetries}x on transient failures`);
+    if (test.variables && Object.keys(test.variables).length)
+                             wlog(`   Vars:  ${JSON.stringify(test.variables)}`);
+    wlog("");
+
+    let lastResult!: TestResult;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      lastResult = await this._attempt(test, testId, attempt);
+
+      if (lastResult.passed) return lastResult;
+
+      const failedStep = lastResult.stepResults.find(s => !s.passed);
+
+      // Non-retryable error or no retries left — return immediately
+      if (!failedStep?.error || !failedStep.retryable || attempt === maxRetries) {
+        return lastResult;
+      }
+
+      // Retryable — log and loop
+      const firstLine    = failedStep.error.split("\n")[0];
+      const errorLabel   = failedStep.errorClass ? `${failedStep.errorClass}: ${firstLine}` : firstLine;
+      wlog(`\n  ↺ retry ${attempt + 1}/${maxRetries} (${errorLabel}) — step ${failedStep.index + 1}`);
+      wlog("");
+    }
+
+    return lastResult;
+  }
+
+  // ── Single attempt ────────────────────────────────────────────────────────
+
+  private async _attempt(test: TestDefinition, testId: string, attempt: number): Promise<TestResult> {
     let config;
     try { config = getConfig(); } catch { config = null; }
 
@@ -75,15 +140,9 @@ export class TestRunner {
       timeout,
     });
 
-    const ctx          = new ExecutionContext(test.variables ?? {}, config);
+    const ctx        = new ExecutionContext(test.variables ?? {}, config);
     const stepResults: StepResult[] = [];
-    const totalStart   = Date.now();
-
-    wlog(`\n📋 Test: "${test.name}"  [id: ${testId}]`);
-    wlog(`   Steps: ${test.steps.length}`);
-    if (test.tags?.length)                                     wlog(`   Tags:  [${test.tags.join(", ")}]`);
-    if (test.variables && Object.keys(test.variables).length)  wlog(`   Vars:  ${JSON.stringify(test.variables)}`);
-    wlog("");
+    const totalStart = Date.now();
 
     try {
       for (let i = 0; i < test.steps.length; i++) {
@@ -95,11 +154,13 @@ export class TestRunner {
 
         try {
           await this.interpreter.execute(step, adapter, ctx);
-          wlog("");   // newline after the handler's inline output
+          wlog("");
           stepResults.push({ index: i, action: step.action, passed: true, durationMs: Date.now() - stepStart });
 
         } catch (err) {
-          const msg = (err as Error).message;
+          const error     = err as Error;
+          const msg       = error.message;
+          const retryable = isRetryable(error);
           wlog(`\n  ✗ FAILED: ${msg}`);
 
           const debugResult = await this.debugger.analyze({
@@ -113,14 +174,18 @@ export class TestRunner {
           let screenshotPath: string | undefined;
           if (this.opts.screenshotsDir) {
             const safeName = test.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
-            screenshotPath = path.join(this.opts.screenshotsDir, `${safeName}-${testId}-step-${i + 1}-fail.png`);
+            const attemptSuffix = attempt > 0 ? `-attempt${attempt + 1}` : "";
+            screenshotPath = path.join(
+              this.opts.screenshotsDir,
+              `${safeName}-${testId}${attemptSuffix}-step-${i + 1}-fail.png`
+            );
             await adapter.screenshot(screenshotPath).catch(() => { screenshotPath = undefined; });
             if (screenshotPath) wlog(`  📸 Screenshot → ${screenshotPath}`);
           }
 
           stepResults.push({
             index: i, action: step.action, passed: false,
-            durationMs: Date.now() - stepStart, error: msg, screenshotPath,
+            durationMs: Date.now() - stepStart, error: msg, errorClass: error.name, retryable, screenshotPath,
           });
 
           return {
@@ -129,6 +194,7 @@ export class TestRunner {
             tags:       test.tags ?? [],
             passed:     false,
             durationMs: Date.now() - totalStart,
+            retryCount: attempt,
             error:      `Step ${i + 1} (${step.action}) failed: ${msg}`,
             stepResults,
             debugResult,
@@ -142,6 +208,7 @@ export class TestRunner {
         tags:       test.tags ?? [],
         passed:     true,
         durationMs: Date.now() - totalStart,
+        retryCount: attempt,
         stepResults,
       };
 
