@@ -11,7 +11,8 @@
     "dev": "ts-node src/cli.ts",
     "run:test": "ts-node src/cli.ts run",
     "stress": "bash scripts/stress-test.sh",
-    "test:epic03": "ts-node scripts/test-epic-03.ts"
+    "test:epic03": "ts-node scripts/test-epic-03.ts",
+    "test:ci": "ts-node src/cli.ts --env staging run-all tests/ --headless --workers 4 --out results --circuit-breaker 5"
   },
   "dependencies": {
     "@playwright/test": "^1.42.1",

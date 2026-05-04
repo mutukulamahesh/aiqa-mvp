@@ -261,12 +261,49 @@ fail_bad_assert-1777674204691-d4ulmh-step-2-fail.png
 
 ---
 
+## EPIC-04 — CI/CD Pipeline ✅ DONE
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `.github/workflows/aiqa.yml` | GitHub Actions — runs full suite on push/PR, smoke gate on PR |
+| `Jenkinsfile` | Declarative Jenkins pipeline with env matrix, artifact publish |
+| `package.json` `test:ci` script | One-liner CI entry point for local and pipeline use |
+
+### Key behaviour
+
+- **GitHub Actions** triggers on push to `main`/`phase1` and all PRs to `main`
+- Environment matrix supports `staging` (and `prod` when uncommented)
+- Uploads HTML report, JSON results, and failure screenshots as run artifacts (30-day retention)
+- **Smoke gate job** runs tag-filtered subset (`--tags smoke`) on every PR after the full suite passes
+- `concurrency` block cancels in-flight runs on new pushes to the same ref — no queue pile-up
+- **Jenkins** pipeline is parameterised: `ENVIRONMENT`, `WORKERS`, `CIRCUIT_BREAKER`, `TAGS`
+- `publishHTML` renders the AIQA HTML report directly in the Jenkins UI
+- `cleanWs` purges `node_modules` only on aborted builds — preserves artifacts on pass/fail
+- `ANTHROPIC_API_KEY` injected via `credentials('anthropic-api-key')` — never echoed in logs
+- Both pipelines exit non-zero on any test failure (wired through `process.exit(failed > 0 ? 1 : 0)`)
+
+### Definition of Done — verified
+
+| Gate | Result |
+|---|---|
+| Non-zero exit on test failure propagates to CI | ✅ `process.exit(failed > 0 ? 1 : 0)` already wired in CLI |
+| HTML report uploaded as artifact | ✅ `upload-artifact` + `publishHTML` steps |
+| Screenshots uploaded on failure | ✅ GitHub `if: failure()` block; Jenkins always-archive |
+| Secret never hardcoded | ✅ GitHub `secrets.ANTHROPIC_API_KEY`; Jenkins `credentials()` binding |
+| Smoke gate runs tag filter on PR | ✅ Separate `smoke` job with `--tags smoke --workers 2` |
+| Jenkins pipeline parameterised | ✅ `ENVIRONMENT`, `WORKERS`, `CIRCUIT_BREAKER`, `TAGS` params |
+| npm `test:ci` script available | ✅ Runs staging suite headless, workers=4, out=results |
+
+---
+
 ## Pending — Sprint 1 Remaining
 
 | EPIC | Title | Status |
 |---|---|---|
-| EPIC-04 | CI/CD Pipeline (GitHub Actions) | ⬜ Next |
-| EPIC-06 | Test Case Importer (Excel/CSV/Gherkin) | ⬜ |
+| EPIC-04 | CI/CD Pipeline (GitHub Actions + Jenkins) | ✅ DONE |
+| EPIC-06 | Test Case Importer (Excel/CSV/Gherkin) | ⬜ Next |
 
 ## Sprint 2
 
