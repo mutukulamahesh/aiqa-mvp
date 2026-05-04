@@ -12,7 +12,7 @@ test:
   steps:
     - navigate: "https://duckduckgo.com"
     - fill:
-        target: "Search the web"
+        target: "[name=q]"
         value: "{{ query }}"
     - assert:
         text: "DuckDuckGo"

@@ -45,28 +45,35 @@ interface RawTestFile {
   };
 }
 
+/** Parse a TestDefinition directly from a YAML string (used by importers for validation). */
+export function parseTestDefinition(content: string): TestDefinition {
+  const raw = yaml.load(content) as RawTestFile;
+  return buildDefinition(raw, "<string>");
+}
+
 export function parseTestFile(filePath: string): TestDefinition {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Test file not found: ${filePath}`);
   }
-
   const raw = yaml.load(fs.readFileSync(filePath, "utf-8")) as RawTestFile;
+  return buildDefinition(raw, filePath);
+}
 
+function buildDefinition(raw: RawTestFile, source: string): TestDefinition {
   if (!raw?.test) {
-    throw new Error(`Invalid test file: missing top-level "test:" key`);
+    throw new Error(`Invalid test (${source}): missing top-level "test:" key`);
   }
   if (!raw.test.name) {
-    throw new Error(`Invalid test file: missing "test.name"`);
+    throw new Error(`Invalid test (${source}): missing "test.name"`);
   }
   if (!Array.isArray(raw.test.steps) || raw.test.steps.length === 0) {
-    throw new Error(`Invalid test file: "test.steps" must be a non-empty array`);
+    throw new Error(`Invalid test (${source}): "test.steps" must be a non-empty array`);
   }
 
-  const steps: StepAction[] = raw.test.steps.map((rawStep, idx) => {
-    return parseStep(rawStep as Record<string, unknown>, idx);
-  });
+  const steps: StepAction[] = raw.test.steps.map((rawStep, idx) =>
+    parseStep(rawStep as Record<string, unknown>, idx)
+  );
 
-  // tags: accept "smoke" or ["smoke", "regression"]
   const rawTags = raw.test.tags;
   const tags: string[] = rawTags
     ? (Array.isArray(rawTags) ? rawTags : [rawTags]).map(t => String(t).trim()).filter(Boolean)
@@ -77,7 +84,7 @@ export function parseTestFile(filePath: string): TestDefinition {
     : 0;
 
   return {
-    name: raw.test.name,
+    name:      raw.test.name,
     tags,
     retries,
     variables: raw.test.variables ?? {},

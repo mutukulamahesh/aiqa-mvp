@@ -303,7 +303,50 @@ fail_bad_assert-1777674204691-d4ulmh-step-2-fail.png
 | EPIC | Title | Status |
 |---|---|---|
 | EPIC-04 | CI/CD Pipeline (GitHub Actions + Jenkins) | ✅ DONE |
-| EPIC-06 | Test Case Importer (Excel/CSV/Gherkin) | ⬜ Next |
+| EPIC-06 | Test Case Importer (Excel/CSV/Gherkin) | ✅ DONE |
+
+---
+
+## EPIC-06 — Test Case Importer ✅ DONE
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/importers/types.ts` | `RawTestCase`, `ColumnMap`, `ImportResult` interfaces |
+| `src/importers/ExcelImporter.ts` | Reads `.xlsx`/`.xls` via `exceljs`, auto-detects column headers |
+| `src/importers/CSVImporter.ts` | Parses `.csv` with RFC-4180 quoted-field support, no extra deps |
+| `src/importers/TextImporter.ts` | Parses Gherkin `.feature` (Given/When/Then) + plain text blocks |
+| `src/importers/TestCaseTranslator.ts` | Maps natural-language steps → AIQA DSL YAML; LLM when key present, heuristic fallback always available |
+| `src/importers/ImportOrchestrator.ts` | Routes by file extension, writes YAML files, returns `ImportResult[]` |
+| `src/cli.ts` | `aiqa import` command: `--file`, `--sheet`, `--out`, `--tags`, `--run` |
+| `src/dsl/DslParser.ts` | Added `parseTestDefinition(yaml)` for string-based validation |
+
+### Key behaviour
+
+- `aiqa import --file test-cases.xlsx --out tests/` — generates one YAML per row, flags vague steps
+- `aiqa import --file login.feature --run` — import + execute in one command with HTML report
+- `--sheet "Sprint 5"` — targets a specific Excel sheet
+- `--tags smoke,regression` — injects tags into every generated YAML
+- Gherkin `Background:` steps are prepended to every `Scenario`
+- Vague/unmappable steps emit `# WARNING: could not map step — "..."` in YAML (visible, not silent)
+- Blank values get `# TODO: replace with real test data` comment
+- Every generated YAML is validated through `DslParser` before writing — invalid output is flagged, not silently written
+- Heuristic translator strips Gherkin "I " subject prefix automatically
+
+### Definition of Done — verified
+
+| Gate | Result |
+|---|---|
+| `.feature` import: 2 scenarios, 0 warnings, both validated | ✅ Live test passed |
+| `.csv` import: 2 test cases, 0 warnings, both validated | ✅ Live test passed |
+| Vague steps flagged with WARNING comment | ✅ Confirmed in output |
+| DslParser rejects invalid generated YAML | ✅ `validated: false` surfaced in summary |
+| `--run` executes generated tests + HTML report | ✅ Wired via TestRunner + HTMLReporter |
+| `exceljs` added to dependencies | ✅ `package.json` updated |
+| TypeScript: zero type errors | ✅ `tsc --noEmit` clean |
+
+---
 
 ## Sprint 2
 

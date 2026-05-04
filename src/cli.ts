@@ -11,6 +11,7 @@ import { ReadinessScorer } from "./agents/ReadinessScorer";
 import { JiraAdapter } from "./integrations/JiraAdapter";
 import { HTMLReporter } from "./reporters/HTMLReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
+import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 
 const program = new Command();
 
@@ -584,6 +585,130 @@ program
       console.log(`✅ All critical checks passed. Run "aiqa help" for usage.\n`);
     } else {
       console.log(`⚠️  Fix the issues above, then re-run: aiqa doctor\n`);
+    }
+  });
+
+// ── import ────────────────────────────────────────────────────────────────────
+
+program
+  .command("import")
+  .description("Import test cases from Excel, CSV, or Gherkin and generate AIQA YAML files")
+  .requiredOption("--file <path>",    "Source file (.xlsx, .xls, .csv, .feature, .txt)")
+  .option("--sheet <name>",           "Excel sheet name (default: first sheet)")
+  .option("--out <dir>",              "Output directory for generated YAML files (default: ./imported-tests)")
+  .option("--tags <tags>",            "Comma-separated tags to add to generated tests (default: imported)")
+  .option("--run",                    "Execute generated tests immediately after import")
+  .option("--workers <n>",            "Workers for --run (default: from env config)")
+  .option("--headless",               "Headless mode for --run")
+  .option("--report",                 "Write import-report.json to the output directory")
+  .action(async (opts: {
+    file: string; sheet?: string; out?: string; tags?: string;
+    run?: boolean; workers?: string; headless?: boolean; report?: boolean;
+  }) => {
+    const config  = cfg();
+    const srcFile = path.resolve(process.cwd(), opts.file);
+    const outDir  = path.resolve(process.cwd(), opts.out ?? "imported-tests");
+    const tags    = opts.tags ? opts.tags.split(",").map(t => t.trim()).filter(Boolean) : ["imported"];
+
+    if (!fs.existsSync(srcFile)) {
+      console.error(`❌ File not found: ${srcFile}`);
+      process.exit(1);
+    }
+
+    console.log(`\n📥 AIQA Import  [env: ${config.environment}]`);
+    console.log(`   Source : ${srcFile}`);
+    if (opts.sheet) console.log(`   Sheet  : ${opts.sheet}`);
+    console.log(`   Out    : ${outDir}`);
+    console.log(`   Tags   : [${tags.join(", ")}]`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    const orchestrator = new ImportOrchestrator();
+    let results;
+    try {
+      results = await orchestrator.run(srcFile, { outDir, sheetName: opts.sheet, tags });
+    } catch (err) {
+      console.error(`❌ Import failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+
+    let totalWarnings = 0;
+    for (const r of results) {
+      const status   = r.validated ? "✅" : "⚠️ ";
+      const tagLabel = `[${tags.join(", ")}]`;
+      console.log(`  ${status} ${r.testCase.name}  ${tagLabel}`);
+      console.log(`      → ${r.yamlPath}`);
+      for (const w of r.warnings) {
+        console.log(`      ⚠️  ${w}`);
+        totalWarnings++;
+      }
+    }
+
+    const valid   = results.filter(r => r.validated).length;
+    const invalid = results.length - valid;
+
+    console.log(`\n─────────────────────────────────────────`);
+    console.log(`   Imported : ${results.length}`);
+    console.log(`   Valid    : ${valid}`);
+    console.log(`   Invalid  : ${invalid}${invalid ? `  → ${outDir}/failed/` : ""}`);
+    if (totalWarnings) console.log(`   Warnings : ${totalWarnings}`);
+    console.log(`   Saved    : ${outDir}/`);
+    console.log(`─────────────────────────────────────────`);
+
+    if (opts.report) {
+      const reportFile = path.join(outDir, "import-report.json");
+      const report = {
+        timestamp: new Date().toISOString(),
+        source:    srcFile,
+        outDir,
+        tags,
+        summary:   { total: results.length, valid, invalid, warnings: totalWarnings },
+        results:   results.map(r => ({
+          name:      r.testCase.name,
+          yamlPath:  r.yamlPath,
+          validated: r.validated,
+          warnings:  r.warnings,
+        })),
+      };
+      fs.writeFileSync(reportFile, JSON.stringify(report, null, 2), "utf-8");
+      console.log(`   Report   : ${reportFile}`);
+    }
+    console.log();
+
+    if (opts.run) {
+      const validFiles = results.filter(r => r.validated).map(r => r.yamlPath);
+      if (validFiles.length === 0) {
+        console.error("❌ No valid test files to run.");
+        process.exit(1);
+      }
+
+      console.log(`\n🚀 Running ${validFiles.length} imported test(s)...\n`);
+
+      const workers       = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
+      const headless      = opts.headless ?? config.execution.headless;
+      const runnerOpts    = { headless, timeout: config.timeouts.action };
+      const allResults: Awaited<ReturnType<TestRunner["run"]>>[] = [];
+
+      const slots = Array.from({ length: workers }, async () => {
+        for (const file of validFiles) {
+          const testDef = parseTestFile(file);
+          const result  = await new TestRunner(runnerOpts).run(testDef);
+          allResults.push(result);
+        }
+      });
+      await Promise.all(slots);
+
+      const passed = allResults.filter(r => r.passed).length;
+      const failed = allResults.length - passed;
+
+      const reportPath = path.join(outDir, "report.html");
+      new HTMLReporter().generate(allResults, reportPath, { baseUrl: opts.file });
+
+      console.log(`─────────────────────────────────────────`);
+      console.log(`   Passed : ${passed}   Failed: ${failed}`);
+      console.log(`   HTML  → ${reportPath}`);
+      console.log(`─────────────────────────────────────────\n`);
+
+      process.exit(failed > 0 ? 1 : 0);
     }
   });
 
