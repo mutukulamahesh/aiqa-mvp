@@ -24,7 +24,7 @@ export class CSVImporter {
     const nameIdx         = this.resolveIdx(headers, [cols.name,         "Test Name", "Name", "Title", "Test Case"]);
     const preconditionIdx = this.resolveIdx(headers, [cols.precondition, "Precondition", "Pre-condition"]);
     const stepsIdx        = this.resolveIdx(headers, [cols.steps,        "Steps", "Test Steps", "Actions"]);
-    const expectedIdx     = this.resolveIdx(headers, [cols.expected,     "Expected Result", "Expected"]);
+    const expectedIdx     = this.resolveIdx(headers, [cols.expected,     "Expected Result", "ExpectedResult", "Expected"]);
 
     if (nameIdx === -1 || stepsIdx === -1) {
       throw new Error(
@@ -41,7 +41,7 @@ export class CSVImporter {
 
       const rawSteps = row[stepsIdx] ?? "";
       const steps    = rawSteps
-        .split(/\n|;|\d+\.\s+/)
+        .split(/\n|\||\s*;\s*|\d+\.\s+/)
         .map(s => s.trim())
         .filter(Boolean);
 

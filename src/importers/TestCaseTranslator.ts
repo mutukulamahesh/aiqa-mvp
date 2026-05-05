@@ -44,9 +44,18 @@ export class TestCaseTranslator {
   async translate(tc: RawTestCase, tags: string[] = ["imported"]): Promise<TranslationResult> {
     const warnings: string[] = [];
 
-    const stepsYaml = this.llm.name === "mock"
-      ? this.heuristicTranslate(tc.steps, warnings)
-      : await this.llmTranslate(tc, warnings);
+    // Primary: structured parser — always runs first
+    const structWarnings: string[] = [];
+    const structuredYaml = this.structuredTranslate(tc.steps, structWarnings);
+
+    let stepsYaml: string;
+    if (structWarnings.length > 0 && this.llm.name !== "mock") {
+      // Secondary: LLM enhancer kicks in only for steps the structured parser couldn't map
+      stepsYaml = await this.llmTranslate(tc, warnings);
+    } else {
+      stepsYaml = structuredYaml;
+      warnings.push(...structWarnings);
+    }
 
     const yaml = this.buildTestYaml(tc, tags, stepsYaml);
 
@@ -74,26 +83,27 @@ export class TestCaseTranslator {
       const res = await this.llm.complete({ system: SYSTEM_PROMPT, userMessage, maxTokens: 1024 });
       return res.content.trim();
     } catch (err) {
-      warnings.push(`LLM call failed, falling back to heuristic: ${(err as Error).message}`);
-      return this.heuristicTranslate(tc.steps, warnings);
+      warnings.push(`LLM call failed, falling back to structured parser: ${(err as Error).message}`);
+      return this.structuredTranslate(tc.steps, warnings);
     }
   }
 
-  // ── Heuristic path (mock / fallback) ─────────────────────────────────────
+  // ── Structured parser (primary) ──────────────────────────────────────────
 
-  private heuristicTranslate(steps: string[], warnings: string[]): string {
+  private structuredTranslate(steps: string[], warnings: string[]): string {
     return steps.map(step => this.mapStep(step, warnings)).join("\n");
   }
 
   private mapStep(step: string, warnings: string[]): string {
-    // Strip Gherkin subject prefix ("I ", "the user ", "a user ")
     const s = step.trim().replace(/^(I |the user |a user )/i, "");
     const lower = s.toLowerCase();
 
-    // navigate — explicit verb
+    // navigate — direct verb or transition verbs
+    if (/^navigate\s+/i.test(s)) {
+      return `- navigate: "${s.replace(/^navigate\s+/i, "").trim()}"`;
+    }
     if (/^(go to|navigate to|open|visit|load|browse to)\s+/i.test(s)) {
-      const url = s.replace(/^(go to|navigate to|open|visit|load|browse to)\s+/i, "").trim();
-      return `- navigate: "${url}"`;
+      return `- navigate: "${s.replace(/^(go to|navigate to|open|visit|load|browse to)\s+/i, "").trim()}"`;
     }
 
     // navigate — any step containing a URL
@@ -112,24 +122,47 @@ export class TestCaseTranslator {
       return `- click: "${target || s}"`;
     }
 
-    // fill — try to extract field and value
+    // fill
     if (/^(enter|fill|type|input|set|provide)\s+/i.test(s)) {
-      const valueMatch = s.match(/"([^"]+)"/);
-      const value      = valueMatch ? valueMatch[1] : "# TODO: replace with real test data";
-      const withoutVerb  = s.replace(/^(enter|fill|type|input|set|provide)\s+/i, "");
-      const fieldMatch   = withoutVerb.match(/(?:in|into|for|on|the)\s+(.+?)(?:\s+field|\s+input|\s+box|$)/i);
-      const target       = fieldMatch
-        ? fieldMatch[1].replace(/"[^"]+"/g, "").trim()
-        : withoutVerb.replace(/"[^"]+"/g, "").replace(/\s+(in|into|for|on)\s+.*/i, "").trim() || "# TODO: replace with real target";
-      return `- fill:\n    target: "${target}"\n    value: "${value}"`;
+      const withoutVerb = s.replace(/^(enter|fill|type|input|set|provide)\s+/i, "").trim();
+      const quotedMatch = withoutVerb.match(/"([^"]+)"/);
+      if (quotedMatch) {
+        const value = quotedMatch[1];
+        const rest  = withoutVerb.replace(/"[^"]+"/g, "").trim();
+        const fieldMatch = rest.match(/(?:in|into|for|on|the)\s+(.+?)(?:\s+field|\s+input|\s+box|$)/i);
+        const target = fieldMatch
+          ? fieldMatch[1].trim()
+          : rest.replace(/\s+(in|into|for|on)\s+.*/i, "").trim() || "# TODO: replace with real target";
+        return `- fill:\n    target: "${target}"\n    value: "${value}"`;
+      }
+      // Positional: fill <field> <value(s)>
+      const tokens = withoutVerb.split(/\s+/);
+      if (tokens.length >= 2) {
+        const [target, ...rest] = tokens;
+        return `- fill:\n    target: "${target}"\n    value: "${rest.join(" ")}"`;
+      }
+      return `- fill:\n    target: "${withoutVerb}"\n    value: "# TODO: replace with real test data"`;
     }
 
-    // assert text visible
+    // URL assert — must come BEFORE generic assert to intercept "assert url ..."
+    if (/^(assert|verify|check|confirm)\s+url\b/i.test(s)) {
+      const rest = s
+        .replace(/^(assert|verify|check|confirm)\s+url\s+(contains?|is|equals?|has|should be)?\s*/i, "")
+        .trim();
+      return `- assert:\n    url: "${rest || "# TODO"}"`;
+    }
+
+    // Redirect / navigation result assertion
+    if (/redirect|navigated?\s+to|taken?\s+to/i.test(lower)) {
+      const pageMatch = s.match(/(?:\bto\b)\s+(.+)$/i);
+      const fragment  = pageMatch ? pageMatch[1].trim().split(/\s+/)[0] : "# TODO";
+      return `- assert:\n    url: "${fragment}"`;
+    }
+
+    // Generic assert
     if (/^(verify|check|assert|confirm|should see|ensure|validate|expect)\s+/i.test(s)) {
-      const valueMatch = s.match(/"([^"]+)"/);
-      if (valueMatch) {
-        return `- assert:\n    text: "${valueMatch[1]}"`;
-      }
+      const quotedMatch = s.match(/"([^"]+)"/);
+      if (quotedMatch) return `- assert:\n    text: "${quotedMatch[1]}"`;
       const text = s
         .replace(/^(verify|check|assert|confirm|should see|ensure|validate|expect)\s+/i, "")
         .replace(/\s+(is|are|appears?|visible|present|displayed?|shown?)\s*$/i, "")
@@ -137,13 +170,6 @@ export class TestCaseTranslator {
       return `- assert:\n    text: "${text}"`;
     }
 
-    // URL assertion
-    if (/url|address|page|redirect/i.test(lower) && /contains?|should be|redirected|navigated/i.test(lower)) {
-      const urlMatch = s.match(/"([^"]+)"/);
-      if (urlMatch) return `- assert:\n    url: "${urlMatch[1]}"`;
-    }
-
-    // Vague — emit as warning comment
     warnings.push(`Could not map step: "${s}"`);
     return `# WARNING: could not map step — "${s}"`;
   }

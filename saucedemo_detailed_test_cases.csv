@@ -1,0 +1,6 @@
+Module,TestCaseID,Title,Type,Steps,ExpectedResult
+Login,TC_LOGIN_01,Valid Login,Positive,navigate https://www.saucedemo.com/ | fill username standard_user | fill password secret_sauce | click login_button | assert url contains inventory,User logged in successfully
+Login,TC_LOGIN_02,Invalid Password,Negative,navigate https://www.saucedemo.com/ | fill username standard_user | fill password wrong_password | click login_button | assert error message visible,Error displayed
+Add Product,TC_ADD_01,Add Product to Cart,Positive,navigate https://www.saucedemo.com/ | login with valid credentials | click add_to_cart backpack | assert cart_count = 1,Product added to cart
+Checkout,TC_CHECKOUT_01,Successful Checkout,Positive,navigate https://www.saucedemo.com/ | login with valid credentials | add product to cart | click cart | click checkout | fill first_name John | fill last_name Doe | fill zip 75001 | click continue | click finish | assert order confirmation visible,Order completed
+Logout,TC_LOGOUT_01,Logout,Positive,navigate https://www.saucedemo.com/ | login with valid credentials | click menu | click logout | assert redirected to login page,User logged out

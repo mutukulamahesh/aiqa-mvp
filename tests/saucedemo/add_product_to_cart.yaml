@@ -1,0 +1,10 @@
+test:
+  name: "Add Product to Cart"
+  tags: [imported]
+  steps:
+    - navigate: "https://www.saucedemo.com/"
+    # WARNING: could not map step — "login with valid credentials"
+    - click: "add_to_cart backpack"
+    - assert:
+        text: "cart_count = 1"
+  # Expected: Product added to cart

@@ -1,0 +1,23 @@
+test:
+  name: "Successful Checkout"
+  tags: [imported]
+  steps:
+    - navigate: "https://www.saucedemo.com/"
+    # WARNING: could not map step — "login with valid credentials"
+    # WARNING: could not map step — "add product to cart"
+    - click: "cart"
+    - click: "checkout"
+    - fill:
+        target: "first_name"
+        value: "John"
+    - fill:
+        target: "last_name"
+        value: "Doe"
+    - fill:
+        target: "zip"
+        value: "75001"
+    - click: "continue"
+    - click: "finish"
+    - assert:
+        text: "order confirmation"
+  # Expected: Order completed
