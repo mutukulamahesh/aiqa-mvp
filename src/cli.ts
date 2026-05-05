@@ -746,12 +746,14 @@ program
   .requiredOption("--url <url>",   "Target URL to explore and test")
   .option("--max-pages <n>",       "Max pages to crawl (default: from env config)")
   .option("--headless",            "Run browser in headless mode")
+  .option("--dry-run",             "Explore, map flows and generate scenarios without running tests")
   .option("--out <dir>",           "Write exploration.json, flows.json, YAMLs and report here")
   .option("--report <path>",       "Path for HTML report (default: <out>/report.html)")
   .action(async (opts: {
     url:       string;
     maxPages?: string;
     headless?: boolean;
+    dryRun?:   boolean;
     out?:      string;
     report?:   string;
   }) => {
@@ -766,56 +768,95 @@ program
 
     if (outRoot) fs.mkdirSync(outRoot, { recursive: true });
 
-    console.log(`\naiqa orchestrate  [env: ${config.environment}]  →  ${url}\n`);
+    console.log(`\naiqa orchestrate  [env: ${config.environment}]  →  ${url}`);
+    if (opts.dryRun) console.log(`  (dry run — execution skipped)`);
+    console.log();
 
-    const result = await new OrchestratorAgent().run(url, {
+    const result = await new OrchestratorAgent().run({
+      url,
       env:      config.environment,
       maxPages: opts.maxPages ? Number(opts.maxPages) : config.execution.maxPages,
       headless: opts.headless ?? config.execution.headless,
       timeout:  config.timeouts.action,
       outDir:   outRoot ?? undefined,
-      onProgress: (stage, total, message) => {
+      dryRun:   opts.dryRun,
+      onProgress: (stage: number, total: number, message: string) => {
         console.log(`[${stage}/${total}] ${message}`);
       },
     });
 
-    // Persist artifacts
-    if (outRoot) {
+    // Persist artifacts (exploration and flows present on success + dry-run)
+    if (outRoot && result.exploration) {
       const explorationPath = path.join(outRoot, "exploration.json");
       fs.writeFileSync(explorationPath, JSON.stringify(result.exploration, null, 2));
       console.log(`\n   Exploration → ${explorationPath}`);
-
+    }
+    if (outRoot && result.flows) {
       const flowsPath = path.join(outRoot, "flows.json");
       fs.writeFileSync(flowsPath, JSON.stringify(result.flows, null, 2));
       console.log(`   Flows       → ${flowsPath}`);
-
+    }
+    if (outRoot && result.scenarios) {
       const yamlDir = path.join(outRoot, "tests");
       fs.mkdirSync(yamlDir, { recursive: true });
       for (const s of result.scenarios) {
-        if (s.validated) {
-          fs.writeFileSync(path.join(yamlDir, `${s.fileName}.yaml`), s.yaml);
-        }
+        if (s.validated) fs.writeFileSync(path.join(yamlDir, `${s.fileName}.yaml`), s.yaml);
       }
       console.log(`   Tests       → ${yamlDir}/ (${result.scenarios.filter(s => s.validated).length} files)`);
     }
+    if (outRoot) {
+      console.log(`   Summary     → ${path.join(outRoot, "orchestrator-summary.json")}`);
+    }
 
-    if (reportPath) {
+    // HTML report (skipped on dry-run)
+    if (reportPath && !opts.dryRun && result.results.length > 0) {
       new HTMLReporter().generate(result.results, reportPath, { baseUrl: url });
       console.log(`   Report      → ${reportPath}`);
     }
 
+    // Warnings
+    if (result.summary.warnings.length > 0) {
+      console.log(`\n   Warnings: ${result.summary.warnings.length}`);
+      result.summary.warnings.forEach(w => console.log(`   ⚠️  ${w}`));
+    }
+
+    // Stage timings
+    const t = result.summary.timings;
+    const timingParts: string[] = [];
+    if (t.explorer            !== undefined) timingParts.push(`Explorer: ${(t.explorer / 1000).toFixed(1)}s`);
+    if (t.flow_mapper         !== undefined) timingParts.push(`Flows: ${(t.flow_mapper / 1000).toFixed(1)}s`);
+    if (t.scenario_generator  !== undefined) timingParts.push(`Gen: ${(t.scenario_generator / 1000).toFixed(1)}s`);
+    if (t.test_runner         !== undefined) timingParts.push(`Run: ${(t.test_runner / 1000).toFixed(1)}s`);
+    if (t.scorer              !== undefined) timingParts.push(`Score: ${(t.scorer / 1000).toFixed(1)}s`);
+    if (timingParts.length > 0) console.log(`\n   Timings: ${timingParts.join("  ·  ")}`);
+
     // Summary
     console.log(`\n${"─".repeat(50)}`);
-    console.log(result.narrative);
-    console.log(`${"─".repeat(50)}`);
-    console.log(`Score: ${result.report.score}/100  Grade: ${result.report.grade}  ` +
-      `Passed: ${result.report.passed}/${result.report.totalTests}`);
-    if (result.report.topIssues.length > 0) {
-      console.log(`Issues: ${result.report.topIssues.join("  ·  ")}`);
+    if (result.status === "partial_failure") {
+      console.log(`❌ Pipeline failed at stage: ${result.failedStage}`);
+      console.log(`   Error: ${result.error?.message}`);
+    } else if (result.status === "dry_run") {
+      console.log(`✅ Dry run complete`);
+      console.log(`   Flows: ${result.summary.flows}  ·  Scenarios: ${result.summary.scenarios} (${result.summary.valid} valid)`);
+    } else {
+      const icon = result.status === "success_with_warnings" ? "⚠️ " : "✅";
+      if (result.narrative) console.log(result.narrative);
+      console.log(`${icon} Score: ${result.summary.score}/100  Grade: ${result.summary.grade}  ` +
+        `Passed: ${result.summary.passed}/${result.summary.scenarios}`);
+      if (result.report?.topIssues.length) {
+        console.log(`Issues: ${result.report.topIssues.join("  ·  ")}`);
+      }
+      if (result.report?.recommendation) {
+        console.log(`Recommendation: ${result.report.recommendation}`);
+      }
     }
-    console.log(`Recommendation: ${result.report.recommendation}\n`);
+    console.log(`   Run ID: ${result.runId}`);
+    console.log(`${"─".repeat(50)}\n`);
 
-    process.exit(result.report.failed > 0 ? 1 : 0);
+    // exit 2 = pipeline failure, exit 1 = test failures, exit 0 = success / warnings
+    if (result.status === "partial_failure") process.exit(2);
+    if (result.summary.failed > 0) process.exit(1);
+    process.exit(0);
   });
 
 program.parse(process.argv);

@@ -117,3 +117,59 @@ export interface CircuitBreakerSummary {
   threshold: number;
   skipped:   number;
 }
+
+// ── OrchestratorAgent ─────────────────────────────────────────────────────────
+
+export type PipelineStatus = "success" | "success_with_warnings" | "partial_failure" | "dry_run";
+
+export interface PipelineError {
+  message: string;
+  stage:   PipelineStage;
+  stack?:  string;
+  code?:   string;
+}
+
+export type PipelineStage =
+  | "explorer"
+  | "flow_mapper"
+  | "scenario_generator"
+  | "test_runner"
+  | "scorer";
+
+export interface StageTimings {
+  explorer?:            number;
+  flow_mapper?:         number;
+  scenario_generator?:  number;
+  test_runner?:         number;
+  scorer?:              number;
+}
+
+export interface OrchestratorSummary {
+  runId:        string;
+  url:          string;
+  status:       PipelineStatus;
+  failedStage?: PipelineStage;
+  error?:       PipelineError;
+  flows:        number;
+  scenarios:    number;
+  valid:        number;
+  passed:       number;
+  failed:       number;
+  score:        number;
+  grade:        "A" | "B" | "C" | "D" | "F";
+  durationMs:   number;
+  warnings:     string[];
+  timings:      StageTimings;
+  generatedAt:  string;
+}
+
+export interface OrchestratorInput {
+  url:         string;
+  env?:        string;
+  maxPages?:   number;
+  headless?:   boolean;
+  timeout?:    number;
+  outDir?:     string;
+  dryRun?:     boolean;
+  onProgress?: (stage: number, total: number, message: string) => void;
+}

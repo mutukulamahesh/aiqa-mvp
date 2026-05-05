@@ -1,3 +1,5 @@
+import * as fs   from "fs";
+import * as path from "path";
 import { AppExplorer }        from "./AppExplorer";
 import { FlowMapper }          from "./FlowMapper";
 import { ScenarioGenerator }   from "./ScenarioGenerator";
@@ -14,28 +16,44 @@ import {
   DebugResult,
   ReadinessReport,
   ExplorerOptions,
+  PipelineStatus,
+  PipelineStage,
+  PipelineError,
+  StageTimings,
+  OrchestratorSummary,
+  OrchestratorInput,
 } from "./types";
 
-export interface OrchestratorOptions {
-  env?:        string;
-  maxPages?:   number;
-  headless?:   boolean;
-  timeout?:    number;
-  outDir?:     string;
-  onProgress?: (stage: number, total: number, message: string) => void;
+export type { OrchestratorInput };
+
+export interface StageResults {
+  explorer?:   ExplorationResult;
+  flowMapper?: UserFlow[];
+  generator?:  GeneratedScenario[];
+  runner?:     TestResult[];
 }
 
 export interface OrchestratorResult {
-  exploration: ExplorationResult;
-  flows:       UserFlow[];
-  scenarios:   GeneratedScenario[];
-  results:     TestResult[];
-  debugMap:    Map<string, DebugResult>;
-  report:      ReadinessReport;
-  narrative:   string;
+  runId:        string;
+  status:       PipelineStatus;
+  failedStage?: PipelineStage;
+  error?:       PipelineError;
+  stageResults: StageResults;
+  exploration?: ExplorationResult;
+  flows?:       UserFlow[];
+  scenarios?:   GeneratedScenario[];
+  results:      TestResult[];
+  debugMap:     Map<string, DebugResult>;
+  report?:      ReadinessReport;
+  narrative?:   string;
+  summary:      OrchestratorSummary;
 }
 
 const TOTAL_STAGES = 5;
+
+function makeRunId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
 
 export class OrchestratorAgent {
   private readonly llm: LLMProvider;
@@ -44,36 +62,91 @@ export class OrchestratorAgent {
     this.llm = llm ?? createLLMProvider();
   }
 
-  async run(url: string, opts: OrchestratorOptions = {}): Promise<OrchestratorResult> {
-    const progress = opts.onProgress ?? defaultProgress;
+  async run(input: OrchestratorInput): Promise<OrchestratorResult> {
+    const progress  = input.onProgress ?? defaultProgress;
+    const startTime = Date.now();
+    const timings: StageTimings = {};
+    const runId = makeRunId();
 
     // ── Stage 1: Explore ──────────────────────────────────────────────────────
-    progress(1, TOTAL_STAGES, `Exploring ${url}`);
-    const explorerOpts: ExplorerOptions = {
-      headless: opts.headless ?? true,
-      maxPages: opts.maxPages,
-    };
-    const exploration = await new AppExplorer().explore(url, explorerOpts);
+    progress(1, TOTAL_STAGES, `[Explorer] Exploring ${input.url}`);
+    let exploration: ExplorationResult;
+    const t1 = Date.now();
+    try {
+      const explorerOpts: ExplorerOptions = {
+        headless: input.headless ?? true,
+        maxPages: input.maxPages,
+      };
+      exploration = await new AppExplorer().explore(input.url, explorerOpts);
+    } catch (err) {
+      return this.partialResult("explorer", err as Error, runId, startTime, timings, input);
+    }
+    timings.explorer = Date.now() - t1;
 
     // ── Stage 2: Map flows ────────────────────────────────────────────────────
-    progress(2, TOTAL_STAGES, `Mapping flows (${exploration.totalPages} pages found)`);
-    const flows = await new FlowMapper().map(exploration);
+    progress(2, TOTAL_STAGES, `[FlowMapper] Mapping flows (${exploration.totalPages} pages found)`);
+    let flows: UserFlow[];
+    const t2 = Date.now();
+    try {
+      flows = await new FlowMapper().map(exploration);
+    } catch (err) {
+      return this.partialResult("flow_mapper", err as Error, runId, startTime, timings, input, { exploration });
+    }
+    timings.flow_mapper = Date.now() - t2;
 
     // ── Stage 3: Generate scenarios ───────────────────────────────────────────
-    progress(3, TOTAL_STAGES, `Generating scenarios (${flows.length} flows)`);
-    const scenarios = await new ScenarioGenerator(this.llm).generate(flows, url);
-    const validated  = scenarios.filter(s => s.validated);
+    progress(3, TOTAL_STAGES, `[Generator] Generating scenarios (${flows.length} flows)`);
+    let scenarios: GeneratedScenario[];
+    const t3 = Date.now();
+    try {
+      scenarios = await new ScenarioGenerator(this.llm).generate(flows, input.url);
+    } catch (err) {
+      return this.partialResult("scenario_generator", err as Error, runId, startTime, timings, input, { exploration, flows });
+    }
+    timings.scenario_generator = Date.now() - t3;
+
+    const validated = scenarios.filter(s => s.validated);
+    const warnings  = scenarios
+      .filter(s => !s.validated && s.validationError)
+      .map(s => `${s.testName}: ${s.validationError!}`);
+
+    // ── Dry-run: skip execution ───────────────────────────────────────────────
+    if (input.dryRun) {
+      const summary = this.buildSummary(
+        runId, input.url, "dry_run", undefined, undefined,
+        flows, scenarios, [], timings, warnings, startTime,
+      );
+      this.persistSummary(summary, input.outDir);
+      return {
+        runId,
+        status:      "dry_run",
+        stageResults: { explorer: exploration, flowMapper: flows, generator: scenarios },
+        exploration,
+        flows,
+        scenarios,
+        results:  [],
+        debugMap: new Map(),
+        summary,
+      };
+    }
 
     // ── Stage 4: Run tests ────────────────────────────────────────────────────
-    progress(4, TOTAL_STAGES, `Running tests (${validated.length} scenarios)`);
-    const runner  = new TestRunner({ headless: opts.headless ?? true, timeout: opts.timeout });
+    progress(4, TOTAL_STAGES, `[Runner] Running ${validated.length} valid scenario(s)`);
     const results: TestResult[] = [];
-
-    for (const scenario of validated) {
-      const def    = parseTestDefinition(scenario.yaml);
-      const result = await runner.run(def);
-      results.push(result);
+    const t4 = Date.now();
+    const runner = new TestRunner({ headless: input.headless ?? true, timeout: input.timeout });
+    try {
+      for (const scenario of validated) {
+        const def    = parseTestDefinition(scenario.yaml);
+        const result = await runner.run(def);
+        results.push(result);
+      }
+    } catch (err) {
+      return this.partialResult("test_runner", err as Error, runId, startTime, timings, input, {
+        exploration, flows, scenarios, results,
+      });
     }
+    timings.test_runner = Date.now() - t4;
 
     // ── Debug failed tests ────────────────────────────────────────────────────
     const debugger_ = new DebuggerAgent(this.llm);
@@ -95,13 +168,124 @@ export class OrchestratorAgent {
     }
 
     // ── Stage 5: Score readiness ──────────────────────────────────────────────
-    progress(5, TOTAL_STAGES, "Scoring readiness");
+    progress(5, TOTAL_STAGES, "[Scorer] Scoring readiness");
+    const t5 = Date.now();
     const report = new ReadinessScorer().score(results, debugMap);
+    timings.scorer = Date.now() - t5;
 
     // ── Post-run narrative ────────────────────────────────────────────────────
     const narrative = await this.buildNarrative(exploration, flows, scenarios, results, report);
 
-    return { exploration, flows, scenarios, results, debugMap, report, narrative };
+    const status: PipelineStatus = warnings.length > 0 ? "success_with_warnings" : "success";
+    const summary = this.buildSummary(
+      runId, input.url, status, report, undefined,
+      flows, scenarios, results, timings, warnings, startTime,
+    );
+    this.persistSummary(summary, input.outDir);
+
+    return {
+      runId,
+      status,
+      stageResults: { explorer: exploration, flowMapper: flows, generator: scenarios, runner: results },
+      exploration,
+      flows,
+      scenarios,
+      results,
+      debugMap,
+      report,
+      narrative,
+      summary,
+    };
+  }
+
+  // ── Partial failure ────────────────────────────────────────────────────────
+
+  private partialResult(
+    stage:     PipelineStage,
+    err:       Error,
+    runId:     string,
+    startTime: number,
+    timings:   StageTimings,
+    input:     OrchestratorInput,
+    partial:   Partial<Pick<OrchestratorResult, "exploration" | "flows" | "scenarios" | "results">> = {},
+  ): OrchestratorResult {
+    const pipelineError: PipelineError = { message: err.message, stage, stack: err.stack };
+    const summary = this.buildSummary(
+      runId, input.url, "partial_failure", undefined, stage,
+      partial.flows     ?? [],
+      partial.scenarios ?? [],
+      partial.results   ?? [],
+      timings, [], startTime, pipelineError,
+    );
+    this.persistSummary(summary, input.outDir);
+    return {
+      runId,
+      status:      "partial_failure",
+      failedStage: stage,
+      error:       pipelineError,
+      stageResults: {
+        explorer:   partial.exploration,
+        flowMapper: partial.flows,
+        generator:  partial.scenarios,
+        runner:     partial.results,
+      },
+      exploration: partial.exploration,
+      flows:       partial.flows,
+      scenarios:   partial.scenarios,
+      results:     partial.results ?? [],
+      debugMap:    new Map(),
+      summary,
+    };
+  }
+
+  // ── Summary builder ────────────────────────────────────────────────────────
+
+  private buildSummary(
+    runId:       string,
+    url:         string,
+    status:      PipelineStatus,
+    report:      ReadinessReport | undefined,
+    failedStage: PipelineStage   | undefined,
+    flows:       UserFlow[],
+    scenarios:   GeneratedScenario[],
+    results:     TestResult[],
+    timings:     StageTimings,
+    warnings:    string[],
+    startTime:   number,
+    error?:      PipelineError,
+  ): OrchestratorSummary {
+    const passed = results.filter(r => r.passed).length;
+    return {
+      runId,
+      url,
+      status,
+      failedStage,
+      error,
+      flows:       flows.length,
+      scenarios:   scenarios.length,
+      valid:       scenarios.filter(s => s.validated).length,
+      passed,
+      failed:      results.length - passed,
+      score:       report?.score ?? 0,
+      grade:       report?.grade ?? "F",
+      durationMs:  Date.now() - startTime,
+      warnings,
+      timings,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // ── Persist summary ────────────────────────────────────────────────────────
+
+  private persistSummary(summary: OrchestratorSummary, outDir?: string): void {
+    if (!outDir) return;
+    try {
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(outDir, "orchestrator-summary.json"),
+        JSON.stringify(summary, null, 2),
+      );
+    } catch { /* best-effort — don't fail the run */ }
   }
 
   // ── Narrative ─────────────────────────────────────────────────────────────
