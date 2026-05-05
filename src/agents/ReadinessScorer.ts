@@ -1,19 +1,7 @@
 import { TestResult } from "../runner/TestRunner";
-import { DebugResult, FailureClass } from "./DebuggerAgent";
+import { DebugResult, FailureClass, ReadinessReport } from "./types";
 
-export interface ReadinessReport {
-  score:            number;
-  grade:            "A" | "B" | "C" | "D" | "F";
-  totalTests:       number;
-  passed:           number;
-  failed:           number;
-  passRatePct:      number;
-  coverageLayers:   string[];
-  failureBreakdown: Partial<Record<FailureClass, number>>;
-  topIssues:        string[];
-  recommendation:   string;
-  generatedAt:      string;
-}
+export type { ReadinessReport };
 
 export class ReadinessScorer {
   score(
@@ -90,7 +78,7 @@ export class ReadinessScorer {
 
   private buildRecommendation(
     score: number,
-    grade: string,
+    _grade: string,
     layers: string[],
     total: number,
   ): string {

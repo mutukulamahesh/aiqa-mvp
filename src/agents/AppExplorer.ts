@@ -1,41 +1,13 @@
 import { chromium, Page } from "playwright";
+import {
+  InputField,
+  PageLink,
+  ExploredPage,
+  ExplorationResult,
+  ExplorerOptions,
+} from "./types";
 
-export interface InputField {
-  type:         string;
-  name?:        string;
-  placeholder?: string;
-}
-
-export interface PageLink {
-  text: string;
-  href: string;
-}
-
-export interface ExploredPage {
-  url:           string;
-  title:         string;
-  headings:      string[];
-  buttons:       string[];
-  inputs:        InputField[];
-  links:         PageLink[];
-  internalLinks: string[];
-}
-
-export interface ExplorationResult {
-  baseUrl:     string;
-  exploredAt:  string;
-  pages:       ExploredPage[];
-  totalPages:  number;
-  totalLinks:  number;
-}
-
-export interface ExplorerOptions {
-  headless?:       boolean;
-  maxPages?:       number;
-  maxDepth?:       number;   // BFS depth limit (default: 3)
-  timeout?:        number;
-  ignorePatterns?: RegExp[];
-}
+export type { InputField, PageLink, ExploredPage, ExplorationResult, ExplorerOptions };
 
 const DEFAULT_IGNORE: RegExp[] = [
   /logout|signout|log-out|sign-out/i,

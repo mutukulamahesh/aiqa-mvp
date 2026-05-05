@@ -267,6 +267,14 @@ program
       console.log(`   Added ${jiraFlows.length} flow(s) from Jira\n`);
     }
 
+    // Persist flows so the orchestrator (and humans) can inspect them
+    const flowsPath = outRoot ? path.join(outRoot, "flows.json") : null;
+    if (flowsPath) {
+      ensureDir(path.dirname(flowsPath));
+      fs.writeFileSync(flowsPath, JSON.stringify(flows, null, 2));
+      console.log(`   Flows → ${flowsPath}`);
+    }
+
     const scenarios = await generator.generate(flows, exploration_data.baseUrl ?? "");
 
     ensureDir(outDir);
@@ -275,12 +283,11 @@ program
     scenarios.forEach(s => {
       const filePath = path.join(outDir, `${s.fileName}.yaml`);
       fs.writeFileSync(filePath, s.yaml);
-      try {
-        parseTestFile(filePath);
+      if (s.validated) {
         console.log(`   ✔ ${s.fileName}.yaml  [${s.flowType}]`);
         validCount++;
-      } catch (err) {
-        console.warn(`   ⚠ ${s.fileName}.yaml  [${s.flowType}] — DSL validation failed: ${(err as Error).message}`);
+      } else {
+        console.warn(`   ⚠ ${s.fileName}.yaml  [${s.flowType}] — DSL validation failed: ${s.validationError}`);
         invalidCount++;
       }
     });
@@ -479,6 +486,9 @@ program
 
     new HTMLReporter().generate(allResults, reportPath, {
       baseUrl: opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? ""),
+      circuitBreaker: circuitOpen
+        ? { triggered: true, threshold: cbThreshold, skipped: skippedByCircuit }
+        : undefined,
     });
     console.log(`   HTML  → ${reportPath}`);
     console.log(`─────────────────────────────────────────\n`);
@@ -503,16 +513,21 @@ QUICK START
   3. aiqa generate --out .         Generate YAML tests from crawl
   4. aiqa run-all --out . --headless  Run all tests + HTML report
 
-COMMANDS
+COMMANDS — Setup
   init <project>        Create workspace (tests/, results/, screenshots/)
+  doctor                Check environment and dependencies
+
+COMMANDS — Discovery
   explore <url>         Crawl app and save page map
     --max-pages <n>       Max pages to visit  (default: 10)
     --depth <n>           BFS link depth       (default: 3)
-    --out <folder>        Project folder
+    --out <folder>        Project folder → saves exploration.json + flows.json
   generate [file]       Generate YAML tests from exploration
     --per-page            One test per discovered page
     --jira <key>          Also pull Jira stories (mock)
     --out <folder>        Project folder
+
+COMMANDS — Execution
   run <file>            Run a single YAML test
     --headless            Run browser headlessly
     --out <folder>        Save results + report here
@@ -520,9 +535,12 @@ COMMANDS
     --headless            Run browser headlessly
     --workers <n>         Parallel workers        (default: 1)
     --tags <tag,...>      Only run tests with these tags
+    --circuit-breaker <n> Stop after N consecutive failures
     --out <folder>        Project folder
+  import                Import CSV/Excel/Gherkin/TXT test cases → YAML DSL
+
+COMMANDS — Analysis
   score <results.json>  Compute 0-100 readiness score
-  doctor                Check environment and dependencies
   help                  Show this guide
 
 EXAMPLES

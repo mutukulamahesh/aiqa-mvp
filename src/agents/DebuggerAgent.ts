@@ -1,27 +1,7 @@
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
+import { FailureClass, DebugParams, DebugResult } from "./types";
 
-export type FailureClass =
-  | "locator_failure"
-  | "timing_issue"
-  | "assertion_failure"
-  | "api_failure"
-  | "network_error"
-  | "unknown";
-
-export interface DebugParams {
-  test_name:     string;
-  step_action:   string;
-  step_index:    number;
-  error_message: string;
-}
-
-export interface DebugResult {
-  failure_class:  FailureClass;
-  root_cause:     string;
-  suggested_fix:  string;
-  confidence:     number;
-  from_mock:      boolean;
-}
+export type { FailureClass, DebugParams, DebugResult };
 
 const SYSTEM_PROMPT =
   "You are a QA failure analysis expert. " +

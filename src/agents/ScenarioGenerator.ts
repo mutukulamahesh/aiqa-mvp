@@ -1,12 +1,8 @@
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
-import { UserFlow, FlowStep } from "./FlowMapper";
+import { parseTestDefinition } from "../dsl/DslParser";
+import { UserFlow, FlowStep, GeneratedScenario } from "./types";
 
-export interface GeneratedScenario {
-  fileName: string;
-  testName: string;
-  flowType: string;
-  yaml:     string;
-}
+export type { GeneratedScenario };
 
 const SYSTEM_PROMPT =
   "You are a QA engineer generating YAML test scenarios. " +
@@ -30,11 +26,21 @@ export class ScenarioGenerator {
         : flow.steps;
 
       const yaml = this.buildYaml(flow, steps, baseUrl);
+      let validated = true;
+      let validationError: string | undefined;
+      try {
+        parseTestDefinition(yaml);
+      } catch (err) {
+        validated = false;
+        validationError = (err as Error).message;
+      }
       scenarios.push({
         fileName: this.toFileName(flow.name),
         testName: flow.name,
         flowType: flow.type,
         yaml,
+        validated,
+        validationError,
       });
     }
 

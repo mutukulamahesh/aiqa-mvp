@@ -2,10 +2,12 @@ import * as fs from "fs";
 import * as path from "path";
 import { TestResult } from "../runner/TestRunner";
 import { ReadinessScorer } from "../agents/ReadinessScorer";
+import { CircuitBreakerSummary } from "../agents/types";
 
 export interface ReportOptions {
-  title?:   string;
-  baseUrl?: string;
+  title?:          string;
+  baseUrl?:        string;
+  circuitBreaker?: CircuitBreakerSummary;
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -40,6 +42,8 @@ export class HTMLReporter {
     const baseUrl   = opts.baseUrl ?? "";
     const generated = new Date().toLocaleString();
     const totalMs   = results.reduce((s, r) => s + r.durationMs, 0);
+    const retried   = results.filter(r => r.retryCount > 0).length;
+    const cb        = opts.circuitBreaker;
 
     const scoreColor =
       report.score >= 75 ? "#22c55e" :
@@ -159,6 +163,13 @@ export class HTMLReporter {
                           border: 1px solid #e2e8f0; display: block; }
 
   .footer { text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 24px; }
+
+  .cb-banner { background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0;
+               padding: 10px 16px; margin-bottom: 20px; font-size: .875rem; color: #92400e; }
+  .cb-banner strong { display: block; margin-bottom: 2px; }
+  .retry-badge { display: inline-block; background: #fef9c3; color: #854d0e;
+                 border-radius: 4px; padding: 1px 6px; font-size: 0.7rem;
+                 font-weight: 700; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -178,6 +189,12 @@ export class HTMLReporter {
   </div>
 </div>
 
+${cb?.triggered ? `
+<div class="cb-banner">
+  <strong>⚡ Circuit breaker triggered</strong>
+  Suite stopped after ${cb.threshold} consecutive failures &nbsp;·&nbsp; ${cb.skipped} test${cb.skipped !== 1 ? "s" : ""} skipped
+</div>` : ""}
+
 <div class="summary">
   <div class="card pass">
     <div class="value" style="color:#22c55e">${report.passed}</div>
@@ -195,6 +212,10 @@ export class HTMLReporter {
     <div class="value" style="color:${scoreColor}">${results.length}</div>
     <div class="label">Total Tests</div>
   </div>
+  ${retried > 0 ? `<div class="card" style="border-top:4px solid #f59e0b">
+    <div class="value" style="color:#d97706">${retried}</div>
+    <div class="label">Retried</div>
+  </div>` : ""}
 </div>
 
 <div class="coverage">
@@ -216,19 +237,22 @@ export class HTMLReporter {
   }
 
   private testBlock(result: TestResult): string {
-    const status    = result.passed ? "pass" : "fail";
-    const icon      = result.passed ? "✅" : "❌";
-    const tags      = result.tags;
-    const tagsHtml  = tags?.length
+    const status     = result.passed ? "pass" : "fail";
+    const icon       = result.passed ? "✅" : "❌";
+    const tags       = result.tags;
+    const tagsHtml   = tags?.length
       ? `<span class="tags">${tags.map(t => `<span class="tag">${this.esc(t)}</span>`).join("")}</span>`
       : "";
-    const stepsHtml = result.stepResults.map(s => this.stepRow(s, result.debugResult)).join("\n");
+    const retryHtml  = result.retryCount > 0
+      ? `<span class="retry-badge">↺ ${result.retryCount} retr${result.retryCount === 1 ? "y" : "ies"}</span>`
+      : "";
+    const stepsHtml  = result.stepResults.map(s => this.stepRow(s, result.debugResult)).join("\n");
 
     return `<div class="test">
   <details>
     <summary class="test-header ${status}">
       <span class="status-dot ${status}"></span>
-      <span class="test-name">${icon} ${this.esc(result.testName)}${tagsHtml}</span>
+      <span class="test-name">${icon} ${this.esc(result.testName)}${tagsHtml}${retryHtml}</span>
       <span class="test-meta">${result.stepResults.length} steps &nbsp;·&nbsp; ${result.durationMs}ms</span>
       <span class="chevron">▶</span>
     </summary>

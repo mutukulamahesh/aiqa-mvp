@@ -1,21 +1,7 @@
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
-import { ExplorationResult, ExploredPage } from "./AppExplorer";
+import { ExplorationResult, ExploredPage, FlowStep, UserFlow } from "./types";
 
-export interface FlowStep {
-  action:       string;
-  target?:      string;
-  value?:       string;
-  description?: string;
-}
-
-export interface UserFlow {
-  name:        string;
-  description: string;
-  type:        "authentication" | "form_submission" | "navigation" | "crud";
-  priority:    "high" | "medium" | "low";
-  pages:       string[];
-  steps:       FlowStep[];
-}
+export type { FlowStep, UserFlow };
 
 const SYSTEM_PROMPT =
   "You are a QA expert identifying user flows from application structure. " +
