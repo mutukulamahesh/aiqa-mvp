@@ -1,11 +1,16 @@
 test:
   name: "Logout"
-  tags: [imported]
+  tags: [saucedemo]
   steps:
     - navigate: "https://www.saucedemo.com/"
-    # WARNING: could not map step — "login with valid credentials"
-    - click: "menu"
-    - click: "logout"
+    - fill:
+        target: "username"
+        value: "standard_user"
+    - fill:
+        target: "password"
+        value: "secret_sauce"
+    - click: '[data-test="login-button"]'
+    - click: "#react-burger-menu-btn"
+    - click: "#logout_sidebar_link"
     - assert:
-        url: "login"
-  # Expected: User logged out
+        visible: '[data-test="login-button"]'

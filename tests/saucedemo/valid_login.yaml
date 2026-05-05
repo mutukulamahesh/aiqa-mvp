@@ -1,6 +1,6 @@
 test:
   name: "Valid Login"
-  tags: [imported]
+  tags: [saucedemo]
   steps:
     - navigate: "https://www.saucedemo.com/"
     - fill:
@@ -9,7 +9,6 @@ test:
     - fill:
         target: "password"
         value: "secret_sauce"
-    - click: "login_button"
+    - click: '[data-test="login-button"]'
     - assert:
         url: "inventory"
-  # Expected: User logged in successfully

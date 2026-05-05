@@ -7,6 +7,7 @@ import { TestDefinition } from "../dsl/types";
 import { DebuggerAgent, DebugResult } from "../agents/DebuggerAgent";
 import { getConfig } from "../config/ConfigLoader";
 import { AssertionError, TransientError } from "../errors";
+import { SelectorHealer } from "../healer/SelectorHealer";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -67,8 +68,14 @@ export function isRetryable(err: Error): boolean {
 export class TestRunner {
   private readonly interpreter = new StepInterpreter();
   private readonly debugger    = new DebuggerAgent();
+  private readonly healer      = new SelectorHealer();
 
   constructor(private readonly opts: RunnerOptions) {}
+
+  /** Returns the healer's activity report for the current runner session. */
+  getHealerReport(): string {
+    return this.healer.getReport();
+  }
 
   /**
    * Public entry point.
@@ -138,6 +145,7 @@ export class TestRunner {
       headless: this.opts.headless,
       slowMo:   this.opts.slowMo ?? 0,
       timeout,
+      healer:   this.healer,
     });
 
     const ctx        = new ExecutionContext(test.variables ?? {}, config);

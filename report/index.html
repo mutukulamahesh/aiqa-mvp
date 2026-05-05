@@ -17,7 +17,7 @@
   .header-left p { margin-top: 6px; font-size: 0.875rem; color: #94a3b8; }
   .header-badge { background: #1e293b; border-radius: 8px; padding: 8px 16px;
                   text-align: center; }
-  .header-badge .grade { font-size: 2rem; font-weight: 800; color: #f59e0b; line-height: 1; }
+  .header-badge .grade { font-size: 2rem; font-weight: 800; color: #22c55e; line-height: 1; }
   .header-badge .grade-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase;
                                 letter-spacing: .06em; margin-top: 2px; }
 
@@ -28,13 +28,13 @@
   .card .value { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: 4px; }
   .card .label { font-size: 0.8rem; color: #64748b; text-transform: uppercase;
                  letter-spacing: .05em; }
-  .card.score  { border-top: 4px solid #f59e0b; }
+  .card.score  { border-top: 4px solid #22c55e; }
   .card.pass   { border-top: 4px solid #22c55e; }
   .card.fail   { border-top: 4px solid #ef4444; }
   .card.time   { border-top: 4px solid #6366f1; }
 
   .progress-bar { background: #e2e8f0; border-radius: 999px; height: 6px; margin-top: 8px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 999px; background: #f59e0b; width: 50%; }
+  .progress-fill { height: 100%; border-radius: 999px; background: #22c55e; width: 100%; }
 
   .coverage { background: #fff; border-radius: 10px; padding: 16px 20px;
               margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
@@ -100,6 +100,13 @@
                           border: 1px solid #e2e8f0; display: block; }
 
   .footer { text-align: center; font-size: 0.8rem; color: #94a3b8; margin-top: 24px; }
+
+  .cb-banner { background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0;
+               padding: 10px 16px; margin-bottom: 20px; font-size: .875rem; color: #92400e; }
+  .cb-banner strong { display: block; margin-bottom: 2px; }
+  .retry-badge { display: inline-block; background: #fef9c3; color: #854d0e;
+                 border-radius: 4px; padding: 1px 6px; font-size: 0.7rem;
+                 font-weight: 700; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -107,110 +114,55 @@
 <div class="header">
   <div class="header-left">
     <h1>AIQA Test Report</h1>
-    <p>Generated: 5/4/2026, 3:25:17 PM &nbsp;·&nbsp; /workspaces/aiqa-mvp/.tmp-epic03/stress</p>
+    <p>Generated: 5/5/2026, 8:40:51 PM &nbsp;·&nbsp; tests/saucedemo</p>
     <div class="progress-bar" style="margin-top:12px;width:200px">
       <div class="progress-fill"></div>
     </div>
-    <p style="font-size:.75rem;color:#94a3b8;margin-top:4px">50% pass rate</p>
+    <p style="font-size:.75rem;color:#94a3b8;margin-top:4px">100% pass rate</p>
   </div>
   <div class="header-badge">
-    <div class="grade">50<span style="font-size:1rem">/100</span></div>
-    <div class="grade-label">Score (D)</div>
+    <div class="grade">76<span style="font-size:1rem">/100</span></div>
+    <div class="grade-label">Score (B)</div>
   </div>
 </div>
 
+
+
 <div class="summary">
   <div class="card pass">
-    <div class="value" style="color:#22c55e">4</div>
+    <div class="value" style="color:#22c55e">5</div>
     <div class="label">Passed</div>
   </div>
   <div class="card fail">
-    <div class="value" style="color:#ef4444">4</div>
+    <div class="value" style="color:#ef4444">0</div>
     <div class="label">Failed</div>
   </div>
   <div class="card time">
-    <div class="value" style="color:#6366f1">0.7s</div>
+    <div class="value" style="color:#6366f1">5.1s</div>
     <div class="label">Duration</div>
   </div>
   <div class="card score">
-    <div class="value" style="color:#f59e0b">8</div>
+    <div class="value" style="color:#22c55e">5</div>
     <div class="label">Total Tests</div>
   </div>
+  
 </div>
 
 <div class="coverage">
   <h2>Coverage</h2>
   <span class="cov-badge">UI</span> <span class="cov-badge">Assertions</span>
-  <p style="margin-top:8px;font-size:.85rem;color:#64748b">2× assertion failure &nbsp;·&nbsp; 2× unknown</p>
-  <div class="reco"><strong>Recommendation:</strong> Low coverage. Significant failures detected. Not recommended for production.</div>
+  
+  <div class="reco"><strong>Recommendation:</strong> Good coverage. Address failing tests before releasing.</div>
 </div>
 
 <div class="tests-section">
   <h2>Test Results</h2>
   <div class="test">
   <details>
-    <summary class="test-header fail">
-      <span class="status-dot fail"></span>
-      <span class="test-name">❌ Stress assertion fail 1</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 7ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge fail">FAIL</span>
-        <span class="step-action" style="background:#10b981">assert</span>
-        <div class="step-detail">
-          <div class="step-duration">7ms</div>
-          <div class="step-error">assertEquals: expected &quot;right&quot;, got &quot;wrong&quot;</div>
-        </div>
-      </div>
-      <div class="inline-debug">
-          <div class="d-class">🔍 assertion failure</div>
-          <div class="d-fix">💡 Verify the expected value matches current application behaviour. Check for whitespace or casing differences.</div>
-        </div>
-      
-    </div>
-      <p style="color:#dc2626;font-size:.85rem;margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:6px">⛔ Step 1 (assert) failed: assertEquals: expected &quot;right&quot;, got &quot;wrong&quot;</p>
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header fail">
-      <span class="status-dot fail"></span>
-      <span class="test-name">❌ Stress assertion fail 2</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 5ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge fail">FAIL</span>
-        <span class="step-action" style="background:#10b981">assert</span>
-        <div class="step-detail">
-          <div class="step-duration">5ms</div>
-          <div class="step-error">assertEquals: expected &quot;right&quot;, got &quot;wrong&quot;</div>
-        </div>
-      </div>
-      <div class="inline-debug">
-          <div class="d-class">🔍 assertion failure</div>
-          <div class="d-fix">💡 Verify the expected value matches current application behaviour. Check for whitespace or casing differences.</div>
-        </div>
-      
-    </div>
-      <p style="color:#dc2626;font-size:.85rem;margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:6px">⛔ Step 1 (assert) failed: assertEquals: expected &quot;right&quot;, got &quot;wrong&quot;</p>
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ Stress multi-step pass</span>
-      <span class="test-meta">3 steps &nbsp;·&nbsp; 5ms</span>
+      <span class="test-name">✅ Add Product to Cart<span class="tags"><span class="tag">saucedemo</span></span></span>
+      <span class="test-meta">6 steps &nbsp;·&nbsp; 920ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -218,9 +170,9 @@
       <div class="step-row">
         <span class="step-idx">1</span>
         <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#10b981">assert</span>
+        <span class="step-action" style="background:#3b82f6">navigate</span>
         <div class="step-detail">
-          <div class="step-duration">4ms</div>
+          <div class="step-duration">517ms</div>
           
         </div>
       </div>
@@ -231,9 +183,9 @@
       <div class="step-row">
         <span class="step-idx">2</span>
         <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#10b981">assert</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
         <div class="step-detail">
-          <div class="step-duration">1ms</div>
+          <div class="step-duration">141ms</div>
           
         </div>
       </div>
@@ -244,9 +196,48 @@
       <div class="step-row">
         <span class="step-idx">3</span>
         <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">62ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">141ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">51ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">6</span>
+        <span class="step-badge pass">PASS</span>
         <span class="step-action" style="background:#10b981">assert</span>
         <div class="step-detail">
-          <div class="step-duration">0ms</div>
+          <div class="step-duration">8ms</div>
           
         </div>
       </div>
@@ -261,8 +252,8 @@
   <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ Stress pass 1</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 3ms</span>
+      <span class="test-name">✅ Invalid Password<span class="tags"><span class="tag">saucedemo</span></span></span>
+      <span class="test-meta">5 steps &nbsp;·&nbsp; 677ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -270,138 +261,432 @@
       <div class="step-row">
         <span class="step-idx">1</span>
         <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#10b981">assert</span>
-        <div class="step-detail">
-          <div class="step-duration">3ms</div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-      
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header pass">
-      <span class="status-dot pass"></span>
-      <span class="test-name">✅ Stress pass 2</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 3ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#10b981">assert</span>
-        <div class="step-detail">
-          <div class="step-duration">3ms</div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-      
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header pass">
-      <span class="status-dot pass"></span>
-      <span class="test-name">✅ Stress pass 3</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 3ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#10b981">assert</span>
-        <div class="step-detail">
-          <div class="step-duration">3ms</div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-      
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header fail">
-      <span class="status-dot fail"></span>
-      <span class="test-name">❌ Stress transient fail 1</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 323ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge fail">FAIL</span>
         <span class="step-action" style="background:#3b82f6">navigate</span>
         <div class="step-detail">
-          <div class="step-duration">323ms</div>
-          <div class="step-error">page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9999/
-Call log:
-  - navigating to &quot;http://localhost:9999/&quot;, waiting until &quot;domcontentloaded&quot;
-</div>
+          <div class="step-duration">406ms</div>
+          
         </div>
       </div>
-      <div class="inline-debug">
-          <div class="d-class">🔍 unknown</div>
-          <div class="d-fix">💡 Review the full error message and stack trace for more detail.</div>
-        </div>
+      
       
     </div>
-      <p style="color:#dc2626;font-size:.85rem;margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:6px">⛔ Step 1 (navigate) failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9999/
-Call log:
-  - navigating to &quot;http://localhost:9999/&quot;, waiting until &quot;domcontentloaded&quot;
-</p>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">2</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">76ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">3</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">59ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">123ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">12ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
     </div>
   </details>
 </div>
 <div class="test">
   <details>
-    <summary class="test-header fail">
-      <span class="status-dot fail"></span>
-      <span class="test-name">❌ Stress transient fail 2</span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 305ms</span>
+    <summary class="test-header pass">
+      <span class="status-dot pass"></span>
+      <span class="test-name">✅ Logout<span class="tags"><span class="tag">saucedemo</span></span></span>
+      <span class="test-meta">7 steps &nbsp;·&nbsp; 1698ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
       <div class="step">
       <div class="step-row">
         <span class="step-idx">1</span>
-        <span class="step-badge fail">FAIL</span>
+        <span class="step-badge pass">PASS</span>
         <span class="step-action" style="background:#3b82f6">navigate</span>
         <div class="step-detail">
-          <div class="step-duration">305ms</div>
-          <div class="step-error">page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9999/
-Call log:
-  - navigating to &quot;http://localhost:9999/&quot;, waiting until &quot;domcontentloaded&quot;
-</div>
+          <div class="step-duration">441ms</div>
+          
         </div>
       </div>
-      <div class="inline-debug">
-          <div class="d-class">🔍 unknown</div>
-          <div class="d-fix">💡 Review the full error message and stack trace for more detail.</div>
-        </div>
+      
       
     </div>
-      <p style="color:#dc2626;font-size:.85rem;margin-top:10px;padding:8px 12px;background:#fff5f5;border-radius:6px">⛔ Step 1 (navigate) failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:9999/
-Call log:
-  - navigating to &quot;http://localhost:9999/&quot;, waiting until &quot;domcontentloaded&quot;
-</p>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">2</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">135ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">3</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">24ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">116ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">58ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">6</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">921ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">7</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">3ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
+    </div>
+  </details>
+</div>
+<div class="test">
+  <details>
+    <summary class="test-header pass">
+      <span class="status-dot pass"></span>
+      <span class="test-name">✅ Successful Checkout<span class="tags"><span class="tag">saucedemo</span></span></span>
+      <span class="test-meta">13 steps &nbsp;·&nbsp; 1070ms</span>
+      <span class="chevron">▶</span>
+    </summary>
+    <div class="steps">
+      <div class="step">
+      <div class="step-row">
+        <span class="step-idx">1</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#3b82f6">navigate</span>
+        <div class="step-detail">
+          <div class="step-duration">433ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">2</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">85ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">3</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">37ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">158ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">58ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">6</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">59ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">7</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">84ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">8</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">15ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">9</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">12ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">10</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">18ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">11</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">66ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">12</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">42ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">13</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">3ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
+    </div>
+  </details>
+</div>
+<div class="test">
+  <details>
+    <summary class="test-header pass">
+      <span class="status-dot pass"></span>
+      <span class="test-name">✅ Valid Login<span class="tags"><span class="tag">saucedemo</span></span></span>
+      <span class="test-meta">5 steps &nbsp;·&nbsp; 723ms</span>
+      <span class="chevron">▶</span>
+    </summary>
+    <div class="steps">
+      <div class="step">
+      <div class="step-row">
+        <span class="step-idx">1</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#3b82f6">navigate</span>
+        <div class="step-detail">
+          <div class="step-duration">524ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">2</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">61ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">3</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">27ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">106ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">5ms</div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
     </div>
   </details>
 </div>
