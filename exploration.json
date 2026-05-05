@@ -1,0 +1,32 @@
+{
+  "baseUrl": "https://www.saucedemo.com",
+  "exploredAt": "2026-05-04T19:22:17.038Z",
+  "pages": [
+    {
+      "url": "https://www.saucedemo.com",
+      "title": "Swag Labs",
+      "headings": [],
+      "buttons": [],
+      "inputs": [
+        {
+          "type": "text",
+          "name": "user-name",
+          "placeholder": "Username"
+        },
+        {
+          "type": "password",
+          "name": "password",
+          "placeholder": "Password"
+        },
+        {
+          "type": "submit",
+          "name": "login-button"
+        }
+      ],
+      "links": [],
+      "internalLinks": []
+    }
+  ],
+  "totalPages": 1,
+  "totalLinks": 0
+}
