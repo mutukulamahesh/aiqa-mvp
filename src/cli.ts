@@ -508,10 +508,12 @@ program
 ╚══════════════════════════════════════════════════════╝
 
 QUICK START
-  1. aiqa init my-project          Create project workspace
-  2. aiqa explore <url> --out .    Crawl app → exploration.json
-  3. aiqa generate --out .         Generate YAML tests from crawl
-  4. aiqa run-all --out . --headless  Run all tests + HTML report
+  1. aiqa init my-project             Create project workspace
+  2. aiqa orchestrate <url> --out .   Full pipeline in one command
+  — or run stages individually —
+  3. aiqa explore <url> --out .       Crawl app → exploration.json
+  4. aiqa generate --out .            Generate YAML tests from crawl
+  5. aiqa run-all --out . --headless  Run all tests + HTML report
 
 COMMANDS — Setup
   init <project>        Create workspace (tests/, results/, screenshots/)
@@ -528,6 +530,11 @@ COMMANDS — Discovery
     --out <folder>        Project folder
 
 COMMANDS — Execution
+  orchestrate <url>     Full pipeline: explore → map → generate → run → score
+    --env <name>          Environment config (config/environments/<name>.yaml)
+    --max-pages <n>       Max pages to crawl  (default: 10)
+    --headless            Run browser headlessly
+    --out <folder>        Write all artifacts here
   run <file>            Run a single YAML test
     --headless            Run browser headlessly
     --out <folder>        Save results + report here
@@ -544,6 +551,7 @@ COMMANDS — Analysis
   help                  Show this guide
 
 EXAMPLES
+  aiqa orchestrate https://example.com --out my-app --headless
   aiqa explore https://example.com --out my-app --max-pages 20 --depth 4
   aiqa generate --out my-app --per-page
   aiqa run-all --out my-app --headless --workers 4
@@ -728,6 +736,83 @@ program
 
       process.exit(failed > 0 ? 1 : 0);
     }
+  });
+
+// ── orchestrate ───────────────────────────────────────────────────────────────
+
+program
+  .command("orchestrate <url>")
+  .description("Full pipeline: explore → map flows → generate → run → score")
+  .option("--env <name>",        "Environment name (loads config/environments/<name>.yaml)")
+  .option("--max-pages <n>",     "Max pages to crawl (default: 10)")
+  .option("--headless",          "Run browser in headless mode", false)
+  .option("--out <dir>",         "Write exploration.json, flows.json, YAMLs and report here")
+  .option("--report <path>",     "Path for HTML report (default: <out>/report.html)")
+  .action(async (url: string, opts: {
+    env?:      string;
+    maxPages?: string;
+    headless?: boolean;
+    out?:      string;
+    report?:   string;
+  }) => {
+    const { OrchestratorAgent } = await import("./agents/OrchestratorAgent");
+
+    const outRoot    = opts.out ? path.resolve(process.cwd(), opts.out) : null;
+    const reportPath = opts.report
+      ? path.resolve(process.cwd(), opts.report)
+      : outRoot ? path.join(outRoot, "report.html") : null;
+
+    if (outRoot) fs.mkdirSync(outRoot, { recursive: true });
+
+    console.log(`\naiqa orchestrate  →  ${url}\n`);
+
+    const result = await new OrchestratorAgent().run(url, {
+      env:      opts.env,
+      maxPages: opts.maxPages ? Number(opts.maxPages) : 10,
+      headless: opts.headless ?? true,
+      outDir:   outRoot ?? undefined,
+      onProgress: (stage, total, message) => {
+        console.log(`[${stage}/${total}] ${message}`);
+      },
+    });
+
+    // Persist artifacts
+    if (outRoot) {
+      const explorationPath = path.join(outRoot, "exploration.json");
+      fs.writeFileSync(explorationPath, JSON.stringify(result.exploration, null, 2));
+      console.log(`\n   Exploration → ${explorationPath}`);
+
+      const flowsPath = path.join(outRoot, "flows.json");
+      fs.writeFileSync(flowsPath, JSON.stringify(result.flows, null, 2));
+      console.log(`   Flows       → ${flowsPath}`);
+
+      const yamlDir = path.join(outRoot, "tests");
+      fs.mkdirSync(yamlDir, { recursive: true });
+      for (const s of result.scenarios) {
+        if (s.validated) {
+          fs.writeFileSync(path.join(yamlDir, `${s.fileName}.yaml`), s.yaml);
+        }
+      }
+      console.log(`   Tests       → ${yamlDir}/ (${result.scenarios.filter(s => s.validated).length} files)`);
+    }
+
+    if (reportPath) {
+      new HTMLReporter().generate(result.results, reportPath, { baseUrl: url });
+      console.log(`   Report      → ${reportPath}`);
+    }
+
+    // Summary
+    console.log(`\n${"─".repeat(50)}`);
+    console.log(result.narrative);
+    console.log(`${"─".repeat(50)}`);
+    console.log(`Score: ${result.report.score}/100  Grade: ${result.report.grade}  ` +
+      `Passed: ${result.report.passed}/${result.report.totalTests}`);
+    if (result.report.topIssues.length > 0) {
+      console.log(`Issues: ${result.report.topIssues.join("  ·  ")}`);
+    }
+    console.log(`Recommendation: ${result.report.recommendation}\n`);
+
+    process.exit(result.report.failed > 0 ? 1 : 0);
   });
 
 program.parse(process.argv);
