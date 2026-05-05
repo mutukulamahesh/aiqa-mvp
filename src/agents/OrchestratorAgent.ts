@@ -17,10 +17,11 @@ import {
 } from "./types";
 
 export interface OrchestratorOptions {
-  env?:      string;
-  maxPages?: number;
-  headless?: boolean;
-  outDir?:   string;
+  env?:        string;
+  maxPages?:   number;
+  headless?:   boolean;
+  timeout?:    number;
+  outDir?:     string;
   onProgress?: (stage: number, total: number, message: string) => void;
 }
 
@@ -65,7 +66,7 @@ export class OrchestratorAgent {
 
     // ── Stage 4: Run tests ────────────────────────────────────────────────────
     progress(4, TOTAL_STAGES, `Running tests (${validated.length} scenarios)`);
-    const runner  = new TestRunner({ headless: opts.headless ?? true });
+    const runner  = new TestRunner({ headless: opts.headless ?? true, timeout: opts.timeout });
     const results: TestResult[] = [];
 
     for (const scenario of validated) {

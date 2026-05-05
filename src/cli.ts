@@ -509,7 +509,7 @@ program
 
 QUICK START
   1. aiqa init my-project             Create project workspace
-  2. aiqa orchestrate <url> --out .   Full pipeline in one command
+  2. aiqa orchestrate --url <url> --out .   Full pipeline in one command
   — or run stages individually —
   3. aiqa explore <url> --out .       Crawl app → exploration.json
   4. aiqa generate --out .            Generate YAML tests from crawl
@@ -530,9 +530,9 @@ COMMANDS — Discovery
     --out <folder>        Project folder
 
 COMMANDS — Execution
-  orchestrate <url>     Full pipeline: explore → map → generate → run → score
-    --env <name>          Environment config (config/environments/<name>.yaml)
-    --max-pages <n>       Max pages to crawl  (default: 10)
+  orchestrate           Full pipeline: explore → map → generate → run → score
+    --url <url>           Target URL to explore and test (required)
+    --max-pages <n>       Max pages to crawl  (default: from env config)
     --headless            Run browser headlessly
     --out <folder>        Write all artifacts here
   run <file>            Run a single YAML test
@@ -551,7 +551,7 @@ COMMANDS — Analysis
   help                  Show this guide
 
 EXAMPLES
-  aiqa orchestrate https://example.com --out my-app --headless
+  aiqa orchestrate --url https://example.com --out my-app --headless
   aiqa explore https://example.com --out my-app --max-pages 20 --depth 4
   aiqa generate --out my-app --per-page
   aiqa run-all --out my-app --headless --workers 4
@@ -741,22 +741,24 @@ program
 // ── orchestrate ───────────────────────────────────────────────────────────────
 
 program
-  .command("orchestrate <url>")
+  .command("orchestrate")
   .description("Full pipeline: explore → map flows → generate → run → score")
-  .option("--env <name>",        "Environment name (loads config/environments/<name>.yaml)")
-  .option("--max-pages <n>",     "Max pages to crawl (default: 10)")
-  .option("--headless",          "Run browser in headless mode", false)
-  .option("--out <dir>",         "Write exploration.json, flows.json, YAMLs and report here")
-  .option("--report <path>",     "Path for HTML report (default: <out>/report.html)")
-  .action(async (url: string, opts: {
-    env?:      string;
+  .requiredOption("--url <url>",   "Target URL to explore and test")
+  .option("--max-pages <n>",       "Max pages to crawl (default: from env config)")
+  .option("--headless",            "Run browser in headless mode")
+  .option("--out <dir>",           "Write exploration.json, flows.json, YAMLs and report here")
+  .option("--report <path>",       "Path for HTML report (default: <out>/report.html)")
+  .action(async (opts: {
+    url:       string;
     maxPages?: string;
     headless?: boolean;
     out?:      string;
     report?:   string;
   }) => {
     const { OrchestratorAgent } = await import("./agents/OrchestratorAgent");
+    const config = cfg();
 
+    const url        = opts.url;
     const outRoot    = opts.out ? path.resolve(process.cwd(), opts.out) : null;
     const reportPath = opts.report
       ? path.resolve(process.cwd(), opts.report)
@@ -764,12 +766,13 @@ program
 
     if (outRoot) fs.mkdirSync(outRoot, { recursive: true });
 
-    console.log(`\naiqa orchestrate  →  ${url}\n`);
+    console.log(`\naiqa orchestrate  [env: ${config.environment}]  →  ${url}\n`);
 
     const result = await new OrchestratorAgent().run(url, {
-      env:      opts.env,
-      maxPages: opts.maxPages ? Number(opts.maxPages) : 10,
-      headless: opts.headless ?? true,
+      env:      config.environment,
+      maxPages: opts.maxPages ? Number(opts.maxPages) : config.execution.maxPages,
+      headless: opts.headless ?? config.execution.headless,
+      timeout:  config.timeouts.action,
       outDir:   outRoot ?? undefined,
       onProgress: (stage, total, message) => {
         console.log(`[${stage}/${total}] ${message}`);
