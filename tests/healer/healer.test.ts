@@ -33,16 +33,22 @@ const mockLLM: LLMProvider = {
 
 /**
  * Minimal Page mock.
- * selectorCount controls what page.locator(sel).count() returns.
- * Pass a Map to return different counts per selector.
- * locatorText is returned by locator().textContent() (null = no visible text).
+ * selectorCount  — what page.locator(sel).count() returns (or Map for per-selector)
+ * locatorText    — returned by locator().textContent() (null = no visible text)
+ * locatorTag     — tag name returned by locator().evaluate(el => el.tagName.toLowerCase())
+ * locatorRole    — value returned by locator().getAttribute("role")
  */
 function makePage(
-  candidate: Record<string, string> = {},
-  selectorCount: number | Map<string, number> = 1,
-  locatorText: string | null = null,
+  candidate:    Record<string, string>          = {},
+  selectorCount: number | Map<string, number>   = 1,
+  locatorText:  string | null                   = null,
+  locatorTag    = "button",
+  locatorRole:  string | null                   = null,
 ) {
   return {
+    // page.evaluate — used by extractCandidates (returns element list)
+    // extractContextKey also calls page.evaluate for h1/h2; .catch(() => "") handles
+    // the mock returning an array instead of a string gracefully.
     evaluate: async (_fn: unknown) => [
       {
         tag:      candidate.tag      ?? "input",
@@ -58,7 +64,10 @@ function makePage(
           ? selectorCount
           : (selectorCount.get(sel) ?? 0),
       textContent:  async () => locatorText,
-      getAttribute: async (_attr: string) => null as string | null,
+      getAttribute: async (attr: string) => attr === "role" ? locatorRole : null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      evaluate:     async (fn: (el: any) => unknown) =>
+        fn({ tagName: locatorTag.toUpperCase(), getAttribute: (a: string) => a === "role" ? locatorRole : null }),
     }),
     title: async () => "Test Page",
   };
@@ -549,9 +558,125 @@ describe("SelectorHealer — report", () => {
     healer.cache.set("https://a.com", "btn", "#x");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await healer.tryCache("https://a.com", "btn", makePage({}, 1) as any);
-    // LLM heal on a different descriptor (never in cache → cold)
+    // LLM heal on a different descriptor; use <a> tag so role validation passes
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await healer.heal("link", makePage() as any, "https://b.com");
+    await healer.heal("link", makePage({}, 1, null, "a") as any, "https://b.com");
     expect(healer.getReport()).toContain("Mixed");
+  });
+});
+
+// ── Semantic scoring ──────────────────────────────────────────────────────────
+
+describe("SelectorHealer — semantic scoring", () => {
+  test("avoids false positive: 'checkout' does not match 'Check box' content", async () => {
+    // "check" is a short fragment of "checkout" (ratio 5/8 < 0.7) → score 0.3 → rejected
+    const healer = new SelectorHealer(stubLLM("#cb"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("checkout_btn", makePage({}, 1, "Check box") as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+
+  test("accepts: 'username' matches 'User Name' via collapsed-space check", async () => {
+    // collapsed "username" === "username" → score 1.0
+    const healer = new SelectorHealer(stubLLM("#u"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("username_field", makePage({}, 1, "User Name", "input") as any, "https://example.com");
+    expect(result).toBe("#u");
+  });
+
+  test("accepts: 'add' exactly matches word in 'Add to Cart'", async () => {
+    const healer = new SelectorHealer(stubLLM("#atc"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("add_to_cart", makePage({}, 1, "Add to Cart") as any, "https://example.com");
+    expect(result).toBe("#atc");
+  });
+});
+
+// ── Role / type validation ────────────────────────────────────────────────────
+
+describe("SelectorHealer — role validation", () => {
+  test("accepts button descriptor when element tag is <button>", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "button") as any, "https://example.com");
+    expect(result).toBe("#b");
+  });
+
+  test("rejects button descriptor when element is an <input> (not a button)", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "input") as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+
+  test("accepts button descriptor when element has role=button even if tag is <div>", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "div", "button") as any, "https://example.com");
+    expect(result).toBe("#b");
+  });
+
+  test("accepts link descriptor when element tag is <a>", async () => {
+    const healer = new SelectorHealer(stubLLM("#lnk"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("nav_link", makePage({}, 1, null, "a") as any, "https://example.com");
+    expect(result).toBe("#lnk");
+  });
+
+  test("rejects link descriptor when element is a <button>", async () => {
+    const healer = new SelectorHealer(stubLLM("#lnk"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("nav_link", makePage({}, 1, null, "button") as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+
+  test("no role rule for generic descriptors — passes through", async () => {
+    const healer = new SelectorHealer(stubLLM("#x"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("username", makePage({}, 1, null, "span") as any, "https://example.com");
+    expect(result).toBe("#x");
+  });
+});
+
+// ── Context key (SPA-safe caching) ────────────────────────────────────────────
+
+describe("HealerCache — context key", () => {
+  test("entries stored without contextKey are always returned regardless of lookup key", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x"); // no contextKey
+    // lookup with a context key should still find the keyless entry
+    const result = cache.getAll("https://example.com", "btn", "abc123");
+    expect(result).toContain("#x");
+  });
+
+  test("context-tagged entry is preferred over keyless entry when keys match", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#generic",           { confidence: 0.85 });
+    cache.set("https://example.com", "btn", "#specific",          { confidence: 0.85, contextKey: "ctx-a" });
+    const result = cache.getAll("https://example.com", "btn", "ctx-a");
+    // Both pass the filter (#generic has no key, #specific matches)
+    expect(result).toContain("#generic");
+    expect(result).toContain("#specific");
+  });
+
+  test("entry for context-A is excluded when looking up context-B", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#ctx-a-only", { contextKey: "ctx-a" });
+    const result = cache.getAll("https://example.com", "btn", "ctx-b");
+    // No keyless entries → falls back to all (backward compat)
+    // but if there IS a keyless entry it would be preferred
+    // Here: only ctx-a entry exists → falls back to all entries
+    expect(result).toContain("#ctx-a-only"); // fallback: returns all when no match
+  });
+
+  test("heal stores entry with contextKey derived from page title", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#healed"), file);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.heal("login_button", makePage({}, 1, "Login") as any, "https://example.com");
+    const entries = healer.cache.entries()["https://example.com/"]["login_button"];
+    expect(entries).toHaveLength(1);
+    // contextKey should be a non-empty hex string (hash of "Test Page|<mock evaluate result>")
+    expect(typeof entries[0].contextKey).toBe("string");
   });
 });

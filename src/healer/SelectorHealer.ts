@@ -51,7 +51,8 @@ export class SelectorHealer {
    * stale entries along the way.
    */
   async tryCache(pageUrl: string, descriptor: string, page: Page): Promise<string | null> {
-    const selectors = this.cache.getAll(pageUrl, descriptor);
+    const contextKey = await this.extractContextKey(page);
+    const selectors  = this.cache.getAll(pageUrl, descriptor, contextKey || undefined);
 
     for (const sel of selectors) {
       const count = await page.locator(sel).count();
@@ -91,14 +92,20 @@ export class SelectorHealer {
       return null;
     }
 
-    // Semantic guard: ensure the matched element's visible text relates to the descriptor.
-    // Prevents silent wrong-heals (e.g. "Logout" button healed for "login_button" descriptor).
+    // Semantic guard: visible text must relate to the descriptor.
     if (!await this.validateSemanticMatch(page, selector, descriptor)) {
       this.emit({ type: "rejected", descriptor, selector, pageUrl, pageTitle });
       return null;
     }
 
-    this.cache.set(pageUrl, descriptor, selector, { confidence: 0.85, source: "llm" });
+    // Role guard: element tag/role must match what the descriptor implies.
+    if (!await this.validateRoleType(page, selector, descriptor)) {
+      this.emit({ type: "rejected", descriptor, selector, pageUrl, pageTitle });
+      return null;
+    }
+
+    const contextKey = await this.extractContextKey(page);
+    this.cache.set(pageUrl, descriptor, selector, { confidence: 0.85, source: "llm", contextKey: contextKey || undefined });
     this.emit({ type: "healed", descriptor, selector, confidence: 0.85, source: "llm", pageUrl, pageTitle });
     return selector;
   }
@@ -197,10 +204,99 @@ export class SelectorHealer {
 
       if (!content || content.length < 2) return true;
 
-      const contentWords = content.split(/\W+/).filter(Boolean);
-      return words.some(dw => contentWords.some(cw => cw.includes(dw) || dw.includes(cw)));
+      const bestScore = Math.max(0, ...words.map(dw => SelectorHealer.semScore(dw, content)));
+      return bestScore >= 0.6;
     } catch {
       return true;
+    }
+  }
+
+  // ── Semantic scoring ──────────────────────────────────────────────────────
+
+  /**
+   * Score a single descriptor word against the element's full content string.
+   * Returns 1.0 for exact word match, 0.7 for strong partial (length ratio ≥ 0.7),
+   * 0.3 for weak partial, 0 for no match.
+   * Also checks content with whitespace collapsed so "User Name" matches "username".
+   */
+  private static semScore(dw: string, content: string): number {
+    const cws = content.split(/\W+/).filter(Boolean);
+    for (const cw of cws) {
+      if (cw === dw) return 1.0;
+    }
+    let best = 0;
+    for (const cw of cws) {
+      const [longer, shorter] = dw.length >= cw.length ? [dw, cw] : [cw, dw];
+      if (longer.includes(shorter)) {
+        best = Math.max(best, shorter.length / longer.length >= 0.7 ? 0.7 : 0.3);
+      }
+    }
+    // Collapsed-space check: "User Name" → "username"
+    const collapsed = content.replace(/\s+/g, "");
+    if (collapsed === dw) return 1.0;
+    if (collapsed.includes(dw) || dw.includes(collapsed)) {
+      const r = Math.min(dw.length, collapsed.length) / Math.max(dw.length, collapsed.length);
+      best = Math.max(best, r >= 0.7 ? 0.7 : 0.3);
+    }
+    return best;
+  }
+
+  // ── Role / type validation ─────────────────────────────────────────────────
+
+  private static readonly ROLE_RULES: Array<{
+    keywords:   string[];
+    validTags:  string[];
+    validRoles: string[];
+  }> = [
+    { keywords: ["button"],         validTags: ["button"],             validRoles: ["button"] },
+    { keywords: ["input", "field"], validTags: ["input", "textarea"],  validRoles: [] },
+    { keywords: ["link"],           validTags: ["a"],                  validRoles: ["link"] },
+  ];
+
+  /** Rejects a healed selector when its tag/role is incompatible with the descriptor.
+   *  E.g. "submit_button" must resolve to <button> or role="button", not an <a>. */
+  private async validateRoleType(page: Page, selector: string, descriptor: string): Promise<boolean> {
+    const desc = descriptor.toLowerCase();
+    const rule = SelectorHealer.ROLE_RULES.find(r => r.keywords.some(k => desc.includes(k)));
+    if (!rule) return true;
+
+    try {
+      const locator = page.locator(selector);
+      const [tag, role] = await Promise.all([
+        locator.evaluate((el: Element) => el.tagName.toLowerCase()).catch(() => ""),
+        locator.getAttribute("role").catch(() => null),
+      ]);
+      return rule.validTags.includes(tag) || rule.validRoles.includes(role ?? "");
+    } catch {
+      return true;
+    }
+  }
+
+  // ── Context key (SPA-safe) ─────────────────────────────────────────────────
+
+  private static contextHash(s: string): string {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(16).slice(0, 8);
+  }
+
+  /** Derives a short hash from the page's title + first two headings.
+   *  Different SPA states that share a URL but show different content will
+   *  produce different keys, preventing cross-state cache contamination. */
+  private async extractContextKey(page: Page): Promise<string> {
+    try {
+      const title    = await page.title().catch(() => "");
+      const headings = await page.evaluate(() =>
+        Array.from(document.querySelectorAll("h1,h2"))
+          .slice(0, 2)
+          .map(el => el.textContent?.trim() ?? "")
+          .filter(Boolean)
+          .join("|"),
+      ).catch(() => "");
+      const raw = [title, headings].filter(Boolean).join("|");
+      return raw ? SelectorHealer.contextHash(raw) : "";
+    } catch {
+      return "";
     }
   }
 

@@ -8,6 +8,7 @@ export interface CacheEntry {
   lastUsed:     string;
   successCount: number;
   failureCount: number;
+  contextKey?:  string; // SPA-safe: hash of page title + headings at heal time
 }
 
 // descriptor → ranked list of candidate selectors (best score first on retrieval)
@@ -51,25 +52,28 @@ export class HealerCache {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  /** Returns the best-scored selector for a descriptor, or undefined. */
-  get(pageUrl: string, descriptor: string): string | undefined {
+  /** Returns the best-scored selector for a descriptor, or undefined.
+   *  When contextKey is provided, prefers entries that match it; entries without
+   *  a contextKey are always eligible (backward compat with pre-SPA cache files). */
+  get(pageUrl: string, descriptor: string, contextKey?: string): string | undefined {
     const entries = this.data[this.normalizeUrl(pageUrl)]?.[descriptor];
     if (!entries?.length) return undefined;
-    return this.sorted(entries)[0]?.selector;
+    const pool = this.contextFilter(entries, contextKey);
+    return this.sorted(pool)[0]?.selector;
   }
 
   /** Returns all selectors for a descriptor, ranked best-first. */
-  getAll(pageUrl: string, descriptor: string): string[] {
+  getAll(pageUrl: string, descriptor: string, contextKey?: string): string[] {
     const entries = this.data[this.normalizeUrl(pageUrl)]?.[descriptor];
     if (!entries?.length) return [];
-    return this.sorted(entries).map(e => e.selector);
+    return this.sorted(this.contextFilter(entries, contextKey)).map(e => e.selector);
   }
 
   set(
     pageUrl:    string,
     descriptor: string,
     selector:   string,
-    opts: { confidence?: number; source?: CacheEntry["source"] } = {},
+    opts: { confidence?: number; source?: CacheEntry["source"]; contextKey?: string } = {},
   ): void {
     const key  = this.normalizeUrl(pageUrl);
     const list = (this.data[key] ??= {})[descriptor] ??= [];
@@ -79,6 +83,7 @@ export class HealerCache {
       // Refresh metadata without resetting counts
       existing.confidence = opts.confidence ?? existing.confidence;
       existing.source     = opts.source     ?? existing.source;
+      existing.contextKey = opts.contextKey ?? existing.contextKey;
       existing.lastUsed   = new Date().toISOString();
     } else {
       list.push({
@@ -88,6 +93,7 @@ export class HealerCache {
         lastUsed:     new Date().toISOString(),
         successCount: 0,
         failureCount: 0,
+        contextKey:   opts.contextKey,
       });
       // Cap to MAX_SELECTORS_PER_DESCRIPTOR, evicting the lowest-scored entry
       if (list.length > MAX_SELECTORS_PER_DESCRIPTOR) {
@@ -132,6 +138,15 @@ export class HealerCache {
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
+
+  /** Filters entries by contextKey when provided. Entries with no contextKey
+   *  always pass through (backward compat). Falls back to all entries if the
+   *  filtered set is empty (e.g. old cache file has no context tags yet). */
+  private contextFilter(entries: CacheEntry[], contextKey?: string): CacheEntry[] {
+    if (!contextKey) return entries;
+    const matched = entries.filter(e => !e.contextKey || e.contextKey === contextKey);
+    return matched.length ? matched : entries;
+  }
 
   private normalizeUrl(url: string): string {
     try {
