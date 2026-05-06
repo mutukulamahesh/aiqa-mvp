@@ -12,6 +12,7 @@ import { JiraAdapter } from "./integrations/JiraAdapter";
 import { HTMLReporter } from "./reporters/HTMLReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
+import { SelectorHealer } from "./healer/SelectorHealer";
 
 const program = new Command();
 
@@ -139,6 +140,8 @@ program
       console.log(`   Reason: ${result.error}`);
     }
     console.log(`─────────────────────────────────────────`);
+    const healerReport = runner.getHealerReport();
+    if (healerReport) console.log(healerReport);
 
     if (outRoot) {
       const resultsDir = path.join(outRoot, "results");
@@ -411,6 +414,7 @@ program
     console.log(`─────────────────────────────────────────\n`);
 
     // ── Concurrency-limited runner with circuit breaker ──────────────────────
+    const sharedHealer = new SelectorHealer();
     const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
     let cursor = 0;
 
@@ -440,7 +444,7 @@ program
           continue;
         }
 
-        const result = await new TestRunner(runnerOpts).run(testDef);
+        const result = await new TestRunner({ ...runnerOpts, healer: sharedHealer }).run(testDef);
         orderedResults[idx] = result;
 
         if (result.passed) {
@@ -492,6 +496,8 @@ program
     });
     console.log(`   HTML  → ${reportPath}`);
     console.log(`─────────────────────────────────────────\n`);
+    const suiteHealerReport = sharedHealer.getReport();
+    if (suiteHealerReport) console.log(suiteHealerReport);
 
     process.exit(failed > 0 ? 1 : 0);
   });

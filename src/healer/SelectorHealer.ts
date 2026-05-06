@@ -91,6 +91,13 @@ export class SelectorHealer {
       return null;
     }
 
+    // Semantic guard: ensure the matched element's visible text relates to the descriptor.
+    // Prevents silent wrong-heals (e.g. "Logout" button healed for "login_button" descriptor).
+    if (!await this.validateSemanticMatch(page, selector, descriptor)) {
+      this.emit({ type: "rejected", descriptor, selector, pageUrl, pageTitle });
+      return null;
+    }
+
     this.cache.set(pageUrl, descriptor, selector, { confidence: 0.85, source: "llm" });
     this.emit({ type: "healed", descriptor, selector, confidence: 0.85, source: "llm", pageUrl, pageTitle });
     return selector;
@@ -107,6 +114,7 @@ export class SelectorHealer {
   // ── Reporting ─────────────────────────────────────────────────────────────
 
   getReport(): string {
+    if (process.env.HEALER_LOG_LEVEL === "off") return "";
     if (!this.events.length) return "🔧 Healer: no activity this run";
 
     const hits     = this.events.filter(e => e.type === "cache_hit");
@@ -115,9 +123,17 @@ export class SelectorHealer {
     const rejected = this.events.filter(e => e.type === "rejected");
     const llmCalls = healed.length + rejected.length;
 
+    const warmDescriptors = new Set(hits.map(e => e.descriptor));
+    const coldDescriptors = new Set(healed.map(e => e.descriptor));
+    const runType =
+      coldDescriptors.size === 0 ? "Warm  (all from cache)"  :
+      warmDescriptors.size === 0 ? "Cold  (all LLM)"         :
+      `Mixed (${[...warmDescriptors].filter(d => !coldDescriptors.has(d)).length} warm, ${[...coldDescriptors].filter(d => !warmDescriptors.has(d)).length} cold)`;
+
     const lines: string[] = [
       "",
       "┌─ 🔧 Healer Report ──────────────────────────────────",
+      `│  Run type:         ${runType}`,
       `│  Cache hits:       ${hits.length}`,
       `│  LLM calls:        ${llmCalls}`,
       `│  Healed:           ${healed.length}`,
@@ -146,7 +162,50 @@ export class SelectorHealer {
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
+  private static readonly MAX_EVENTS = 500;
+
+  private static readonly SEMANTIC_STOP_WORDS = new Set([
+    "btn", "button", "field", "input", "link", "icon", "label", "the", "for", "and",
+  ]);
+
+  /**
+   * Lightweight semantic guard: rejects a healed selector when the element's
+   * visible text clearly contradicts the descriptor (e.g. "Logout" for "login_button").
+   * Returns true (accept) when the element has no readable content — icon-only
+   * and SVG elements should not be blocked.
+   */
+  private async validateSemanticMatch(page: Page, selector: string, descriptor: string): Promise<boolean> {
+    const words = descriptor.toLowerCase()
+      .split(/[_\-\s]+/)
+      .filter(w => w.length > 2 && !SelectorHealer.SEMANTIC_STOP_WORDS.has(w));
+
+    if (!words.length) return true;
+
+    try {
+      const locator = page.locator(selector);
+      const [text, ariaLabel, placeholder] = await Promise.all([
+        locator.textContent().catch(() => null),
+        locator.getAttribute("aria-label").catch(() => null),
+        locator.getAttribute("placeholder").catch(() => null),
+      ]);
+
+      const content = [text, ariaLabel, placeholder]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .trim();
+
+      if (!content || content.length < 2) return true;
+
+      const contentWords = content.split(/\W+/).filter(Boolean);
+      return words.some(dw => contentWords.some(cw => cw.includes(dw) || dw.includes(cw)));
+    } catch {
+      return true;
+    }
+  }
+
   private emit(partial: Omit<HealerEvent, "ts">): void {
+    if (this.events.length >= SelectorHealer.MAX_EVENTS) this.events.shift();
     this.events.push({ ts: new Date().toISOString(), ...partial });
   }
 

@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~35%**
-> Foundation (DSL, runner, explorer, generator, HTML reporter, CLI) is solid.
-> Gaps: orchestration, self-healing, memory, CI/CD, enterprise integrations, vision, desktop.
+> Current alignment with vision: **~55%**  *(updated 2026-05-06)*
+> Sprint 1 + Sprint 2 + Phase 2 Healer: **DONE**.
+> Remaining: Phase 2 Memory Layer → Phase 3 Coverage → Phase 4 Enterprise → Phase 5-7.
 
 ---
 
@@ -19,56 +19,56 @@ Everything else is parked until both sprints are stable.
 
 ---
 
-## Sprint 1 — Foundation Hardening `[START HERE]`
+## Sprint 1 — Foundation Hardening `[✅ COMPLETE]`
 > Make what exists bulletproof. Nothing ships until all four DoD gates pass.
 
-### EPIC-01 · Config & Environment System
+### EPIC-01 · Config & Environment System `[✅ DONE]`
 
 **Definition of Done:** No part of the codebase reads a hardcoded URL or default timeout. If it does → not done.
 
 | ID | Story | Status |
 |---|---|---|
-| 1.1 | Create `config/environments/dev.yaml`, `staging.yaml`, `prod.yaml` with `baseUrl`, `apiBase`, `timeouts`, feature flags | [ ] |
-| 1.2 | `ConfigLoader` — reads profile at startup, validates with Zod, throws on missing required fields (fail fast) | [ ] |
-| 1.3 | `aiqa run --env staging` — profile name passed to CLI, injected into `ExecutionContext` | [ ] |
-| 1.4 | Audit and remove all hardcoded URLs/timeouts across `src/` — replace with `ctx.config.*` | [ ] |
-| 1.5 | Secrets via `dotenv` — `.env` for `ANTHROPIC_API_KEY` etc; `doctor` command warns if missing | [ ] |
+| 1.1 | Create `config/environments/dev.yaml`, `staging.yaml`, `prod.yaml` with `baseUrl`, `apiBase`, `timeouts`, feature flags | [x] |
+| 1.2 | `ConfigLoader` — reads profile at startup, validates with Zod, throws on missing required fields (fail fast) | [x] |
+| 1.3 | `aiqa run --env staging` — profile name passed to CLI, injected into `ExecutionContext` | [x] |
+| 1.4 | Audit and remove all hardcoded URLs/timeouts across `src/` — replace with `ctx.config.*` | [x] |
+| 1.5 | Secrets via `dotenv` — `.env` for `ANTHROPIC_API_KEY` etc; `doctor` command warns if missing | [x] |
 
-### EPIC-02 · Parallel Execution & Isolation
+### EPIC-02 · Parallel Execution & Isolation `[✅ DONE]`
 
 **Definition of Done:** Run `--workers 4` with the same test 10 times. Zero flaky results, zero mixed logs, zero wrong screenshots → done.
 
 | ID | Story | Status |
 |---|---|---|
-| 2.1 | Each worker gets its own `new BrowserContext` + `new Page` — no shared browser state between workers | [ ] |
-| 2.2 | `AsyncLocalStorage` context wrapping — test id, logs, debug data scoped per worker, never bleed across | [ ] |
-| 2.3 | No shared mutable state anywhere in `TestRunner`, `StepInterpreter`, or handlers | [ ] |
-| 2.4 | Stress test: `aiqa run-all --workers 4` running same test 10× — add this as a local validation script | [ ] |
+| 2.1 | Each worker gets its own `new BrowserContext` + `new Page` — no shared browser state between workers | [x] |
+| 2.2 | `AsyncLocalStorage` context wrapping — test id, logs, debug data scoped per worker, never bleed across | [x] |
+| 2.3 | No shared mutable state anywhere in `TestRunner`, `StepInterpreter`, or handlers | [x] |
+| 2.4 | Stress test: `aiqa run-all --workers 4` running same test 10× — add this as a local validation script | [x] |
 
-### EPIC-03 · Retry & Circuit Breaker
+### EPIC-03 · Retry & Circuit Breaker `[✅ DONE]`
 
 **Definition of Done:** `retries: 2` in YAML retries on timeout/locator errors only. Suite stops at 5 consecutive failures.
 
 | ID | Story | Status |
 |---|---|---|
-| 3.1 | Add `retries?: number` to DSL (`TestDefinition`) — default 0 | [ ] |
-| 3.2 | Retry only on known transient failure types: timeout, locator not found — not on assertion failures | [ ] |
-| 3.3 | Circuit breaker in `TestRunner` — track consecutive failures, abort suite if threshold (default 5) hit | [ ] |
-| 3.4 | Log retry attempts clearly: `↺ retry 1/2 — timeout on step 3` | [ ] |
+| 3.1 | Add `retries?: number` to DSL (`TestDefinition`) — default 0 | [x] |
+| 3.2 | Retry only on known transient failure types: timeout, locator not found — not on assertion failures | [x] |
+| 3.3 | Circuit breaker in `TestRunner` — track consecutive failures, abort suite if threshold (default 5) hit | [x] |
+| 3.4 | Log retry attempts clearly: `↺ retry 1/2 — timeout on step 3` | [x] |
 
-### EPIC-04 · CI/CD Pipeline
+### EPIC-04 · CI/CD Pipeline `[✅ DONE]`
 
 **Definition of Done:** Open a PR → Actions runs → HTML report + screenshots visible as artifacts. That's it.
 
 | ID | Story | Status |
 |---|---|---|
-| 4.1 | `.github/workflows/ci.yml` — install deps, build, run 1–2 smoke tests on every PR | [ ] |
-| 4.2 | Upload HTML report + screenshots as GitHub Actions artifacts on every run | [ ] |
-| 4.3 | Nightly scheduled run against a stable test (`cron: '0 2 * * *'`) | [ ] |
+| 4.1 | `.github/workflows/ci.yml` — install deps, build, run 1–2 smoke tests on every PR | [x] |
+| 4.2 | Upload HTML report + screenshots as GitHub Actions artifacts on every run | [x] |
+| 4.3 | Nightly scheduled run against a stable test (`cron: '0 2 * * *'`) | [x] |
 
 ---
 
-## Sprint 2 — OrchestratorAgent `[AFTER SPRINT 1 IS SOLID]`
+## Sprint 2 — OrchestratorAgent `[✅ COMPLETE]`
 > Make it feel like a product. One command, full pipeline.
 
 ### Design Rule — Orchestrator is a thin coordinator, not a smart brain
@@ -86,17 +86,17 @@ Everything else is parked until both sprints are stable.
 
 If logic could live in a sub-agent → it belongs there, not in the Orchestrator.
 
-### EPIC-05 · OrchestratorAgent
+### EPIC-05 · OrchestratorAgent `[✅ DONE]`
 
 **Definition of Done:** `aiqa orchestrate --url https://app.com` runs the full pipeline end-to-end with no manual steps.
 
 | ID | Story | Status |
 |---|---|---|
-| 5.1 | `OrchestratorAgent.run(url, env)` — sequential pipeline: Explorer → FlowMapper → ScenarioGenerator → TestRunner → ReadinessScorer | [ ] |
-| 5.2 | `aiqa orchestrate --url <url> --env <env>` CLI command wired to `OrchestratorAgent` | [ ] |
-| 5.3 | Progress output at each stage: `[1/5] Exploring...`, `[2/5] Mapping flows...` etc | [ ] |
-| 5.4 | Post-run summary — try LLM narrative first, fall back to template string if LLM fails | [ ] |
-| 5.5 | Summary template (fallback): `Explored N pages · Generated M tests · P passed / F failed · Score: X%` | [ ] |
+| 5.1 | `OrchestratorAgent.run(url, env)` — sequential pipeline: Explorer → FlowMapper → ScenarioGenerator → TestRunner → ReadinessScorer | [x] |
+| 5.2 | `aiqa orchestrate --url <url> --env <env>` CLI command wired to `OrchestratorAgent` | [x] |
+| 5.3 | Progress output at each stage: `[1/5] Exploring...`, `[2/5] Mapping flows...` etc | [x] |
+| 5.4 | Post-run summary — try LLM narrative first, fall back to template string if LLM fails | [x] |
+| 5.5 | Summary template (fallback): `Explored N pages · Generated M tests · P passed / F failed · Score: X%` | [x] |
 
 ### Risks to Watch
 
@@ -108,7 +108,7 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Sprint 1 — EPIC-06 · Test Case Importer `[SPRINT 1 — ADDED 2026-05-01]`
+## Sprint 1 — EPIC-06 · Test Case Importer `[✅ DONE — 2026-05-01]`
 > Bridge for teams with existing Excel/text/Gherkin test documentation. No rewrite needed.
 
 **Definition of Done:** `aiqa import --file test-cases.xlsx --run` reads the file, generates valid YAML via LLM, executes it, and produces an HTML report. Vague steps are flagged with a warning rather than silently skipped.
@@ -117,14 +117,14 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 | ID | Story | Status |
 |---|---|---|
-| 6.1 | `ExcelImporter` — reads `.xlsx`, extracts rows into `{ id, name, precondition, steps, expected }` objects. Configurable column name map. | [ ] |
-| 6.2 | `TextImporter` — reads plain text and Gherkin `.feature` files, parses `Scenario` / `Given/When/Then` blocks into same shape | [ ] |
-| 6.3 | `CSVImporter` — reads `.csv` test case tables, same output shape as ExcelImporter | [ ] |
-| 6.4 | `TestCaseTranslator` — LLM maps natural language steps to AIQA DSL actions. Knows available actions: `navigate`, `click`, `fill`, `assert`, `api`. Flags vague steps with `# WARNING: could not infer assertion` | [ ] |
-| 6.5 | Validate generated YAML through existing `DslParser` before writing — reject and warn on invalid output | [ ] |
-| 6.6 | `aiqa import --file <path> --sheet <name> --out <dir>` — generates one YAML file per test case into output dir | [ ] |
-| 6.7 | `aiqa import --file <path> --run` — import + execute in one command, produce HTML report | [ ] |
-| 6.8 | Test data handling — blank values in Excel get sensible defaults; note in generated YAML as `# TODO: replace with real test data` | [ ] |
+| 6.1 | `ExcelImporter` — reads `.xlsx`, extracts rows into `{ id, name, precondition, steps, expected }` objects. Configurable column name map. | [x] |
+| 6.2 | `TextImporter` — reads plain text and Gherkin `.feature` files, parses `Scenario` / `Given/When/Then` blocks into same shape | [x] |
+| 6.3 | `CSVImporter` — reads `.csv` test case tables, same output shape as ExcelImporter | [x] |
+| 6.4 | `TestCaseTranslator` — LLM maps natural language steps to AIQA DSL actions. Knows available actions: `navigate`, `click`, `fill`, `assert`, `api`. Flags vague steps with `# WARNING: could not infer assertion` | [x] |
+| 6.5 | Validate generated YAML through existing `DslParser` before writing — reject and warn on invalid output | [x] |
+| 6.6 | `aiqa import --file <path> --sheet <name> --out <dir>` — generates one YAML file per test case into output dir | [x] |
+| 6.7 | `aiqa import --file <path> --run` — import + execute in one command, produce HTML report | [x] |
+| 6.8 | Test data handling — blank values in Excel get sensible defaults; note in generated YAML as `# TODO: replace with real test data` | [x] |
 
 **Scenarios this unlocks:**
 - Scenario 2 (Java/Selenium team with Excel repo) — import existing docs, run immediately, no rewrite
@@ -132,25 +132,29 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Phase 2 — Intelligence Layer `[CORE DIFFERENTIATOR]`
+## Phase 2 — Intelligence Layer `[IN PROGRESS]`
 > What makes AIQA an AI platform, not just a runner
 
-### EPIC-04 · OrchestratorAgent
+### EPIC-04 · OrchestratorAgent `[✅ DONE — see Sprint 2]`
 | ID | Story | Status |
 |---|---|---|
-| 4.1 | `OrchestratorAgent` — accepts goal, decomposes into sub-agent tasks, routes to Explorer → Generator → Runner | [ ] |
-| 4.2 | Task dependency graph — sequential vs parallel task execution | [ ] |
-| 4.3 | `aiqa orchestrate --url https://app.com` — one command runs the full pipeline | [ ] |
-| 4.4 | Post-run narrative via LLM — "3 critical flows tested, 1 failed" execution summary | [ ] |
+| 4.1 | `OrchestratorAgent` — accepts goal, decomposes into sub-agent tasks, routes to Explorer → Generator → Runner | [x] |
+| 4.2 | Task dependency graph — sequential vs parallel task execution | [x] |
+| 4.3 | `aiqa orchestrate --url https://app.com` — one command runs the full pipeline | [x] |
+| 4.4 | Post-run narrative via LLM — "3 critical flows tested, 1 failed" execution summary | [x] |
 
-### EPIC-05 · Self-Healer Agent
+### EPIC-05 · Self-Healer Agent `[✅ DONE]`
+> Fully built as `SelectorHealer` + `HealerCache` with multi-selector ranking, LLM healing, confidence calibration, score decay, event sampling, cold/warm reporting. 45 tests. 2026-05-06.
+
 | ID | Story | Status |
 |---|---|---|
-| 5.1 | `HealerAgent` — when locator fails, pass DOM + screenshot to Claude for repair | [ ] |
-| 5.2 | Healer history store — persist repairs in `object-repository/healer-history/`, indexed by original locator | [ ] |
-| 5.3 | Cached fix — on next run, try stored fix first if confidence > 0.9 (skip LLM call) | [ ] |
-| 5.4 | Integrate into `AssertionHandler` and `UIActionHandler` — transparent healing, no DSL change | [ ] |
-| 5.5 | Healer section in HTML report — show what was healed per run with confidence scores | [ ] |
+| 5.1 | `HealerAgent` — when locator fails, pass DOM + screenshot to Claude for repair | [x] |
+| 5.2 | Healer history store — persist repairs in `.aiqa/healer-cache.json`, indexed by URL+descriptor | [x] |
+| 5.3 | Cached fix — on next run, try stored fix first; multi-selector ranked by score (confidence×10 + successCount×2×decay − failureCount×3 + recencyBoost) | [x] |
+| 5.4 | Integrate into `PlaywrightAdapter` — transparent healing on click/fill, retry after heal | [x] |
+| 5.5 | Healer report — `getReport()` on `TestRunner`; shows Cold/Warm/Mixed run type, cache hits, LLM calls, healed locators | [x] ⚠️ CLI `run-all` not yet wired to print report |
+
+### EPIC-06 · Memory Layer `[▶ NEXT]`
 
 ### EPIC-06 · Memory Layer
 | ID | Story | Status |

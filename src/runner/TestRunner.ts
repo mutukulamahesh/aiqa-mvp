@@ -14,6 +14,7 @@ export interface RunnerOptions {
   slowMo?:         number;
   timeout?:        number;
   screenshotsDir?: string;
+  healer?:         SelectorHealer;
 }
 
 export interface TestResult {
@@ -68,9 +69,11 @@ export function isRetryable(err: Error): boolean {
 export class TestRunner {
   private readonly interpreter = new StepInterpreter();
   private readonly debugger    = new DebuggerAgent();
-  private readonly healer      = new SelectorHealer();
+  private readonly healer: SelectorHealer;
 
-  constructor(private readonly opts: RunnerOptions) {}
+  constructor(private readonly opts: RunnerOptions) {
+    this.healer = opts.healer ?? new SelectorHealer();
+  }
 
   /** Returns the healer's activity report for the current runner session. */
   getHealerReport(): string {

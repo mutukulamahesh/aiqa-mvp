@@ -28,12 +28,21 @@ export class HealerCache {
   // ── Scoring ────────────────────────────────────────────────────────────────
 
   private scoreEntry(e: CacheEntry): number {
-    const ageDays     = (Date.now() - new Date(e.lastUsed).getTime()) / 86_400_000;
-    const recencyBoost = Math.max(0, 7 - ageDays); // up to 7 pts within last 7 days
+    const ageDays      = (Date.now() - new Date(e.lastUsed).getTime()) / 86_400_000;
+    const recencyBoost = Math.max(0, 7 - ageDays);
+    const decayFactor  = Math.exp(-ageDays / 30); // 30-day half-life on historical counts
     return e.confidence * 10
-         + e.successCount * 2
+         + e.successCount * 2 * decayFactor
          - e.failureCount * 3
          + recencyBoost;
+  }
+
+  /** Adjusts confidence toward observed success rate after each outcome. */
+  private recalibrate(entry: CacheEntry): void {
+    const total = entry.successCount + entry.failureCount;
+    if (total === 0) return;
+    const successRate  = entry.successCount / total;
+    entry.confidence   = Math.min(1, entry.confidence * 0.7 + successRate * 0.3);
   }
 
   private sorted(entries: CacheEntry[]): CacheEntry[] {
@@ -80,6 +89,10 @@ export class HealerCache {
         successCount: 0,
         failureCount: 0,
       });
+      // Cap to MAX_SELECTORS_PER_DESCRIPTOR, evicting the lowest-scored entry
+      if (list.length > MAX_SELECTORS_PER_DESCRIPTOR) {
+        this.data[key][descriptor] = this.sorted(list).slice(0, MAX_SELECTORS_PER_DESCRIPTOR);
+      }
     }
     this.save();
   }
@@ -89,6 +102,7 @@ export class HealerCache {
     if (!entry) return;
     entry.successCount++;
     entry.lastUsed = new Date().toISOString();
+    this.recalibrate(entry);
     this.save();
   }
 
@@ -103,6 +117,7 @@ export class HealerCache {
 
     if (!entry) return;
     entry.failureCount++;
+    this.recalibrate(entry);
 
     if (entry.failureCount >= EVICT_THRESHOLD) {
       const idx = list.indexOf(entry);

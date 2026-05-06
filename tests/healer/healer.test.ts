@@ -35,10 +35,12 @@ const mockLLM: LLMProvider = {
  * Minimal Page mock.
  * selectorCount controls what page.locator(sel).count() returns.
  * Pass a Map to return different counts per selector.
+ * locatorText is returned by locator().textContent() (null = no visible text).
  */
 function makePage(
   candidate: Record<string, string> = {},
   selectorCount: number | Map<string, number> = 1,
+  locatorText: string | null = null,
 ) {
   return {
     evaluate: async (_fn: unknown) => [
@@ -55,6 +57,8 @@ function makePage(
         typeof selectorCount === "number"
           ? selectorCount
           : (selectorCount.get(sel) ?? 0),
+      textContent:  async () => locatorText,
+      getAttribute: async (_attr: string) => null as string | null,
     }),
     title: async () => "Test Page",
   };
@@ -217,6 +221,61 @@ describe("HealerCache", () => {
     const cache = new HealerCache(file);
     expect(cache.get("https://example.com/", "btn")).toBe("#x");
     fs.unlinkSync(file);
+  });
+
+  // ── Refinement 1: cap selector list ───────────────────────────────────────
+
+  test("caps selector list at 5 — drops lowest-scored entry on overflow", () => {
+    const cache = new HealerCache(tmpCache());
+    // Add 6 selectors with increasing confidence; #s1 (lowest) should be evicted
+    for (let i = 1; i <= 6; i++) {
+      cache.set("https://example.com", "btn", `#s${i}`, { confidence: i * 0.1 + 0.3 });
+    }
+    const all = cache.getAll("https://example.com", "btn");
+    expect(all).toHaveLength(5);
+    expect(all).not.toContain("#s1"); // lowest confidence — evicted
+    expect(all).toContain("#s6");     // highest — kept
+  });
+
+  // ── Refinement 2: score decay ──────────────────────────────────────────────
+
+  test("score decay — a 60-day-old entry with high successCount ranks below a fresh entry", () => {
+    const file    = tmpCache();
+    const oldDate = new Date(Date.now() - 60 * 86_400_000).toISOString();
+    fs.writeFileSync(file, JSON.stringify({
+      "https://example.com/": {
+        "btn": [
+          { selector: "#old", confidence: 0.85, source: "llm", lastUsed: oldDate,                    successCount: 10, failureCount: 0 },
+          { selector: "#new", confidence: 0.85, source: "llm", lastUsed: new Date().toISOString(),   successCount: 0,  failureCount: 0 },
+        ],
+      },
+    }));
+    const cache = new HealerCache(file);
+    // #old: 8.5 + 10*2*exp(-60/30) ≈ 8.5 + 2.7  = 11.2  (recencyBoost = 0 at 60 days)
+    // #new: 8.5 + 0                + 7            = 15.5  (full recencyBoost)
+    expect(cache.get("https://example.com/", "btn")).toBe("#new");
+    fs.unlinkSync(file);
+  });
+
+  // ── Refinement 3: confidence calibration ──────────────────────────────────
+
+  test("markSuccess raises confidence toward 1 via calibration", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x", { confidence: 0.5 });
+    cache.markSuccess("https://example.com", "btn", "#x");
+    cache.markSuccess("https://example.com", "btn", "#x");
+    const entry = cache.entries()["https://example.com/"]["btn"][0];
+    // successRate = 1.0 → confidence moves toward 1
+    expect(entry.confidence).toBeGreaterThan(0.5);
+  });
+
+  test("markFailure lowers confidence toward 0 via calibration", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x", { confidence: 0.85 });
+    cache.markFailure("https://example.com", "btn", "#x");
+    const entry = cache.entries()["https://example.com/"]["btn"][0];
+    // successRate = 0.0 → confidence = 0.85*0.7 = 0.595
+    expect(entry.confidence).toBeLessThan(0.85);
   });
 });
 
@@ -403,5 +462,96 @@ describe("SelectorHealer — report", () => {
     await healer.heal("btn", makePage() as any, "https://example.com");
     healer.resetEvents();
     expect(healer.getReport()).toContain("no activity");
+  });
+
+  // ── Refinement 4: event sampling ──────────────────────────────────────────
+
+  test("event buffer caps at 500 — oldest events are dropped", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(mockLLM, file);
+    // Seed 520 unique cache entries and hit tryCache for each → 520 cache_hit events
+    for (let i = 0; i < 520; i++) {
+      healer.cache.set(`https://example.com/p${i}`, "btn", "#x");
+    }
+    const page = makePage({}, 1) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    for (let i = 0; i < 520; i++) {
+      await healer.tryCache(`https://example.com/p${i}`, "btn", page);
+    }
+    // Buffer capped at 500 → report shows 500, not 520
+    expect(healer.getReport()).toMatch(/Cache hits:\s+500/);
+  });
+
+  // ── Refinement 5: cold vs warm run type ───────────────────────────────────
+
+  test("getReport shows Warm when all hits came from cache", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(mockLLM, file);
+    healer.cache.set("https://example.com", "btn", "#x");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.tryCache("https://example.com", "btn", makePage({}, 1) as any);
+    expect(healer.getReport()).toContain("Warm");
+  });
+
+  test("getReport shows Cold when all heals came from LLM", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#x"), file);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.heal("btn", makePage() as any, "https://example.com");
+    expect(healer.getReport()).toContain("Cold");
+  });
+
+  // ── Semantic validation ───────────────────────────────────────────────────
+
+  test("heal accepts selector when element text matches descriptor", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#login-btn"), file);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("login_button", makePage({}, 1, "Login") as any, "https://example.com");
+    expect(result).toBe("#login-btn");
+  });
+
+  test("heal rejects selector when element text contradicts descriptor", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#logout-btn"), file);
+    // "Logout" shares no meaningful words with "login_button" → rejected
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("login_button", makePage({}, 1, "Logout") as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+
+  test("heal skips semantic validation when element has no text content", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#icon-btn"), file);
+    // null textContent → icon-only element → validation skipped → accepted
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("login_button", makePage({}, 1, null) as any, "https://example.com");
+    expect(result).toBe("#icon-btn");
+  });
+
+  // ── HEALER_LOG_LEVEL ──────────────────────────────────────────────────────
+
+  test("getReport returns empty string when HEALER_LOG_LEVEL is off", () => {
+    const orig = process.env.HEALER_LOG_LEVEL;
+    try {
+      process.env.HEALER_LOG_LEVEL = "off";
+      const healer = new SelectorHealer(mockLLM, tmpCache());
+      expect(healer.getReport()).toBe("");
+    } finally {
+      if (orig === undefined) delete process.env.HEALER_LOG_LEVEL;
+      else process.env.HEALER_LOG_LEVEL = orig;
+    }
+  });
+
+  test("getReport shows Mixed when both cache hits and LLM heals occurred", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#y"), file);
+    // cache hit on one descriptor
+    healer.cache.set("https://a.com", "btn", "#x");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.tryCache("https://a.com", "btn", makePage({}, 1) as any);
+    // LLM heal on a different descriptor (never in cache → cold)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.heal("link", makePage() as any, "https://b.com");
+    expect(healer.getReport()).toContain("Mixed");
   });
 });
