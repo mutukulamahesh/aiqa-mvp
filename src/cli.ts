@@ -13,6 +13,7 @@ import { HTMLReporter } from "./reporters/HTMLReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
+import { MemoryStore } from "./memory/MemoryStore";
 
 const program = new Command();
 
@@ -408,7 +409,12 @@ program
     if (outRoot) console.log(`   Out      : ${outRoot}`);
     console.log(`─────────────────────────────────────────\n`);
 
-    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir };
+    const memoryPath   = outRoot ? path.join(outRoot, "results", "memory.json") : undefined;
+    const sharedMemory = memoryPath
+      ? new MemoryStore(memoryPath, path.basename(testsDir))
+      : undefined;
+
+    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir, memory: sharedMemory };
 
     console.log(`   Circuit: stop after ${cbThreshold} consecutive failures`);
     console.log(`─────────────────────────────────────────\n`);
@@ -498,6 +504,12 @@ program
     console.log(`─────────────────────────────────────────\n`);
     const suiteHealerReport = sharedHealer.getReport();
     if (suiteHealerReport) console.log(suiteHealerReport);
+
+    if (sharedMemory) {
+      sharedMemory.save();
+      const memReport = sharedMemory.getReport();
+      if (memReport) console.log(memReport);
+    }
 
     process.exit(failed > 0 ? 1 : 0);
   });

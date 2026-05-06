@@ -92,6 +92,7 @@ export interface DebugResult {
   suggested_fix:  string;
   confidence:     number;
   from_mock:      boolean;
+  from_memory?:   boolean;  // true when returned from known-pattern cache (no LLM call)
 }
 
 // ── ReadinessScorer ───────────────────────────────────────────────────────────

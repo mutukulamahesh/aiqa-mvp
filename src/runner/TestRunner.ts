@@ -8,6 +8,7 @@ import { DebuggerAgent, DebugResult } from "../agents/DebuggerAgent";
 import { getConfig } from "../config/ConfigLoader";
 import { AssertionError, TransientError } from "../errors";
 import { SelectorHealer } from "../healer/SelectorHealer";
+import { MemoryStore, makeStepKey } from "../memory/MemoryStore";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -15,6 +16,7 @@ export interface RunnerOptions {
   timeout?:        number;
   screenshotsDir?: string;
   healer?:         SelectorHealer;
+  memory?:         MemoryStore;
 }
 
 export interface TestResult {
@@ -69,10 +71,12 @@ export function isRetryable(err: Error): boolean {
 export class TestRunner {
   private readonly interpreter = new StepInterpreter();
   private readonly debugger    = new DebuggerAgent();
-  private readonly healer: SelectorHealer;
+  private readonly healer:  SelectorHealer;
+  private readonly memory?: MemoryStore;
 
   constructor(private readonly opts: RunnerOptions) {
     this.healer = opts.healer ?? new SelectorHealer();
+    this.memory = opts.memory;
   }
 
   /** Returns the healer's activity report for the current runner session. */
@@ -130,6 +134,16 @@ export class TestRunner {
       const firstLine    = failedStep.error.split("\n")[0];
       const errorLabel   = failedStep.errorClass ? `${failedStep.errorClass}: ${firstLine}` : firstLine;
       wlog(`\n  ↺ retry ${attempt + 1}/${maxRetries} (${errorLabel}) — step ${failedStep.index + 1}`);
+
+      if (this.memory) {
+        const stepKey = makeStepKey(test.name, failedStep.index, failedStep.action);
+        const extraMs = this.memory.extraWaitMs(stepKey);
+        if (extraMs > 0) {
+          const score = this.memory.getScore(stepKey).toFixed(2);
+          wlog(`  ⏳ Flaky step detected (score: ${score}) — extra wait ${extraMs}ms before retry`);
+          await new Promise(r => setTimeout(r, extraMs));
+        }
+      }
       wlog("");
     }
 
@@ -166,6 +180,7 @@ export class TestRunner {
         try {
           await this.interpreter.execute(step, adapter, ctx);
           wlog("");
+          this.memory?.recordOutcome(makeStepKey(test.name, i, step.action), true);
           stepResults.push({ index: i, action: step.action, passed: true, durationMs: Date.now() - stepStart });
 
         } catch (err) {
@@ -174,13 +189,15 @@ export class TestRunner {
           const retryable = isRetryable(error);
           wlog(`\n  ✗ FAILED: ${msg}`);
 
-          const debugResult = await this.debugger.analyze({
-            test_name:     test.name,
-            step_action:   step.action,
-            step_index:    i,
-            error_message: msg,
-          });
-          wlog(`  🔍 [${debugResult.failure_class}] ${debugResult.suggested_fix}`);
+          const stepKey   = makeStepKey(test.name, i, step.action);
+          this.memory?.recordOutcome(stepKey, false);
+
+          const debugResult = await this.debugger.analyze(
+            { test_name: test.name, step_action: step.action, step_index: i, error_message: msg },
+            this.memory ? { memory: this.memory, stepKey } : undefined,
+          );
+          const memBadge = debugResult.from_memory ? " [memory]" : "";
+          wlog(`  🔍 [${debugResult.failure_class}]${memBadge} ${debugResult.suggested_fix}`);
 
           let screenshotPath: string | undefined;
           if (this.opts.screenshotsDir) {

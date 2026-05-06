@@ -1,4 +1,5 @@
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
+import { MemoryStore } from "../memory/MemoryStore";
 import { FailureClass, DebugParams, DebugResult } from "./types";
 
 export type { FailureClass, DebugParams, DebugResult };
@@ -9,6 +10,11 @@ const SYSTEM_PROMPT =
   "failure_class (one of: locator_failure, timing_issue, assertion_failure, api_failure, network_error, unknown), " +
   "root_cause (string), suggested_fix (string), confidence (0-1 number).";
 
+export interface MemoryContext {
+  memory:  MemoryStore;
+  stepKey: string;
+}
+
 export class DebuggerAgent {
   private llm: LLMProvider;
 
@@ -16,12 +22,28 @@ export class DebuggerAgent {
     this.llm = llm ?? createLLMProvider();
   }
 
-  async analyze(params: DebugParams): Promise<DebugResult> {
+  async analyze(params: DebugParams, memCtx?: MemoryContext): Promise<DebugResult> {
+    // Return cached diagnosis if available — skips LLM call entirely.
+    if (memCtx) {
+      const known = memCtx.memory.getKnownPattern(memCtx.stepKey);
+      if (known) {
+        return {
+          failure_class: known.failureClass as FailureClass,
+          root_cause:    known.rootCause,
+          suggested_fix: known.suggestedFix,
+          confidence:    0.9,
+          from_mock:     false,
+          from_memory:   true,
+        };
+      }
+    }
+
     const userMessage =
       `Test: ${params.test_name}\n` +
       `Step ${params.step_index + 1} (${params.step_action})\n` +
       `Error: ${params.error_message}`;
 
+    let result: DebugResult;
     try {
       const res = await this.llm.complete({
         system:     SYSTEM_PROMPT,
@@ -36,7 +58,7 @@ export class DebuggerAgent {
         confidence:    number;
       };
 
-      return {
+      result = {
         failure_class: parsed.failure_class ?? "unknown",
         root_cause:    parsed.root_cause    ?? "Unknown error",
         suggested_fix: parsed.suggested_fix ?? "Review the error message.",
@@ -44,9 +66,20 @@ export class DebuggerAgent {
         from_mock:     this.llm.name === "mock",
       };
     } catch {
-      // Fallback if LLM call or JSON parse fails
-      return this.heuristicFallback(params);
+      result = this.heuristicFallback(params);
     }
+
+    // Cache the diagnosis so identical future failures skip the LLM call.
+    if (memCtx) {
+      memCtx.memory.storePattern(memCtx.stepKey, {
+        failureClass: result.failure_class,
+        rootCause:    result.root_cause,
+        suggestedFix: result.suggested_fix,
+      });
+      memCtx.memory.save();
+    }
+
+    return result;
   }
 
   // Pure heuristic fallback — always works, no external calls
