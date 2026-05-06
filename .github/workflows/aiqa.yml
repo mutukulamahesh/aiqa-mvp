@@ -2,7 +2,7 @@ name: AIQA Test Suite
 
 on:
   push:
-    branches: [main, phase1]
+    branches: [main, phase2]
   pull_request:
     branches: [main]
 
