@@ -1,6 +1,6 @@
 # AIQA — Sprint 1 Progress Report
 
-> Branch: `phase1` · Started: 2026-05-01 · Last updated: 2026-05-04
+> Branch: `phase2` · Started: 2026-05-01 · Last updated: 2026-05-06
 > Platform alignment at sprint start: **~35%** of vision
 
 ---
@@ -353,6 +353,102 @@ fail_bad_assert-1777674204691-d4ulmh-step-2-fail.png
 | EPIC | Title | Status |
 |---|---|---|
 | EPIC-05 | OrchestratorAgent | ⬜ Parked until Sprint 1 done |
+
+---
+
+---
+
+## Healer Safety Fixes — Pre-EPIC-06 ✅ DONE
+
+Three targeted safety fixes applied before the Memory Layer epic to harden the healer under real-world conditions.
+
+### Fix 1 — Visibility + Interactability Guard
+
+After a selector passes semantic scoring and role validation, AIQA now verifies the element is actually visible and enabled on the page before returning it. Hidden or disabled elements are rejected and the event log records a `rejected` event.
+
+| File | Change |
+|---|---|
+| `src/healer/SelectorHealer.ts` | `validateVisible()` — calls `locator.isVisible()` + `locator.isEnabled()` in parallel; both must pass |
+
+### Fix 2 — Safe Context Fallback Ordering
+
+When `contextFilter()` has no entries matching the current SPA context key, the fallback set is now sorted deterministically by confidence desc → lastUsed desc instead of returning raw unordered data.
+
+| File | Change |
+|---|---|
+| `src/healer/HealerCache.ts` | `contextFilter()` fallback path returns `[...entries].sort(...)` |
+
+### Fix 3 — Selector Lifecycle State
+
+Cache entries now carry `status: "provisional" | "validated"`. A freshly healed selector starts as `provisional`. After 3 confirmed successes it is promoted to `validated` and receives a +5 score bonus during future lookups. Old cache files without the field are migrated transparently.
+
+| File | Change |
+|---|---|
+| `src/healer/HealerCache.ts` | `status` field on `CacheEntry`; `markSuccess()` promotes at ≥3; `scoreEntry()` applies bonus; `migrate()` defaults old entries to `provisional` |
+
+### Tests — 70/70 passing after safety fixes
+
+New describe blocks added to `tests/healer/healer.test.ts`:
+- `SelectorHealer — visibility + interactability` (3 tests)
+- `HealerCache — context fallback ordering` (1 test)
+- `HealerCache — lifecycle state` (4 tests)
+
+---
+
+## Multi-LLM Provider Support ✅ DONE
+
+AIQA previously hardcoded Anthropic. This work makes the LLM layer pluggable — users configure their own provider via `.env` and the YAML environment profile. Zero code changes required to switch.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/llm/OpenAILLMProvider.ts` | Handles OpenAI and NVIDIA (OpenAI-compatible API) via native `fetch` — zero extra npm deps |
+| `src/llm/GeminiLLMProvider.ts` | Handles Google Gemini via native `fetch` — uses `system_instruction` + `contents` wire format |
+| `src/llm/FallbackLLMProvider.ts` | Chains providers in order; retries on transient errors; warns on degradation; fails fast on auth/bad-request errors |
+| `src/llm/LLMProvider.ts` | Rewritten — `ProviderName`, `LLMConfig`, `createLLMProvider()` factory with env auto-detection |
+| `src/llm/AnthropicLLMProvider.ts` | Added optional `model` param; includes `raw` in response |
+| `src/config/ConfigLoader.ts` | `llm` section added to Zod schema; `checkSecrets()` updated per active provider |
+| `config/environments/dev.yaml` | `llm.provider: mock` |
+| `config/environments/staging.yaml` | `llm.provider: anthropic, fallback: [mock]` |
+| `config/environments/prod.yaml` | `llm.provider: anthropic, fallback: [mock]` |
+
+### Provider selection — resolution order
+
+```
+1. Explicit LLMConfig argument (passed from YAML config at CLI startup)
+2. LLM_PROVIDER env var  +  optional LLM_FALLBACK (comma-separated names)
+3. Auto-detect: ANTHROPIC_API_KEY → OPENAI_API_KEY → NVIDIA_API_KEY → GEMINI_API_KEY
+4. MockLLMProvider  (no keys, no explicit config)
+```
+
+### Supported providers
+
+| Provider | Env var | Notes |
+|---|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude — requires `@anthropic-ai/sdk` |
+| `openai` | `OPENAI_API_KEY` | GPT-4o-mini default |
+| `nvidia` | `NVIDIA_API_KEY` | OpenAI-compatible endpoint — `meta/llama-3.1-8b-instruct` default |
+| `gemini` | `GEMINI_API_KEY` | `gemini-2.0-flash` default |
+| `mock` | — | Rule-based, always available |
+
+### 5 Safety Properties
+
+| Risk | Fix |
+|---|---|
+| Response shape leaks | All providers return normalized `{ content, model, raw? }` — callers never see provider wire format |
+| Prompt format drift | `LLMRequest.{system, userMessage}` is the single canonical format; each provider translates internally |
+| Blind fallback on auth errors | `isRetryableError()` — HTTP 4xx (except 429) and `not installed` are non-retryable; fail immediately without masking |
+| Silent degradation | `console.warn("[LLM] Degraded — primary failed, using fallback: <name>")` when chain advances |
+| Cost/latency awareness | Documented as future work — model-per-task selection (healer vs generator vs judge) is out of scope now |
+
+### Tests — 183/183 passing after multi-LLM work
+
+`tests/llm/providers.test.ts` — 32 tests across 4 describe blocks:
+- `FallbackLLMProvider` (10): name, first-succeeds, fallthrough on retryable, all-fail aggregate, empty chain, 429/500 retryable, 401/400 non-retryable, degradation warning
+- `OpenAILLMProvider` (7): name detection (openai/nvidia), request format, content + raw field, HTTP error, empty choices, NVIDIA endpoint
+- `GeminiLLMProvider` (6): name, request format, content + raw field, HTTP error, empty candidates, custom model
+- `createLLMProvider` (9): mock default, auto-detect all 4 providers, env override, fallback chain, explicit config precedence
 
 ---
 

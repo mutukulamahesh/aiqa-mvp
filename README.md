@@ -288,20 +288,59 @@ steps:
 
 ## LLM Integration
 
-The platform uses an abstraction layer so it works without any API key and upgrades seamlessly when one is provided.
+AIQA works out of the box without any API key and upgrades seamlessly to a real provider when one is configured. Five providers are supported — pick whichever you have access to.
 
-| Mode | Behaviour |
-|---|---|
-| No API key (default) | Rule-based mock responses — fully functional |
-| `ANTHROPIC_API_KEY` set | Real Claude API for richer analysis and generation |
+### Supported providers
 
-To enable Claude:
+| Provider | Env var | Notes |
+|---|---|---|
+| `mock` (default) | — | Rule-based, zero dependencies, always works |
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude — `npm install @anthropic-ai/sdk` required |
+| `openai` | `OPENAI_API_KEY` | GPT-4o-mini default |
+| `nvidia` | `NVIDIA_API_KEY` | Free API at [build.nvidia.com](https://build.nvidia.com) — OpenAI-compatible |
+| `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash default |
+
+### Quick start
+
 ```bash
+# Anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
 npm install @anthropic-ai/sdk
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# NVIDIA (free tier available)
+export NVIDIA_API_KEY="nvapi-..."
+
+# Gemini
+export GEMINI_API_KEY="AIza..."
 ```
 
-No code changes required — the factory picks it up automatically.
+No code changes required — the factory auto-detects whichever key is present (priority: Anthropic → OpenAI → NVIDIA → Gemini → mock).
+
+### Configuring via YAML environment profile
+
+```yaml
+# config/environments/prod.yaml
+llm:
+  provider: anthropic
+  fallback: [openai, mock]   # tried in order if primary fails
+  model: claude-opus-4-7     # optional — overrides provider default
+```
+
+### Fallback chains
+
+Set `LLM_FALLBACK` or configure `fallback:` in the YAML profile to build a resilience chain:
+
+```bash
+export LLM_PROVIDER=anthropic
+export LLM_FALLBACK=openai,mock
+```
+
+- Transient failures (rate limits, server errors) advance to the next provider
+- Non-retryable failures (invalid API key, bad request) fail immediately
+- A warning is logged whenever a fallback provider is activated
 
 ---
 
@@ -330,9 +369,12 @@ src/
   reporters/
     HTMLReporter.ts             # Self-contained HTML report generator
   llm/
-    LLMProvider.ts              # Interface + factory
+    LLMProvider.ts              # Interface, types, createLLMProvider() factory
     MockLLMProvider.ts          # Rule-based, no API key needed
-    AnthropicLLMProvider.ts     # Claude integration (plug-in ready)
+    AnthropicLLMProvider.ts     # Claude (requires @anthropic-ai/sdk)
+    OpenAILLMProvider.ts        # OpenAI + NVIDIA (fetch-based, no extra deps)
+    GeminiLLMProvider.ts        # Google Gemini (fetch-based, no extra deps)
+    FallbackLLMProvider.ts      # Chains providers; retryable-error classification; degradation warning
   agents/
     DebuggerAgent.ts            # Failure classification + fix suggestions
     AppExplorer.ts              # Playwright-based app crawler

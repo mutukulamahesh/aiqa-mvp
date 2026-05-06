@@ -13,7 +13,7 @@ import { LLMProvider, LLMRequest, LLMResponse } from "./LLMProvider";
 export class AnthropicLLMProvider implements LLMProvider {
   readonly name = "anthropic";
 
-  constructor(private apiKey: string) {}
+  constructor(private apiKey: string, private model = "claude-haiku-4-5-20251001") {}
 
   async complete(req: LLMRequest): Promise<LLMResponse> {
     // Dynamic import — no hard compile-time dependency on the SDK.
@@ -33,7 +33,7 @@ export class AnthropicLLMProvider implements LLMProvider {
 
     const client = new Anthropic({ apiKey: this.apiKey });
     const response = await client.messages.create({
-      model:      "claude-haiku-4-5-20251001",
+      model:      this.model,
       max_tokens: req.maxTokens ?? 1024,
       system:     req.system,
       messages:   [{ role: "user", content: req.userMessage }],
@@ -44,6 +44,6 @@ export class AnthropicLLMProvider implements LLMProvider {
       throw new Error("[AnthropicLLMProvider] Unexpected non-text response from API");
     }
 
-    return { content: block.text, model: response.model };
+    return { content: block.text, model: response.model, raw: response };
   }
 }

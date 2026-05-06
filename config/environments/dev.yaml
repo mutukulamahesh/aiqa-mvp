@@ -26,3 +26,12 @@ results:
 
 features:
   llmEnabled: true
+
+# LLM provider selection.
+# provider: anthropic | openai | nvidia | gemini | mock
+# fallback:  ordered list tried when primary fails (optional)
+# model:     override the provider default (optional)
+# API keys stay in .env — never commit them here.
+llm:
+  provider: mock
+  fallback: []

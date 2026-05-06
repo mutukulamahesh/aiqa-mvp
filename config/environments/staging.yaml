@@ -26,3 +26,7 @@ results:
 
 features:
   llmEnabled: true
+
+llm:
+  provider: anthropic
+  fallback: [mock]

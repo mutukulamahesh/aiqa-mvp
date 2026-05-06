@@ -43,6 +43,12 @@ const EnvConfigSchema = z.object({
   features: z.object({
     llmEnabled: z.boolean(),
   }),
+
+  llm: z.object({
+    provider: z.enum(["anthropic", "openai", "nvidia", "gemini", "mock"]).default("mock"),
+    fallback: z.array(z.enum(["anthropic", "openai", "nvidia", "gemini", "mock"])).default([]),
+    model:    z.string().optional(),
+  }).default({ provider: "mock", fallback: [] }),
 });
 
 export type EnvConfig = z.infer<typeof EnvConfigSchema>;
@@ -101,8 +107,30 @@ export function checkSecrets(): { missing: string[]; warnings: string[] } {
   const missing:  string[] = [];
   const warnings: string[] = [];
 
-  if (!process.env["ANTHROPIC_API_KEY"]) {
-    missing.push("ANTHROPIC_API_KEY — LLM features will fall back to mock provider");
+  // Determine which provider is active: YAML config → LLM_PROVIDER env → auto-detect
+  const configuredProvider = (() => {
+    try { return _loaded?.llm?.provider; } catch { return undefined; }
+  })() ?? process.env.LLM_PROVIDER;
+
+  const KEY_MAP: Record<string, string> = {
+    anthropic: "ANTHROPIC_API_KEY",
+    openai:    "OPENAI_API_KEY",
+    nvidia:    "NVIDIA_API_KEY",
+    gemini:    "GEMINI_API_KEY",
+  };
+
+  if (configuredProvider && configuredProvider !== "mock") {
+    // Explicit provider selected — check its key
+    const required = KEY_MAP[configuredProvider];
+    if (required && !process.env[required]) {
+      missing.push(`${required} is required for provider "${configuredProvider}"`);
+    }
+  } else if (!configuredProvider) {
+    // Auto-detect mode — warn if no key at all (will silently use mock)
+    const hasAny = Object.values(KEY_MAP).some(k => process.env[k]);
+    if (!hasAny) {
+      missing.push("No LLM API key found — healer and debugger will use mock provider");
+    }
   }
 
   if (process.env["JIRA_API_TOKEN"] && !process.env["JIRA_EMAIL"]) {
