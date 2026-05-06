@@ -3,6 +3,8 @@ import * as path from "path";
 import { AppExplorer }        from "./AppExplorer";
 import { FlowMapper }          from "./FlowMapper";
 import { ScenarioGenerator }   from "./ScenarioGenerator";
+import { HealerCache }         from "../healer/HealerCache";
+import { HealerAnalytics, AnalyticsReport } from "../healer/HealerAnalytics";
 import { DebuggerAgent }        from "./DebuggerAgent";
 import { ReadinessScorer }      from "./ReadinessScorer";
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
@@ -46,6 +48,7 @@ export interface OrchestratorResult {
   debugMap:     Map<string, DebugResult>;
   report?:      ReadinessReport;
   narrative?:   string;
+  analytics?:   AnalyticsReport;
   summary:      OrchestratorSummary;
 }
 
@@ -87,8 +90,13 @@ export class OrchestratorAgent {
     progress(2, TOTAL_STAGES, `[FlowMapper] Mapping flows (${exploration.totalPages} pages found)`);
     let flows: UserFlow[];
     const t2 = Date.now();
+    // Shared cache: FlowMapper reads validated selectors from prior runs so generated
+    // steps embed known-good CSS targets directly (skips healer strategy 3/4 on re-runs).
+    const selectorCache = new HealerCache();
+    const analytics     = new HealerAnalytics(selectorCache);
+    const flowMapper    = new FlowMapper(this.llm, selectorCache);
     try {
-      flows = await new FlowMapper().map(exploration);
+      flows = await flowMapper.map(exploration);
     } catch (err) {
       return this.partialResult("flow_mapper", err as Error, runId, startTime, timings, input, { exploration });
     }
@@ -112,9 +120,11 @@ export class OrchestratorAgent {
 
     // ── Dry-run: skip execution ───────────────────────────────────────────────
     if (input.dryRun) {
+      const seeded = flowMapper.getSeedCount();
+      analytics.recordRun({ runId, timestamp: new Date().toISOString(), url: input.url, seededSelectors: seeded, testsPassed: 0, testsFailed: 0 });
       const summary = this.buildSummary(
         runId, input.url, "dry_run", undefined, undefined,
-        flows, scenarios, [], timings, warnings, startTime,
+        flows, scenarios, [], timings, warnings, startTime, undefined, seeded,
       );
       this.persistSummary(summary, input.outDir);
       return {
@@ -126,6 +136,7 @@ export class OrchestratorAgent {
         scenarios,
         results:  [],
         debugMap: new Map(),
+        analytics: analytics.getReport(),
         summary,
       };
     }
@@ -177,9 +188,18 @@ export class OrchestratorAgent {
     const narrative = await this.buildNarrative(exploration, flows, scenarios, results, report);
 
     const status: PipelineStatus = warnings.length > 0 ? "success_with_warnings" : "success";
+    const seeded = flowMapper.getSeedCount();
+    analytics.recordRun({
+      runId,
+      timestamp:       new Date().toISOString(),
+      url:             input.url,
+      seededSelectors: seeded,
+      testsPassed:     results.filter(r => r.passed).length,
+      testsFailed:     results.filter(r => !r.passed).length,
+    });
     const summary = this.buildSummary(
       runId, input.url, status, report, undefined,
-      flows, scenarios, results, timings, warnings, startTime,
+      flows, scenarios, results, timings, warnings, startTime, undefined, seeded,
     );
     this.persistSummary(summary, input.outDir);
 
@@ -194,6 +214,7 @@ export class OrchestratorAgent {
       debugMap,
       report,
       narrative,
+      analytics: analytics.getReport(),
       summary,
     };
   }
@@ -241,18 +262,19 @@ export class OrchestratorAgent {
   // ── Summary builder ────────────────────────────────────────────────────────
 
   private buildSummary(
-    runId:       string,
-    url:         string,
-    status:      PipelineStatus,
-    report:      ReadinessReport | undefined,
-    failedStage: PipelineStage   | undefined,
-    flows:       UserFlow[],
-    scenarios:   GeneratedScenario[],
-    results:     TestResult[],
-    timings:     StageTimings,
-    warnings:    string[],
-    startTime:   number,
-    error?:      PipelineError,
+    runId:            string,
+    url:              string,
+    status:           PipelineStatus,
+    report:           ReadinessReport | undefined,
+    failedStage:      PipelineStage   | undefined,
+    flows:            UserFlow[],
+    scenarios:        GeneratedScenario[],
+    results:          TestResult[],
+    timings:          StageTimings,
+    warnings:         string[],
+    startTime:        number,
+    error?:           PipelineError,
+    seededSelectors = 0,
   ): OrchestratorSummary {
     const passed = results.filter(r => r.passed).length;
     return {
@@ -261,17 +283,18 @@ export class OrchestratorAgent {
       status,
       failedStage,
       error,
-      flows:       flows.length,
-      scenarios:   scenarios.length,
-      valid:       scenarios.filter(s => s.validated).length,
+      flows:            flows.length,
+      scenarios:        scenarios.length,
+      valid:            scenarios.filter(s => s.validated).length,
       passed,
-      failed:      results.length - passed,
-      score:       report?.score ?? 0,
-      grade:       report?.grade ?? "F",
-      durationMs:  Date.now() - startTime,
+      failed:           results.length - passed,
+      score:            report?.score ?? 0,
+      grade:            report?.grade ?? "F",
+      durationMs:       Date.now() - startTime,
       warnings,
       timings,
-      generatedAt: new Date().toISOString(),
+      seededSelectors,
+      generatedAt:      new Date().toISOString(),
     };
   }
 

@@ -292,6 +292,102 @@ describe("HealerCache", () => {
   });
 });
 
+// ── HealerCache — getHealStats ────────────────────────────────────────────────
+
+describe("HealerCache — getHealStats", () => {
+  test("returns empty array for cache with no usage history", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x"); // successCount = 0, failureCount = 0
+    expect(cache.getHealStats()).toHaveLength(0);
+  });
+
+  test("aggregates counts across multiple URLs for the same descriptor", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://a.com", "btn", "#a");
+    cache.set("https://b.com", "btn", "#b");
+    cache.markSuccess("https://a.com", "btn", "#a");
+    cache.markSuccess("https://a.com", "btn", "#a");
+    cache.markSuccess("https://b.com", "btn", "#b");
+    const stats = cache.getHealStats();
+    expect(stats).toHaveLength(1);
+    expect(stats[0].descriptor).toBe("btn");
+    expect(stats[0].totalUses).toBe(3);
+    expect(stats[0].successRate).toBe(100);
+  });
+
+  test("calculates success rate correctly when there are failures", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x");
+    cache.markSuccess("https://example.com", "btn", "#x");
+    cache.markSuccess("https://example.com", "btn", "#x");
+    cache.markFailure("https://example.com", "btn", "#x");  // failureCount = 1 but not yet evicted? Actually this evicts at 3
+    // 2 success, 1 failure → 67%
+    const stats = cache.getHealStats();
+    expect(stats[0].successRate).toBe(67);
+  });
+
+  test("returns descriptors sorted by totalUses descending", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "rare",   "#r");
+    cache.set("https://example.com", "common", "#c");
+    cache.markSuccess("https://example.com", "rare",   "#r");
+    cache.markSuccess("https://example.com", "common", "#c");
+    cache.markSuccess("https://example.com", "common", "#c");
+    cache.markSuccess("https://example.com", "common", "#c");
+    const stats = cache.getHealStats();
+    expect(stats[0].descriptor).toBe("common");
+    expect(stats[1].descriptor).toBe("rare");
+  });
+
+  test("respects topN limit", () => {
+    const cache = new HealerCache(tmpCache());
+    for (let i = 0; i < 5; i++) {
+      cache.set("https://example.com", `desc-${i}`, `#s${i}`);
+      cache.markSuccess("https://example.com", `desc-${i}`, `#s${i}`);
+    }
+    expect(cache.getHealStats(3)).toHaveLength(3);
+  });
+});
+
+// ── HealerCache — getValidated ────────────────────────────────────────────────
+
+describe("HealerCache — getValidated", () => {
+  test("returns undefined when no entries exist", () => {
+    const cache = new HealerCache(tmpCache());
+    expect(cache.getValidated("https://example.com", "email")).toBeUndefined();
+  });
+
+  test("returns undefined for provisional entries (< 3 successes)", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "email", "#email");
+    cache.markSuccess("https://example.com", "email", "#email");
+    cache.markSuccess("https://example.com", "email", "#email");
+    // 2 successes → still provisional
+    expect(cache.getValidated("https://example.com", "email")).toBeUndefined();
+  });
+
+  test("returns selector once entry reaches validated status (3 successes)", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "email", "#email-field");
+    cache.markSuccess("https://example.com", "email", "#email-field");
+    cache.markSuccess("https://example.com", "email", "#email-field");
+    cache.markSuccess("https://example.com", "email", "#email-field");
+    expect(cache.getValidated("https://example.com", "email")).toBe("#email-field");
+  });
+
+  test("returns highest-scored validated selector when multiple exist", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "submit", "#low",  { confidence: 0.5 });
+    cache.set("https://example.com", "submit", "#high", { confidence: 0.9 });
+    for (let i = 0; i < 3; i++) {
+      cache.markSuccess("https://example.com", "submit", "#low");
+      cache.markSuccess("https://example.com", "submit", "#high");
+    }
+    // #high should score higher (confidence * 10 is dominant factor)
+    expect(cache.getValidated("https://example.com", "submit")).toBe("#high");
+  });
+});
+
 // ── SelectorHealer — cache layer ──────────────────────────────────────────────
 
 describe("SelectorHealer — cache", () => {
@@ -763,5 +859,53 @@ describe("HealerCache — lifecycle state", () => {
     const cache = new HealerCache(file);
     expect(cache.entries()["https://example.com/"]["btn"][0].status).toBe("provisional");
     fs.unlinkSync(file);
+  });
+});
+
+// ── Healer Analytics — unstable areas + most healed ──────────────────────────
+
+describe("SelectorHealer — analytics sections", () => {
+  test("getReport includes Unstable areas when heals occurred on a page", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#x"), file);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.heal("btn", makePage({}, 1, null, "button") as any, "https://app.com/login");
+    const report = healer.getReport();
+    expect(report).toContain("Unstable areas");
+    expect(report).toContain("app.com/login");
+    expect(report).toContain("heals: 1");
+  });
+
+  test("getReport omits Unstable areas when only cache hits occurred (no healing needed)", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(mockLLM, file);
+    healer.cache.set("https://app.com", "btn", "#x");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.tryCache("https://app.com", "btn", makePage({}, 1) as any);
+    expect(healer.getReport()).not.toContain("Unstable areas");
+  });
+
+  test("getReport includes Most healed (all-time) when cache has usage history", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(stubLLM("#x"), file);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.heal("login_button", makePage({}, 1, null, "button") as any, "https://app.com");
+    healer.cache.markSuccess("https://app.com", "login_button", "#x");
+    const report = healer.getReport();
+    expect(report).toContain("Most healed (all-time)");
+    expect(report).toContain("login_button");
+    expect(report).toContain("success: 100%");
+  });
+
+  test("getReport shows evictions in Unstable areas count", async () => {
+    const file   = tmpCache();
+    const healer = new SelectorHealer(mockLLM, file);
+    healer.cache.set("https://app.com/checkout", "btn", "#stale");
+    // Force stale: return count 0 so it gets evicted
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await healer.tryCache("https://app.com/checkout", "btn", makePage({}, 0) as any);
+    const report = healer.getReport();
+    expect(report).toContain("Unstable areas");
+    expect(report).toContain("evictions: 1");
   });
 });

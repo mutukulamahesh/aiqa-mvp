@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~55%**  *(updated 2026-05-06)*
-> Sprint 1 + Sprint 2 + Phase 2 Healer: **DONE**.
-> Remaining: Phase 2 Memory Layer → Phase 3 Coverage → Phase 4 Enterprise → Phase 5-7.
+> Current alignment with vision: **~62%**  *(updated 2026-05-06)*
+> Sprint 1 + Sprint 2 + Phase 2 Intelligence Layer: **DONE**.
+> Remaining: Phase 3 Coverage (DB, flow control, LLM judge) → Phase 4 Enterprise → Phase 5-7.
 
 ---
 
@@ -144,7 +144,7 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | 4.4 | Post-run narrative via LLM — "3 critical flows tested, 1 failed" execution summary | [x] |
 
 ### EPIC-05 · Self-Healer Agent `[✅ DONE]`
-> Fully built as `SelectorHealer` + `HealerCache` with multi-selector ranking, LLM healing, confidence calibration, score decay, event sampling, cold/warm reporting. 45 tests. 2026-05-06.
+> Fully built: SelectorHealer + HealerCache + contextKey + semantic scoring + role validation + visibility guard + FlowMapper seeding + HealerAnalytics. 283 tests. 2026-05-06.
 
 | ID | Story | Status |
 |---|---|---|
@@ -152,17 +152,30 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | 5.2 | Healer history store — persist repairs in `.aiqa/healer-cache.json`, indexed by URL+descriptor | [x] |
 | 5.3 | Cached fix — on next run, try stored fix first; multi-selector ranked by score (confidence×10 + successCount×2×decay − failureCount×3 + recencyBoost) | [x] |
 | 5.4 | Integrate into `PlaywrightAdapter` — transparent healing on click/fill, retry after heal | [x] |
-| 5.5 | Healer report — `getReport()` on `TestRunner`; shows Cold/Warm/Mixed run type, cache hits, LLM calls, healed locators | [x] ⚠️ CLI `run-all` not yet wired to print report |
+| 5.5 | Healer report — analytics block in CLI after every `orchestrate` run; cold/warm/seeded stats | [x] |
+| 5.6 | SPA context key — `buildContextKey()` SHA-256 fingerprint; `getValidated()` enforces context match | [x] |
+| 5.7 | Semantic scoring + role validation + `validateVisible()` guard — rejects hidden/disabled candidates | [x] |
+| 5.8 | FlowMapper seeding — validated selectors embedded directly in generated steps; `getSeedCount()` | [x] |
 
-### EPIC-06 · Memory Layer `[▶ NEXT]`
-
-### EPIC-06 · Memory Layer
+### EPIC-06 · Memory Layer `[✅ DONE — 2026-05-06]`
 | ID | Story | Status |
 |---|---|---|
-| 6.1 | `MemoryStore` — JSON file per test suite, tracks flakiness score per step across runs | [ ] |
-| 6.2 | Flakiness score — increment on fail, decay on pass; flag tests above 0.4 threshold | [ ] |
-| 6.3 | Known failure patterns — store root cause + fix suggestion from DebuggerAgent, skip LLM on repeat | [ ] |
-| 6.4 | Memory-aware retry — flaky tests get longer wait before retry, uses flakiness score | [ ] |
+| 6.1 | `MemoryStore` — JSON file per test suite, tracks flakiness score per step across runs | [x] |
+| 6.2 | Flakiness score — increment on fail, decay on pass; flag tests above 0.4 threshold | [x] |
+| 6.3 | Known failure patterns — store root cause + fix suggestion from DebuggerAgent, skip LLM on repeat | [x] |
+| 6.4 | Memory-aware retry — flaky tests get longer wait before retry, uses flakiness score | [x] |
+
+### Healer Analytics `[✅ DONE — 2026-05-06]`
+> Turns accumulated healer data into a structured report surfaced after every `orchestrate` run.
+
+| ID | Story | Status |
+|---|---|---|
+| H.1 | `HealerAnalytics` class — `getTopUnstablePages`, `getMostHealedSelectors`, `getFlakiestSteps` | [x] |
+| H.2 | Run log persistence — appends `RunRecord` to `.aiqa/healer-runs.json` after every orchestrate run | [x] |
+| H.3 | `getMemoryReuseTrend(lastN)` + `getTotalLLMCallsSaved()` — cumulative LLM savings across runs | [x] |
+| H.4 | `static format(report)` — CLI formatter; silent on cold first run, full analytics block from run 2 onward | [x] |
+| H.5 | Noise filter — flakiest steps require ≥ 3 uses to suppress 1-failure/1-run false positives | [x] |
+| H.6 | Wired into `OrchestratorAgent` + `cli.ts` — `analytics` field on result, printed after summary | [x] |
 
 ---
 

@@ -6,7 +6,19 @@ export { KnownPattern, MemoryData, StepMemory };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-export const FLAKINESS_THRESHOLD = 0.4;
+export const FLAKINESS_THRESHOLD             = 0.4;
+
+/** Maximum step entries retained in the store; oldest entry evicted when exceeded. */
+export const MAX_STEP_ENTRIES                = 500;
+
+/**
+ * A cached diagnosis is evicted after this many consecutive failures on the same step.
+ * The next failure triggers a fresh LLM call, producing an updated diagnosis.
+ *
+ * TODO (future): split memory into separate flakiness.json + diagnosis.json files once
+ * multi-suite mixing or file-size growth becomes a concern.
+ */
+export const DIAGNOSIS_INVALIDATION_THRESHOLD = 5;
 
 // ── Step key ──────────────────────────────────────────────────────────────────
 
@@ -14,6 +26,10 @@ export const FLAKINESS_THRESHOLD = 0.4;
  * Canonical key for a step in memory.
  * Format: "<testName>::step<N>::<action>"
  * e.g.  "Login flow::step3::click"
+ *
+ * TODO (future): normalize action text before hashing so minor wording changes
+ * (e.g. "click_login" → "click_login_button") don't silently create a new key
+ * and lose accumulated flakiness/diagnosis history for that step.
  */
 export function makeStepKey(testName: string, stepIndex: number, action: string): string {
   return `${testName}::step${stepIndex + 1}::${action}`;
@@ -38,6 +54,7 @@ export class MemoryStore {
   constructor(
     private readonly filePath?: string,
     suiteId = "default",
+    private readonly maxEntries = MAX_STEP_ENTRIES,
   ) {
     this.data = filePath ? this.load(filePath, suiteId) : this.fresh(suiteId);
   }
@@ -50,8 +67,16 @@ export class MemoryStore {
     if (!passed) {
       entry.failCount++;
       entry.flakinessScore = entry.flakinessScore + 0.2 * (1 - entry.flakinessScore);
+      if (entry.knownPattern) {
+        entry.knownPattern.failuresSinceDiagnosis =
+          (entry.knownPattern.failuresSinceDiagnosis ?? 0) + 1;
+        if (entry.knownPattern.failuresSinceDiagnosis >= DIAGNOSIS_INVALIDATION_THRESHOLD) {
+          delete entry.knownPattern; // stale diagnosis — force fresh LLM call next failure
+        }
+      }
     } else {
       entry.flakinessScore = entry.flakinessScore * 0.8;
+      if (entry.knownPattern) entry.knownPattern.failuresSinceDiagnosis = 0;
     }
     entry.flakinessScore = Math.round(entry.flakinessScore * 1000) / 1000;
     entry.lastUpdated = new Date().toISOString();
@@ -93,13 +118,14 @@ export class MemoryStore {
    * Stores a new failure diagnosis. First-seen wins — if a pattern already
    * exists for this step it is not overwritten.
    */
-  storePattern(stepKey: string, pattern: Omit<KnownPattern, "hitCount" | "firstSeen">): void {
+  storePattern(stepKey: string, pattern: Omit<KnownPattern, "hitCount" | "firstSeen" | "failuresSinceDiagnosis">): void {
     const entry = this.getOrCreate(stepKey);
     if (!entry.knownPattern) {
       entry.knownPattern = {
         ...pattern,
-        firstSeen: new Date().toISOString(),
-        hitCount:  0,
+        firstSeen:              new Date().toISOString(),
+        hitCount:               0,
+        failuresSinceDiagnosis: 0,
       };
     }
   }
@@ -148,6 +174,16 @@ export class MemoryStore {
 
   private getOrCreate(stepKey: string): StepMemory {
     if (!this.data.steps[stepKey]) {
+      const keys = Object.keys(this.data.steps);
+      if (keys.length >= this.maxEntries) {
+        // TODO (future): evict by lowest value (low runCount + low flakinessScore) rather than
+        // oldest lastUpdated — a frequently-failing but stale step carries more signal than a
+        // rarely-seen step and should be retained longer.
+        const oldest = keys.reduce((a, b) =>
+          this.data.steps[a].lastUpdated < this.data.steps[b].lastUpdated ? a : b
+        );
+        delete this.data.steps[oldest];
+      }
       this.data.steps[stepKey] = {
         stepKey,
         flakinessScore: 0,

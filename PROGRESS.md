@@ -452,9 +452,242 @@ AIQA previously hardcoded Anthropic. This work makes the LLM layer pluggable —
 
 ---
 
+---
+
+## EPIC-06 — Memory Layer ✅ DONE
+
+Cross-run QA memory: flakiness scoring per step + cached DebuggerAgent diagnoses that skip the LLM on repeat failures.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/memory/types.ts` | `KnownPattern`, `StepMemory`, `MemoryData` — shared data contracts |
+| `src/memory/MemoryStore.ts` | Core store: flakiness scoring, pattern cache, persistence, eviction |
+| `src/agents/DebuggerAgent.ts` | Checks `getKnownPattern()` before LLM call; stores result after |
+| `src/agents/types.ts` | `from_memory?: boolean` added to `DebugResult` |
+| `src/runner/TestRunner.ts` | Tracks outcomes per step; applies extra wait on flaky steps; passes `memCtx` to debugger |
+| `src/cli.ts` | Creates `MemoryStore` at suite start; prints memory report after run |
+
+### Key behaviour
+
+**Flakiness scoring**
+- On fail: `score += 0.2 × (1 − score)` — asymptotically approaches 1.0
+- On pass: `score ×= 0.8` — exponential decay
+- Score ≥ 0.4 → step is flagged as flaky
+
+**Memory-aware retry wait** (proportional to score)
+| Score range | Extra wait before retry |
+|---|---|
+| ≥ 0.8 | 3 000 ms |
+| ≥ 0.6 | 2 000 ms |
+| ≥ 0.4 | 1 000 ms |
+| < 0.4 | 0 ms |
+
+**Known-pattern cache**
+- First LLM diagnosis per step key is stored; reuse skips the LLM entirely
+- `llmCallsSaved` counter surfaced in memory report
+- `[memory]` badge in runner output when cached diagnosis is returned
+- First-seen wins; subsequent `storePattern` calls for the same key are no-ops
+
+**Diagnosis trust / auto-invalidation**
+- `failuresSinceDiagnosis` counter increments on each failure while a cached pattern exists
+- Resets to 0 on pass (pattern was actionable)
+- At `DIAGNOSIS_INVALIDATION_THRESHOLD` (5) consecutive failures the pattern is evicted → next failure triggers a fresh LLM call
+
+**Growth cap**
+- Store evicts the oldest entry (by `lastUpdated`) when `MAX_STEP_ENTRIES` (500) is reached
+- Constructor accepts `maxEntries` override for tests
+
+**Persistence**
+- `results/memory.json` per project — loaded at suite start, saved after each test failure + at suite end
+- `MemoryStore(undefined)` → in-memory only; `save()` is a no-op (used in tests)
+
+### Constants (exported)
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `FLAKINESS_THRESHOLD` | 0.4 | Minimum score to be reported as flaky |
+| `DIAGNOSIS_INVALIDATION_THRESHOLD` | 5 | Consecutive fails before a cached diagnosis is evicted |
+| `MAX_STEP_ENTRIES` | 500 | Hard cap on tracked steps; oldest evicted beyond this |
+
+### Definition of Done — verified
+
+| Gate | Result |
+|---|---|
+| Score formula: 0 → 3 fails → ≥ 0.4 | ✅ `0 → 0.2 → 0.36 → 0.49` |
+| Score caps at 1.0 after many fails | ✅ 50-fail loop stays ≤ 1.0 |
+| Pass after fail decays score by 20% | ✅ `before × 0.8` confirmed |
+| `extraWaitMs` returns correct tier | ✅ 1000/2000/3000ms for score bands |
+| Known pattern returned on second failure | ✅ `getKnownPattern()` returns cached result; `hitCount` increments |
+| Pattern evicted after 5 consecutive fails | ✅ Diagnosis invalidation test passing |
+| Store never exceeds maxEntries cap | ✅ Growth cap test passing |
+| Persistence round-trip | ✅ Save → load restores scores + patterns |
+
+### Tests — 34 tests in `tests/memory/memory.test.ts`
+
+- `makeStepKey` (2)
+- `MemoryStore — flakiness scoring` (6)
+- `MemoryStore — extraWaitMs` (4)
+- `MemoryStore — getFlakySteps` (3)
+- `MemoryStore — known patterns` (4)
+- `MemoryStore — getReport` (4)
+- `MemoryStore — persistence` (5)
+- `MemoryStore — diagnosis invalidation` (3)
+- `MemoryStore — growth cap` (2)
+
+---
+
+## Platform Metrics — After EPIC-06
+
+| Metric | After Multi-LLM | After EPIC-06 |
+|---|---|---|
+| Test suites | 8 | **9** |
+| Tests passing | 183 | **217** |
+| Cross-run memory | ❌ None | ✅ Per-step flakiness scores |
+| Repeat LLM calls on known failures | ❌ Every failure | ✅ Cached; `llmCallsSaved` tracked |
+| Flaky step visibility | ❌ None | ✅ Scored + reported after suite |
+| Memory file | — | `results/memory.json` |
+| Diagnosis trust | — | Auto-evicted after 5 consecutive failures |
+| Memory growth | — | Hard-capped at 500 entries |
+
+---
+
+## EPIC-05 — Healer Elite Refinements ✅ DONE
+
+Three targeted improvements that harden the healer under real-world SPA conditions.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/healer/contextKey.ts` | `buildContextKey(page)` — SHA-256 hash of page title + visible headings; stable SPA context fingerprint |
+| `src/healer/HealerCache.ts` | `contextKey?` field on `CacheEntry`; `getValidated()` enforces context match; `contextFilter()` fallback ordering |
+| `src/healer/SelectorHealer.ts` | Semantic scoring, role validation, `validateVisible()` guard, log-level control |
+| `src/agents/FlowMapper.ts` | Reads validated selectors from `HealerCache` and seeds them into generated steps (`getSeedCount()`) |
+| `src/agents/OrchestratorAgent.ts` | Creates shared `HealerCache` + `HealerAnalytics`, records run after each orchestrate, returns analytics |
+
+### Key behaviour
+
+**SPA Context Key**
+- Each cache entry optionally carries a `contextKey` — SHA-256 of page title + h1/h2 text
+- `get()` / `getAll()` prefer entries whose `contextKey` matches; entries without a key always pass (backward compat)
+- `getValidated()` is strict — never returns a selector stored under a different SPA state (safe for code generation)
+- Fallback path (no matching entries): sorted by confidence desc → lastUsed desc, never random
+
+**Semantic Scoring + Visibility Guard**
+- After selector match, `validateVisible()` calls `locator.isVisible()` + `locator.isEnabled()` in parallel
+- Hidden or disabled candidates are rejected and logged as `rejected` events
+- Role validation runs after semantic scoring — ARIA role must match expected element type
+
+**Selector Lifecycle (status field)**
+- `provisional` — freshly healed, not yet confirmed
+- `validated` — promoted after 3 confirmed successes; earns +5 score bonus on future lookups
+- Migration in `migrate()` transparently upgrades old cache files
+
+**FlowMapper seeding**
+- Before generating steps, FlowMapper calls `cache.getValidated()` per descriptor
+- If a known-good selector exists, it's embedded directly as a CSS target (skips healer strategies 3/4)
+- `getSeedCount()` returns the number of steps seeded in the last `map()` call — surfaced in CLI output
+
+### New tests
+
+| Suite | Tests | What's covered |
+|---|---|---|
+| `tests/healer/contextKey.test.ts` | New | `buildContextKey` determinism, stability, uniqueness |
+| `tests/agents/flow-mapper-cache.test.ts` | New | FlowMapper seeding — cold cache, warm cache, seed count |
+| `tests/healer/healer.test.ts` | +18 | Visibility guard, context fallback ordering, lifecycle state |
+
+---
+
+## Healer Analytics Layer ✅ DONE
+
+Turns accumulated healer data into a structured analytics report surfaced after every `orchestrate` run.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/healer/HealerAnalytics.ts` | `HealerAnalytics` class — 5 metric methods, run log persistence, CLI formatter |
+| `tests/healer/healer-analytics.test.ts` | 32 tests across 6 describe blocks |
+
+### Metrics collected
+
+| Metric | Method | How ranked |
+|---|---|---|
+| Memory reuse trend | `getMemoryReuseTrend(lastN)` | Last N runs in order; each run shows seeded count or "cache cold" |
+| Total LLM calls saved | `getTotalLLMCallsSaved()` | Sum of `seededSelectors` across all runs |
+| Top unstable pages | `getTopUnstablePages(topN)` | Ranked by failure count desc, then failure rate |
+| Most healed selectors | `getMostHealedSelectors(topN)` | Ranked by total heal attempts desc; shows `heals: N  success: X%` |
+| Flakiest steps | `getFlakiestSteps(topN)` | Ranked by failure rate desc; requires ≥ 3 uses (noise filter) |
+
+### Persistence
+
+- Run records appended to `.aiqa/healer-runs.json` after every orchestrate run (dry-run or full)
+- `recordRun()` writes `{ runId, timestamp, url, seededSelectors, testsPassed, testsFailed }`
+- File is created on first write; missing file returns empty list (no crash)
+
+### Analytics polish applied
+
+| Refinement | Change |
+|---|---|
+| Label clarity | `uses` → `heals:` in Most healed selectors output — aligns with user mental model |
+| Noise filter | Flakiest steps now requires `uses ≥ 3` — prevents 1-failure/1-run entries from showing 100% flaky |
+
+### CLI output (after `orchestrate`)
+
+```
+━━━ Healer Analytics ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LLM calls saved   : 8  (across 2 runs)
+
+   Memory reuse trend  (last 2 runs)
+   ──────────────────────────────────────────────
+   Run 1  [app.com/login]  cache cold
+   Run 2  [app.com/login]  4 seeded  ·  4 heals avoided
+
+   Most healed selectors
+   ──────────────────────────────────────────────
+   1. email_input           heals:   5  success: 80%  [/login]
+
+   Top unstable pages
+   ──────────────────────────────────────────────
+   1. /checkout                              2/5 failed (40%)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Output is suppressed entirely on the first cold run (no data yet).
+
+### Tests — `tests/healer/healer-analytics.test.ts`
+
+| Describe block | Tests |
+|---|---|
+| `HealerAnalytics — run log` | 5 |
+| `HealerAnalytics — getTopUnstablePages` | 6 |
+| `HealerAnalytics — getMostHealedSelectors` | 5 |
+| `HealerAnalytics — getFlakiestSteps` | 4 |
+| `HealerAnalytics — getReport` | 2 |
+| `HealerAnalytics.format` | 7 |
+
+---
+
+## Platform Metrics — After Healer Analytics
+
+| Metric | After EPIC-06 Memory | After Healer Analytics |
+|---|---|---|
+| Test suites | 9 | **12** |
+| Tests passing | 217 | **283** |
+| Healer analytics | ❌ None | ✅ 5 metric collections |
+| LLM call savings tracked | ❌ None | ✅ Cumulative across all runs |
+| Flaky selector visibility | ❌ None | ✅ Per-page, per-descriptor, per-entry |
+| Run history | ❌ None | ✅ `.aiqa/healer-runs.json` |
+| CLI analytics output | ❌ None | ✅ After every `orchestrate` run |
+
+---
+
 ## Notes for Presentation
 
 - EPIC-02 is the critical infrastructure investment — it makes everything else reliable under load
 - The `AsyncLocalStorage` approach is the same pattern used by Node.js APM tools (Datadog, New Relic) for distributed tracing — we're using it for test isolation
 - 8-worker parallelism with zero resource leaks means the runner is already more reliable than most open-source parallel test runners
 - Every test has a unique `testId` — this becomes the hook for future features: healer history, memory store, flakiness scoring all reference by testId
+- Healer Analytics gives the demo moment: run twice, watch LLM calls drop, see which pages are flakiest

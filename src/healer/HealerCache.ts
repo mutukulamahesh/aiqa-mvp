@@ -12,6 +12,12 @@ export interface CacheEntry {
   status:       "provisional" | "validated";
 }
 
+export interface HealStat {
+  descriptor:  string;
+  totalUses:   number;  // successCount + failureCount across all URLs
+  successRate: number;  // 0–100
+}
+
 // descriptor → ranked list of candidate selectors (best score first on retrieval)
 type CacheData = Record<string, Record<string, CacheEntry[]>>;
 
@@ -62,6 +68,22 @@ export class HealerCache {
     const entries = this.data[this.normalizeUrl(pageUrl)]?.[descriptor];
     if (!entries?.length) return undefined;
     const pool = this.contextFilter(entries, contextKey);
+    return this.sorted(pool)[0]?.selector;
+  }
+
+  /** Returns the best-scored validated (≥ 3 successes) selector, or undefined.
+   *  Only returns entries with status === "validated" — safe to embed directly
+   *  as a CSS target in generated steps (strategy 1 in PlaywrightAdapter).
+   *
+   *  Unlike get/getAll, this method does NOT fall back to mismatched-context entries.
+   *  An entry stored under a different SPA state is never promoted into generated code. */
+  getValidated(pageUrl: string, descriptor: string, contextKey?: string): string | undefined {
+    const entries = this.data[this.normalizeUrl(pageUrl)]?.[descriptor];
+    if (!entries?.length) return undefined;
+    const pool = entries.filter(
+      e => e.status === "validated" &&
+           (!contextKey || !e.contextKey || e.contextKey === contextKey),
+    );
     return this.sorted(pool)[0]?.selector;
   }
 
@@ -140,6 +162,33 @@ export class HealerCache {
 
   entries(): CacheData {
     return this.data;
+  }
+
+  /**
+   * Cross-run aggregated stats per descriptor, sorted by total uses desc.
+   * Useful for analytics: which locators needed healing most across all pages.
+   */
+  getHealStats(topN = 10): HealStat[] {
+    const map = new Map<string, { success: number; total: number }>();
+    for (const descs of Object.values(this.data)) {
+      for (const [desc, entries] of Object.entries(descs)) {
+        const acc = map.get(desc) ?? { success: 0, total: 0 };
+        for (const e of entries) {
+          acc.success += e.successCount;
+          acc.total   += e.successCount + e.failureCount;
+        }
+        map.set(desc, acc);
+      }
+    }
+    return [...map.entries()]
+      .filter(([, s]) => s.total > 0)
+      .map(([descriptor, s]) => ({
+        descriptor,
+        totalUses:   s.total,
+        successRate: Math.round((s.success / s.total) * 100),
+      }))
+      .sort((a, b) => b.totalUses - a.totalUses)
+      .slice(0, topN);
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

@@ -146,22 +146,24 @@ export interface StageTimings {
 }
 
 export interface OrchestratorSummary {
-  runId:        string;
-  url:          string;
-  status:       PipelineStatus;
-  failedStage?: PipelineStage;
-  error?:       PipelineError;
-  flows:        number;
-  scenarios:    number;
-  valid:        number;
-  passed:       number;
-  failed:       number;
-  score:        number;
-  grade:        "A" | "B" | "C" | "D" | "F";
-  durationMs:   number;
-  warnings:     string[];
-  timings:      StageTimings;
-  generatedAt:  string;
+  runId:             string;
+  url:               string;
+  status:            PipelineStatus;
+  failedStage?:      PipelineStage;
+  error?:            PipelineError;
+  flows:             number;
+  scenarios:         number;
+  valid:             number;
+  passed:            number;
+  failed:            number;
+  score:             number;
+  grade:             "A" | "B" | "C" | "D" | "F";
+  durationMs:        number;
+  warnings:          string[];
+  timings:           StageTimings;
+  /** CSS selectors seeded from prior-run cache into generated steps (healer skipped for these). */
+  seededSelectors:   number;
+  generatedAt:       string;
 }
 
 export interface OrchestratorInput {

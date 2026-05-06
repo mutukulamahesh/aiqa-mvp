@@ -88,7 +88,8 @@ function stubAll(overrides: {
     explore: jest.fn().mockResolvedValue(EXPLORATION),
   }));
   (FlowMapper as jest.Mock).mockImplementation(() => ({
-    map: jest.fn().mockResolvedValue([FLOW]),
+    map:           jest.fn().mockResolvedValue([FLOW]),
+    getSeedCount:  jest.fn().mockReturnValue(0),
   }));
   (ScenarioGenerator as jest.Mock).mockImplementation(() => ({
     generate: jest.fn().mockResolvedValue(overrides.scenarios ?? [SCENARIO]),
@@ -360,7 +361,8 @@ describe("OrchestratorAgent", () => {
       explore: jest.fn().mockResolvedValue(EXPLORATION),
     }));
     (FlowMapper as jest.Mock).mockImplementation(() => ({
-      map: jest.fn().mockRejectedValue(new Error("Mapping error")),
+      map:          jest.fn().mockRejectedValue(new Error("Mapping error")),
+      getSeedCount: jest.fn().mockReturnValue(0),
     }));
 
     const result = await new OrchestratorAgent().run({ url: "https://example.com" });
@@ -377,7 +379,8 @@ describe("OrchestratorAgent", () => {
       explore: jest.fn().mockResolvedValue(EXPLORATION),
     }));
     (FlowMapper as jest.Mock).mockImplementation(() => ({
-      map: jest.fn().mockResolvedValue([FLOW]),
+      map:          jest.fn().mockResolvedValue([FLOW]),
+      getSeedCount: jest.fn().mockReturnValue(0),
     }));
     (ScenarioGenerator as jest.Mock).mockImplementation(() => ({
       generate: jest.fn().mockRejectedValue(new Error("LLM error")),

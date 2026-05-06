@@ -1,4 +1,6 @@
 import { createLLMProvider, LLMProvider } from "../llm/LLMProvider";
+import { HealerCache }        from "../healer/HealerCache";
+import { pageContextKey }     from "../healer/contextKey";
 import { ExplorationResult, ExploredPage, FlowStep, UserFlow } from "./types";
 
 export type { FlowStep, UserFlow };
@@ -10,9 +12,26 @@ const SYSTEM_PROMPT =
 
 export class FlowMapper {
   private llm: LLMProvider;
+  private seedCount = 0;
 
-  constructor(llm?: LLMProvider) {
+  constructor(llm?: LLMProvider, private readonly healerCache?: HealerCache) {
     this.llm = llm ?? createLLMProvider();
+  }
+
+  /** Number of step targets replaced with validated CSS selectors from cache. */
+  getSeedCount(): number { return this.seedCount; }
+
+  /**
+   * Returns a validated CSS selector for the descriptor if known, else the descriptor itself.
+   * Only promotes entries with status === "validated" (≥ 3 successes) into generated steps.
+   * Uses the page's title + headings as a contextKey to avoid cross-state cache contamination.
+   */
+  private seedTarget(pageUrl: string, descriptor: string, page: ExploredPage): string {
+    if (!this.healerCache) return descriptor;
+    const ctxKey = pageContextKey(page.title, page.headings) || undefined;
+    const seeded = this.healerCache.getValidated(pageUrl, descriptor, ctxKey);
+    if (seeded) { this.seedCount++; return seeded; }
+    return descriptor;
   }
 
   perPageFlows(exploration: ExplorationResult): UserFlow[] {
@@ -25,7 +44,7 @@ export class FlowMapper {
       if (page.inputs.length > 0 && page.buttons.some(b => /submit|send|save/i.test(b))) {
         for (const input of page.inputs.slice(0, 4)) {
           const label = input.placeholder ?? input.name ?? input.type;
-          steps.push({ action: "fill", target: label, value: this.sampleValue(input.type, input.name) });
+          steps.push({ action: "fill", target: this.seedTarget(page.url, label, page), value: this.sampleValue(input.type, input.name) });
         }
       }
       const pathname = (() => { try { return new URL(page.url).pathname.replace(/\/$/, "") || "/"; } catch { return "/"; } })();
@@ -149,17 +168,18 @@ export class FlowMapper {
     const steps: FlowStep[] = [{ action: "navigate", target: page.url }];
 
     if (page.inputs.some(i => i.type === "email" || i.name?.includes("email"))) {
-      steps.push({ action: "fill", target: "email", value: "testuser@example.com" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "email", page), value: "testuser@example.com" });
     } else if (page.inputs.some(i => i.name?.includes("user") || i.placeholder?.toLowerCase().includes("user"))) {
-      steps.push({ action: "fill", target: "username", value: "testuser" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "username", page), value: "testuser" });
     }
 
     if (page.inputs.some(i => i.type === "password")) {
-      steps.push({ action: "fill", target: "password", value: "TestPassword123" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "password", page), value: "TestPassword123" });
     }
 
     const submitBtn = page.buttons.find(b => /sign\s?in|log\s?in|login|submit/i.test(b));
-    steps.push({ action: "click", target: submitBtn ?? "Sign in" });
+    const clickDescriptor = submitBtn ?? "Sign in";
+    steps.push({ action: "click", target: this.seedTarget(page.url, clickDescriptor, page) });
     steps.push({ action: "assert", target: "url", value: "dashboard" });
 
     return steps;
@@ -171,11 +191,11 @@ export class FlowMapper {
     for (const input of page.inputs.slice(0, 5)) {
       const label = input.placeholder ?? input.name ?? input.type;
       const value = this.sampleValue(input.type, input.name);
-      steps.push({ action: "fill", target: label, value });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, label, page), value });
     }
 
     const submitBtn = page.buttons.find(b => /submit|send|save|register|sign\s?up/i.test(b));
-    if (submitBtn) steps.push({ action: "click", target: submitBtn });
+    if (submitBtn) steps.push({ action: "click", target: this.seedTarget(page.url, submitBtn, page) });
     steps.push({ action: "assert", target: "text", value: "success" });
 
     return steps;

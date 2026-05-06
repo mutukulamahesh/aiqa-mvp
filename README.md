@@ -12,6 +12,9 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **Explore any app** autonomously and map its pages and flows
 - **Generate test files** per page or per flow — no manual test writing
 - **Run tests** defined in YAML — web UI, API, or mixed
+- **Orchestrate the full pipeline** — one command: explore → map → generate → run → score
+- **Self-heal broken selectors** — when a locator fails, AIQA repairs it via LLM and caches the fix
+- **Analytics after every run** — top unstable pages, most healed selectors, LLM calls saved
 - **Diagnose failures** automatically with AI root-cause analysis and screenshots
 - **Score readiness** — get a 0–100 grade on your test coverage
 - **HTML reports** generated automatically after every run
@@ -185,6 +188,46 @@ Output:
 
 ---
 
+### `aiqa orchestrate --url <url>` — Full pipeline in one command
+
+Runs the complete pipeline: Explore → Map flows → Generate scenarios → Run tests → Score readiness.
+
+```bash
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --headless
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run   # generate only, skip execution
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --out myproject
+```
+
+Options:
+- `--url <url>` — target application URL (required)
+- `--headless` — run browser in headless mode
+- `--dry-run` — generate scenarios but do not execute them
+- `--out <folder>` — save `orchestrator-summary.json` to this folder
+- `--max-pages <n>` — page crawl limit (default: 10)
+
+Output:
+```
+[1/5] [Explorer] Exploring https://yourapp.com
+[2/5] [FlowMapper] Mapping flows (4 pages found)
+[3/5] [Generator] Generating scenarios (3 flows)
+[4/5] [Runner] Running 3 valid scenario(s)
+[5/5] [Scorer] Scoring readiness
+
+   Status  : success
+   Score   : 75/100 (C)
+   Flows   : 3   Scenarios: 3   Passed: 2   Failed: 1
+   Memory reuse: seeded selectors: 4  ·  heals avoided: 4
+
+━━━ Healer Analytics ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LLM calls saved   : 4  (across 2 runs)
+   ...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+On the first run the healer cache is cold. From run 2 onward, previously healed selectors are reused directly and the analytics block appears.
+
+---
+
 ### `aiqa score <results.json>` — Readiness scoring
 
 Computes a 0–100 readiness score from saved test results.
@@ -348,7 +391,7 @@ export LLM_FALLBACK=openai,mock
 
 ```
 src/
-  cli.ts                        # CLI entry point (init, run, explore, generate, run-all, score)
+  cli.ts                        # CLI entry point (all commands)
   dsl/
     types.ts                    # DSL type definitions
     DslParser.ts                # YAML → TestDefinition parser
@@ -363,9 +406,9 @@ src/
     APIActionHandler.ts         # api step execution
   adapter/
     AdapterActions.ts           # Browser adapter interface (includes screenshot)
-    PlaywrightAdapter.ts        # Playwright implementation (lazy launch + screenshots)
+    PlaywrightAdapter.ts        # Playwright implementation + transparent selector healing
   runner/
-    TestRunner.ts               # End-to-end test orchestration + failure screenshots
+    TestRunner.ts               # End-to-end test orchestration, retry, circuit breaker
   reporters/
     HTMLReporter.ts             # Self-contained HTML report generator
   llm/
@@ -376,13 +419,26 @@ src/
     GeminiLLMProvider.ts        # Google Gemini (fetch-based, no extra deps)
     FallbackLLMProvider.ts      # Chains providers; retryable-error classification; degradation warning
   agents/
-    DebuggerAgent.ts            # Failure classification + fix suggestions
+    OrchestratorAgent.ts        # Full pipeline coordinator: Explorer → FlowMapper → Generator → Runner → Scorer
+    DebuggerAgent.ts            # Failure classification + fix suggestions (memory-backed)
     AppExplorer.ts              # Playwright-based app crawler
-    FlowMapper.ts               # Heuristic flow identification + per-page flows
+    FlowMapper.ts               # Flow identification + healer-seeded step generation
     ScenarioGenerator.ts        # Flow → YAML test file generator
     ReadinessScorer.ts          # 0–100 readiness score
+  healer/
+    SelectorHealer.ts           # LLM-powered locator repair with semantic scoring + visibility guard
+    HealerCache.ts              # Persisted selector store — confidence, score decay, lifecycle state
+    HealerAnalytics.ts          # Analytics: unstable pages, healed selectors, flakiest steps, LLM savings
+    contextKey.ts               # SPA context fingerprint — SHA-256 of page title + headings
+  memory/
+    MemoryStore.ts              # Cross-run flakiness scores + known-pattern cache
+    types.ts                    # KnownPattern, StepMemory, MemoryData
   integrations/
     JiraAdapter.ts              # Jira story → flow converter (mock + stub)
+
+.aiqa/
+  healer-cache.json             # Persisted healer selector store (created on first heal)
+  healer-runs.json              # Run history for analytics (created after first orchestrate run)
 
 tests/
   example.yaml                  # Web automation example

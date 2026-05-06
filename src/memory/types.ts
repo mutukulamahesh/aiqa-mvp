@@ -1,9 +1,11 @@
 export interface KnownPattern {
-  failureClass: string;
-  rootCause:    string;
-  suggestedFix: string;
-  firstSeen:    string;
-  hitCount:     number;
+  failureClass:           string;
+  rootCause:              string;
+  suggestedFix:           string;
+  firstSeen:              string;
+  hitCount:               number;
+  /** Consecutive failures since this diagnosis was stored. Reset on pass; at threshold the pattern is evicted. */
+  failuresSinceDiagnosis: number;
 }
 
 export interface StepMemory {

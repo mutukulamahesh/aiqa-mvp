@@ -14,6 +14,7 @@ import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
+import { HealerAnalytics } from "./healer/HealerAnalytics";
 
 const program = new Command();
 
@@ -848,6 +849,11 @@ program
     if (t.scorer              !== undefined) timingParts.push(`Score: ${(t.scorer / 1000).toFixed(1)}s`);
     if (timingParts.length > 0) console.log(`\n   Timings: ${timingParts.join("  ·  ")}`);
 
+    const seeded = result.summary.seededSelectors ?? 0;
+    if (seeded > 0) {
+      console.log(`   Memory reuse: seeded selectors: ${seeded}  ·  heals avoided: ${seeded}`);
+    }
+
     // Summary
     console.log(`\n${"─".repeat(50)}`);
     if (result.status === "partial_failure") {
@@ -870,6 +876,11 @@ program
     }
     console.log(`   Run ID: ${result.runId}`);
     console.log(`${"─".repeat(50)}\n`);
+
+    if (result.analytics) {
+      const analyticsText = HealerAnalytics.format(result.analytics);
+      if (analyticsText) console.log(analyticsText);
+    }
 
     // exit 2 = pipeline failure, exit 1 = test failures, exit 0 = success / warnings
     if (result.status === "partial_failure") process.exit(2);

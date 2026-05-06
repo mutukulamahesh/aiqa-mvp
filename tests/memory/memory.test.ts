@@ -1,7 +1,7 @@
 import * as fs   from "fs";
 import * as path from "path";
 import * as os   from "os";
-import { MemoryStore, makeStepKey, FLAKINESS_THRESHOLD } from "../../src/memory/MemoryStore";
+import { MemoryStore, makeStepKey, FLAKINESS_THRESHOLD, DIAGNOSIS_INVALIDATION_THRESHOLD } from "../../src/memory/MemoryStore";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -198,6 +198,57 @@ describe("MemoryStore — getReport", () => {
     m.getKnownPattern("k");
     m.getKnownPattern("k");
     expect(m.getReport()).toContain("LLM calls saved:    2");
+  });
+});
+
+// ── Diagnosis invalidation ────────────────────────────────────────────────────
+
+describe("MemoryStore — diagnosis invalidation", () => {
+  const pat = { failureClass: "locator_failure", rootCause: "rc", suggestedFix: "sf" };
+
+  test("pattern is evicted after DIAGNOSIS_INVALIDATION_THRESHOLD consecutive failures", () => {
+    const m = store();
+    m.storePattern("k", pat);
+    for (let i = 0; i < DIAGNOSIS_INVALIDATION_THRESHOLD; i++) m.recordOutcome("k", false);
+    expect(m.getKnownPattern("k")).toBeUndefined();
+  });
+
+  test("pattern survives fewer than threshold consecutive failures", () => {
+    const m = store();
+    m.storePattern("k", pat);
+    for (let i = 0; i < DIAGNOSIS_INVALIDATION_THRESHOLD - 1; i++) m.recordOutcome("k", false);
+    expect(m.getKnownPattern("k")).toBeDefined();
+  });
+
+  test("a pass resets the counter — pattern survives intermittent failures", () => {
+    const m = store();
+    m.storePattern("k", pat);
+    // Almost reach threshold
+    for (let i = 0; i < DIAGNOSIS_INVALIDATION_THRESHOLD - 1; i++) m.recordOutcome("k", false);
+    m.recordOutcome("k", true);  // resets failuresSinceDiagnosis to 0
+    // Same number of failures again — counter reset, pattern must survive
+    for (let i = 0; i < DIAGNOSIS_INVALIDATION_THRESHOLD - 1; i++) m.recordOutcome("k", false);
+    expect(m.getKnownPattern("k")).toBeDefined();
+  });
+});
+
+// ── Growth cap ────────────────────────────────────────────────────────────────
+
+describe("MemoryStore — growth cap", () => {
+  test("store never exceeds maxEntries", () => {
+    const cap = 3;
+    const m = new MemoryStore(undefined, "default", cap);
+    for (let i = 0; i < cap + 5; i++) m.recordOutcome(`step-${i}`, false);
+    expect(m.getFlakySteps(0)).toHaveLength(cap);
+  });
+
+  test("most recently added entry is always retained after eviction", () => {
+    const small = new MemoryStore(undefined, "default", 2);
+    small.recordOutcome("a", false);
+    small.recordOutcome("b", false);
+    small.recordOutcome("c", false); // triggers eviction of one existing entry
+    expect(small.getScore("c")).toBeGreaterThan(0); // newest must be retained
+    expect(small.getFlakySteps(0)).toHaveLength(2); // cap must be respected
   });
 });
 

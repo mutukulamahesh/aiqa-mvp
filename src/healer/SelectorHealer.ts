@@ -1,6 +1,7 @@
 import { Page }                           from "playwright";
 import { LLMProvider, createLLMProvider } from "../llm/LLMProvider";
 import { HealerCache }                    from "./HealerCache";
+import { contextHash, pageContextKey }    from "./contextKey";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -165,6 +166,40 @@ export class SelectorHealer {
       }
     }
 
+    // ── Unstable areas (this run) ─────────────────────────────────────────────
+    const urlMap = new Map<string, { heals: number; evictions: number }>();
+    for (const e of this.events) {
+      const s = urlMap.get(e.pageUrl) ?? { heals: 0, evictions: 0 };
+      if (e.type === "healed")  s.heals++;
+      if (e.type === "evicted") s.evictions++;
+      urlMap.set(e.pageUrl, s);
+    }
+    const unstable = [...urlMap.entries()]
+      .filter(([, s]) => s.heals + s.evictions > 0)
+      .sort((a, b) => (b[1].heals + b[1].evictions) - (a[1].heals + a[1].evictions))
+      .slice(0, 5);
+
+    if (unstable.length) {
+      lines.push("│");
+      lines.push("│  Unstable areas:");
+      for (const [url, s] of unstable) {
+        const short = url.length > 44 ? "…" + url.slice(-43) : url;
+        lines.push(`│    • ${short.padEnd(44)}  heals: ${s.heals}  evictions: ${s.evictions}`);
+      }
+    }
+
+    // ── Most healed locators (cross-run, from cache) ───────────────────────────
+    const healStats = this.cache.getHealStats(5);
+    if (healStats.length) {
+      lines.push("│");
+      lines.push("│  Most healed (all-time):");
+      for (const s of healStats) {
+        lines.push(
+          `│    • ${s.descriptor.padEnd(28)}  uses: ${String(s.totalUses).padStart(3)}  success: ${s.successRate}%`,
+        );
+      }
+    }
+
     lines.push("└────────────────────────────────────────────────────");
     return lines.join("\n");
   }
@@ -295,15 +330,6 @@ export class SelectorHealer {
 
   // ── Context key (SPA-safe) ─────────────────────────────────────────────────
 
-  private static contextHash(s: string): string {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-    return (h >>> 0).toString(16).slice(0, 8);
-  }
-
-  /** Derives a short hash from the page's title + first two headings.
-   *  Different SPA states that share a URL but show different content will
-   *  produce different keys, preventing cross-state cache contamination. */
   private async extractContextKey(page: Page): Promise<string> {
     try {
       const title    = await page.title().catch(() => "");
@@ -311,15 +337,16 @@ export class SelectorHealer {
         Array.from(document.querySelectorAll("h1,h2"))
           .slice(0, 2)
           .map(el => el.textContent?.trim() ?? "")
-          .filter(Boolean)
-          .join("|"),
-      ).catch(() => "");
-      const raw = [title, headings].filter(Boolean).join("|");
-      return raw ? SelectorHealer.contextHash(raw) : "";
+          .filter(Boolean),
+      ).catch(() => [] as string[]);
+      return pageContextKey(title, headings);
     } catch {
       return "";
     }
   }
+
+  /** Exposed for tests that need to inspect the hash algorithm. */
+  static computeContextHash(s: string): string { return contextHash(s); }
 
   private emit(partial: Omit<HealerEvent, "ts">): void {
     if (this.events.length >= SelectorHealer.MAX_EVENTS) this.events.shift();
