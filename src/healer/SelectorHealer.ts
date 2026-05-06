@@ -104,6 +104,12 @@ export class SelectorHealer {
       return null;
     }
 
+    // Visibility + interactability guard: reject hidden or disabled elements.
+    if (!await this.validateVisible(page, selector)) {
+      this.emit({ type: "rejected", descriptor, selector, pageUrl, pageTitle });
+      return null;
+    }
+
     const contextKey = await this.extractContextKey(page);
     this.cache.set(pageUrl, descriptor, selector, { confidence: 0.85, source: "llm", contextKey: contextKey || undefined });
     this.emit({ type: "healed", descriptor, selector, confidence: 0.85, source: "llm", pageUrl, pageTitle });
@@ -269,6 +275,21 @@ export class SelectorHealer {
       return rule.validTags.includes(tag) || rule.validRoles.includes(role ?? "");
     } catch {
       return true;
+    }
+  }
+
+  // ── Visibility + interactability ──────────────────────────────────────────
+
+  private async validateVisible(page: Page, selector: string): Promise<boolean> {
+    try {
+      const locator = page.locator(selector);
+      const [visible, enabled] = await Promise.all([
+        locator.isVisible().catch(() => false),
+        locator.isEnabled().catch(() => false),
+      ]);
+      return visible && enabled;
+    } catch {
+      return false;
     }
   }
 

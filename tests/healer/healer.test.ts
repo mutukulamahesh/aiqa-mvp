@@ -39,11 +39,13 @@ const mockLLM: LLMProvider = {
  * locatorRole    — value returned by locator().getAttribute("role")
  */
 function makePage(
-  candidate:    Record<string, string>          = {},
-  selectorCount: number | Map<string, number>   = 1,
-  locatorText:  string | null                   = null,
-  locatorTag    = "button",
-  locatorRole:  string | null                   = null,
+  candidate:      Record<string, string>          = {},
+  selectorCount:  number | Map<string, number>    = 1,
+  locatorText:    string | null                   = null,
+  locatorTag      = "button",
+  locatorRole:    string | null                   = null,
+  locatorVisible  = true,
+  locatorEnabled  = true,
 ) {
   return {
     // page.evaluate — used by extractCandidates (returns element list)
@@ -65,6 +67,8 @@ function makePage(
           : (selectorCount.get(sel) ?? 0),
       textContent:  async () => locatorText,
       getAttribute: async (attr: string) => attr === "role" ? locatorRole : null,
+      isVisible:    async () => locatorVisible,
+      isEnabled:    async () => locatorEnabled,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       evaluate:     async (fn: (el: any) => unknown) =>
         fn({ tagName: locatorTag.toUpperCase(), getAttribute: (a: string) => a === "role" ? locatorRole : null }),
@@ -678,5 +682,86 @@ describe("HealerCache — context key", () => {
     expect(entries).toHaveLength(1);
     // contextKey should be a non-empty hex string (hash of "Test Page|<mock evaluate result>")
     expect(typeof entries[0].contextKey).toBe("string");
+  });
+});
+
+// ── Visibility + interactability ──────────────────────────────────────────────
+
+describe("SelectorHealer — visibility + interactability", () => {
+  test("accepts selector when element is visible and enabled", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "button", null, true, true) as any, "https://example.com");
+    expect(result).toBe("#b");
+  });
+
+  test("rejects selector when element is not visible", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "button", null, false, true) as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+
+  test("rejects selector when element is disabled", async () => {
+    const healer = new SelectorHealer(stubLLM("#b"), tmpCache());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await healer.heal("submit_button", makePage({}, 1, null, "button", null, true, false) as any, "https://example.com");
+    expect(result).toBeNull();
+  });
+});
+
+// ── Context fallback ordering ─────────────────────────────────────────────────
+
+describe("HealerCache — context fallback ordering", () => {
+  test("fallback returns entries sorted by confidence desc when no context key matches", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#low",  { confidence: 0.4, contextKey: "ctx-a" });
+    cache.set("https://example.com", "btn", "#high", { confidence: 0.9, contextKey: "ctx-a" });
+    // ctx-b matches nothing → falls back to all entries, sorted by confidence
+    const result = cache.getAll("https://example.com", "btn", "ctx-b");
+    expect(result[0]).toBe("#high");
+  });
+});
+
+// ── Selector lifecycle state ──────────────────────────────────────────────────
+
+describe("HealerCache — lifecycle state", () => {
+  test("new entry has status 'provisional'", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x");
+    expect(cache.entries()["https://example.com/"]["btn"][0].status).toBe("provisional");
+  });
+
+  test("3 markSuccess calls promote entry to 'validated'", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#x");
+    cache.markSuccess("https://example.com", "btn", "#x");
+    cache.markSuccess("https://example.com", "btn", "#x");
+    expect(cache.entries()["https://example.com/"]["btn"][0].status).toBe("provisional"); // not yet at 2
+    cache.markSuccess("https://example.com", "btn", "#x");
+    expect(cache.entries()["https://example.com/"]["btn"][0].status).toBe("validated");
+  });
+
+  test("validated entry ranks above provisional entry with equal confidence", () => {
+    const cache = new HealerCache(tmpCache());
+    cache.set("https://example.com", "btn", "#provisional", { confidence: 0.85 });
+    cache.set("https://example.com", "btn", "#validated",   { confidence: 0.85 });
+    cache.markSuccess("https://example.com", "btn", "#validated");
+    cache.markSuccess("https://example.com", "btn", "#validated");
+    cache.markSuccess("https://example.com", "btn", "#validated");
+    expect(cache.get("https://example.com", "btn")).toBe("#validated");
+  });
+
+  test("migrate assigns 'provisional' to entries loaded without a status field", () => {
+    const file = tmpCache();
+    fs.writeFileSync(file, JSON.stringify({
+      "https://example.com/": {
+        "btn": [{ selector: "#x", confidence: 0.85, source: "llm",
+                  lastUsed: new Date().toISOString(), successCount: 0, failureCount: 0 }],
+      },
+    }));
+    const cache = new HealerCache(file);
+    expect(cache.entries()["https://example.com/"]["btn"][0].status).toBe("provisional");
+    fs.unlinkSync(file);
   });
 });

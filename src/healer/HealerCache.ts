@@ -9,6 +9,7 @@ export interface CacheEntry {
   successCount: number;
   failureCount: number;
   contextKey?:  string; // SPA-safe: hash of page title + headings at heal time
+  status:       "provisional" | "validated";
 }
 
 // descriptor → ranked list of candidate selectors (best score first on retrieval)
@@ -32,10 +33,12 @@ export class HealerCache {
     const ageDays      = (Date.now() - new Date(e.lastUsed).getTime()) / 86_400_000;
     const recencyBoost = Math.max(0, 7 - ageDays);
     const decayFactor  = Math.exp(-ageDays / 30); // 30-day half-life on historical counts
+    const statusBonus = (e.status ?? "provisional") === "validated" ? 5 : 0;
     return e.confidence * 10
          + e.successCount * 2 * decayFactor
          - e.failureCount * 3
-         + recencyBoost;
+         + recencyBoost
+         + statusBonus;
   }
 
   /** Adjusts confidence toward observed success rate after each outcome. */
@@ -94,6 +97,7 @@ export class HealerCache {
         successCount: 0,
         failureCount: 0,
         contextKey:   opts.contextKey,
+        status:       "provisional",
       });
       // Cap to MAX_SELECTORS_PER_DESCRIPTOR, evicting the lowest-scored entry
       if (list.length > MAX_SELECTORS_PER_DESCRIPTOR) {
@@ -108,6 +112,7 @@ export class HealerCache {
     if (!entry) return;
     entry.successCount++;
     entry.lastUsed = new Date().toISOString();
+    if (entry.successCount >= 3) entry.status = "validated";
     this.recalibrate(entry);
     this.save();
   }
@@ -145,7 +150,11 @@ export class HealerCache {
   private contextFilter(entries: CacheEntry[], contextKey?: string): CacheEntry[] {
     if (!contextKey) return entries;
     const matched = entries.filter(e => !e.contextKey || e.contextKey === contextKey);
-    return matched.length ? matched : entries;
+    if (matched.length) return matched;
+    // Fallback: sort by confidence desc, then lastUsed desc (most trusted first)
+    return [...entries].sort(
+      (a, b) => b.confidence - a.confidence || new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime(),
+    );
   }
 
   private normalizeUrl(url: string): string {
@@ -182,14 +191,15 @@ export class HealerCache {
 
       for (const [desc, val] of Object.entries(descs as Record<string, unknown>)) {
         if (Array.isArray(val)) {
-          result[url][desc] = val as CacheEntry[];
+          result[url][desc] = (val as CacheEntry[]).map(e => ({ ...e, status: e.status ?? "provisional" }));
         } else if (typeof val === "string") {
           result[url][desc] = [{
             selector: val, confidence: 1.0, source: "llm",
-            lastUsed: new Date().toISOString(), successCount: 0, failureCount: 0,
+            lastUsed: new Date().toISOString(), successCount: 0, failureCount: 0, status: "provisional",
           }];
         } else if (typeof val === "object" && val !== null && "selector" in val) {
-          result[url][desc] = [val as CacheEntry];
+          const e = val as CacheEntry;
+          result[url][desc] = [{ ...e, status: e.status ?? "provisional" }];
         }
       }
     }
