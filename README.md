@@ -41,15 +41,26 @@ npm install
 npx playwright install
 ```
 
+The `aiqa` CLI is available immediately after install — no build step required:
+
+```bash
+npx aiqa --help          # run via npx (always works)
+
+npm link                 # optional: install globally so you can type just:
+aiqa --help              # aiqa <command> anywhere
+```
+
+All examples below use `npx aiqa`. If you've run `npm link`, drop the `npx` prefix.
+
 ---
 
 ## Quickstart — test any app in 4 commands
 
 ```bash
-npx ts-node src/cli.ts init myproject
-npx ts-node src/cli.ts explore https://yourapp.com --out myproject
-npx ts-node src/cli.ts generate --out myproject --per-page
-npx ts-node src/cli.ts run-all --out myproject --headless
+npx aiqa init myproject
+npx aiqa explore https://yourapp.com --out myproject
+npx aiqa generate --out myproject --per-page
+npx aiqa run-all --out myproject --headless
 ```
 
 This creates a complete project folder:
@@ -75,7 +86,7 @@ myproject/
 ### `aiqa init <project>` — Create a project workspace
 
 ```bash
-npx ts-node src/cli.ts init myproject
+npx aiqa init myproject
 ```
 
 Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starter `tests/sample.yaml`.
@@ -87,8 +98,8 @@ Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starte
 Navigates the app, maps all pages, forms, buttons, and internal links into a structured JSON file.
 
 ```bash
-npx ts-node src/cli.ts explore https://yourapp.com --out myproject --max-pages 20
-npx ts-node src/cli.ts explore https://yourapp.com --output exploration.json
+npx aiqa explore https://yourapp.com --out myproject --max-pages 20
+npx aiqa explore https://yourapp.com --output exploration.json
 ```
 
 Options:
@@ -103,9 +114,9 @@ Options:
 Reads an exploration file, identifies user flows or individual pages, and generates ready-to-run YAML test files.
 
 ```bash
-npx ts-node src/cli.ts generate --out myproject --per-page
-npx ts-node src/cli.ts generate --out myproject
-npx ts-node src/cli.ts generate exploration.json --output tests/
+npx aiqa generate --out myproject --per-page
+npx aiqa generate --out myproject
+npx aiqa generate exploration.json --output tests/
 ```
 
 Options:
@@ -121,10 +132,10 @@ Options:
 Converts CSV, Excel (.xlsx), or Gherkin (.feature) test cases into AIQA YAML format. Handles structured files directly; falls back to LLM translation for free-form text.
 
 ```bash
-npx ts-node src/cli.ts import --file tests/cases.csv --out myproject
-npx ts-node src/cli.ts import --file tests/cases.xlsx --out myproject
-npx ts-node src/cli.ts import --file tests/login.feature --out myproject
-npx ts-node src/cli.ts import --file tests/cases.csv --run --headless   # import and run immediately
+npx aiqa import --file tests/cases.csv --out myproject
+npx aiqa import --file tests/cases.xlsx --out myproject
+npx aiqa import --file tests/login.feature --out myproject
+npx aiqa import --file tests/cases.csv --run --headless   # import and run immediately
 ```
 
 Options:
@@ -144,8 +155,8 @@ Output:
 ### `aiqa run <file>` — Run a single test file
 
 ```bash
-npx ts-node src/cli.ts run tests/example.yaml --headless
-npx ts-node src/cli.ts run tests/example.yaml --out myproject --headless
+npx aiqa run tests/example.yaml --headless
+npx aiqa run tests/example.yaml --out myproject --headless
 ```
 
 Options:
@@ -165,8 +176,8 @@ On failure the DebuggerAgent automatically classifies the error, suggests a fix,
 ### `aiqa run-all [dir]` — Run all tests in a directory
 
 ```bash
-npx ts-node src/cli.ts run-all --out myproject --headless
-npx ts-node src/cli.ts run-all myproject/tests/ --headless --report myproject/results/report.html
+npx aiqa run-all --out myproject --headless
+npx aiqa run-all myproject/tests/ --headless --report myproject/results/report.html
 ```
 
 Options:
@@ -183,9 +194,9 @@ Options:
 Runs the complete pipeline: Explore → Map flows → Generate scenarios → Run tests → Score readiness.
 
 ```bash
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --headless
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --out myproject
+npx aiqa orchestrate --url https://yourapp.com --headless
+npx aiqa orchestrate --url https://yourapp.com --dry-run
+npx aiqa orchestrate --url https://yourapp.com --out myproject
 ```
 
 Options:
@@ -219,7 +230,7 @@ Output:
 ### `aiqa score <results.json>` — Readiness scoring
 
 ```bash
-npx ts-node src/cli.ts score myproject/results/run-2026-01-15T10-30-45.json
+npx aiqa score myproject/results/run-2026-01-15T10-30-45.json
 ```
 
 Output:
@@ -357,7 +368,7 @@ Retries only trigger on transient errors (timeouts, network failures). Assertion
 AIQA uses per-environment YAML profiles for all runtime settings. The profile is selected via `--env` flag or `AIQA_ENV` env var (default: `dev`).
 
 ```bash
-npx ts-node src/cli.ts run-all --env staging --headless
+npx aiqa run-all --env staging --headless
 ```
 
 ```yaml
