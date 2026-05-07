@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import { JiraClient, JiraIssue } from "./JiraClient";
 import { UserFlow, FlowStep } from "../agents/FlowMapper";
 
@@ -18,6 +19,7 @@ export interface JiraConfig {
   apiToken?:   string;
   projectKey?: string;
   useMock?:    boolean;  // default true when credentials are absent
+  throttleMs?: number;  // ms between API calls; default 100; set 0 to disable (e.g. in tests)
 }
 
 export interface PushResultItem {
@@ -28,23 +30,36 @@ export interface PushResultItem {
   testKey?: string;
 }
 
+export interface FailureRecord {
+  testName: string;
+  error:    string;
+}
+
 export interface PushResultSummary {
-  created: string[];   // Jira issue keys for newly created defects
-  skipped: number;     // passed tests — no action taken
+  created:   string[];        // issue keys for newly created defects
+  commented: string[];        // issue keys of existing issues that received a dedup comment
+  skipped:   number;          // count of passed tests — no action taken
+  failed:    FailureRecord[]; // items where the Jira API call failed (non-fatal)
 }
 
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class JiraAdapter {
-  private readonly useMock: boolean;
+  private useMock: boolean;
   private readonly client: JiraClient | null;
 
   constructor(private readonly config: JiraConfig = {}) {
-    this.useMock =
-      config.useMock ??
-      !(config.baseUrl && config.email && config.apiToken);
+    const hasCredentials = !!(config.baseUrl && config.email && config.apiToken);
 
-    this.client = this.useMock
+    // Warn when partial credentials are provided but the set is incomplete
+    if (!hasCredentials && (config.baseUrl || config.email || config.apiToken)) {
+      process.stderr.write(
+        `[jira] incomplete credentials (need baseUrl + email + apiToken) — falling back to mock mode\n`,
+      );
+    }
+
+    this.useMock = config.useMock ?? !hasCredentials;
+    this.client  = this.useMock
       ? null
       : new JiraClient(config.baseUrl!, config.email!, config.apiToken!);
   }
@@ -79,33 +94,74 @@ export class JiraAdapter {
 
     if (!this.client) {
       process.stderr.write(`[jira] mock mode — defect push skipped\n`);
-      return { created: [], skipped: results.filter(r => r.passed).length };
+      return {
+        created:   [],
+        commented: [],
+        skipped:   results.filter(r => r.passed).length,
+        failed:    [],
+      };
     }
 
-    const created: string[] = [];
+    const created:   string[]        = [];
+    const commented: string[]        = [];
+    const failed:    FailureRecord[] = [];
     let   skipped = 0;
+    const runId = new Date().toISOString();
 
     for (const r of results) {
       if (r.passed) { skipped++; continue; }
 
+      const fp      = this.fingerprint(r.testName, r.error);
       const summary = `[AIQA] Test failed: ${r.testName}`;
-      const bodyText = r.error
-        ? `Test "${r.testName}" failed in an AIQA automated run.\n\nError:\n${r.error}`
-        : `Test "${r.testName}" failed in an AIQA automated run.`;
+      const labels  = ["aiqa", "aiqa-auto", fp, this.sanitizeLabel(r.testName)];
 
-      const issue = await this.client.createIssue({
-        project:     { key },
-        issuetype:   { name: "Bug" },
-        summary,
-        priority:    { name: "High" },
-        labels:      ["aiqa-auto"],
-        description: this.toAdf(bodyText),
-      });
-      created.push(issue.key);
-      process.stderr.write(`[jira] created defect ${issue.key} for "${r.testName}"\n`);
+      try {
+        await this.throttle();
+
+        // Dedup: search for an existing open issue bearing the fingerprint label.
+        // If the search itself fails, treat it as "no duplicate" and create a new issue.
+        let existingKey: string | undefined;
+        try {
+          const jql     = `project = "${key}" AND labels = "${fp}" AND statusCategory != Done ORDER BY created DESC`;
+          const existing = await this.client.searchIssues(jql, ["summary", "status"]);
+          existingKey   = existing.issues[0]?.key;
+        } catch {
+          // search failure is non-fatal — fall through to create
+        }
+
+        if (existingKey) {
+          // Duplicate found — add a comment instead of opening a second bug
+          const commentText =
+            `Test "${r.testName}" failed again in AIQA run ${runId}.` +
+            (r.error ? `\n\nError:\n${r.error}` : "");
+          await this.throttle();
+          await this.client.addComment(existingKey, commentText);
+          commented.push(existingKey);
+          process.stderr.write(`[jira] updated existing defect ${existingKey} for "${r.testName}"\n`);
+        } else {
+          const bodyText =
+            `Test "${r.testName}" failed in AIQA run ${runId}.` +
+            (r.error ? `\n\nError:\n${r.error}` : "");
+          const issue = await this.client.createIssue({
+            project:     { key },
+            issuetype:   { name: "Bug" },
+            summary,
+            priority:    { name: "High" },
+            labels,
+            description: this.toAdf(bodyText),
+          });
+          created.push(issue.key);
+          process.stderr.write(`[jira] created defect ${issue.key} for "${r.testName}"\n`);
+        }
+      } catch (err) {
+        // Per-item errors are non-fatal — log and continue so other issues are still processed
+        const msg = (err as Error).message ?? String(err);
+        process.stderr.write(`[jira] failed to create/sync issue for "${r.testName}": ${msg}\n`);
+        failed.push({ testName: r.testName, error: msg });
+      }
     }
 
-    return { created, skipped };
+    return { created, commented, skipped, failed };
   }
 
   // ── Xray result sync ──────────────────────────────────────────────────────
@@ -136,7 +192,30 @@ export class JiraAdapter {
     process.stderr.write(`[jira] Xray sync: pushed ${tests.length} result(s) to ${testExecutionKey}\n`);
   }
 
-  // ── Parsing helpers ───────────────────────────────────────────────────────
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  /** Stable fingerprint: same test name + same error class → same label across runs. */
+  private fingerprint(testName: string, error?: string): string {
+    const errorClass = error?.match(/^[A-Za-z]+(?:Error|Exception)/)?.[0] ?? "";
+    return "aiqa-fp-" + crypto.createHash("sha256")
+      .update(`${testName}|${errorClass}`)
+      .digest("hex")
+      .slice(0, 12);
+  }
+
+  /** Jira-safe label derived from the test name (no spaces, max 50 chars). */
+  private sanitizeLabel(name: string): string {
+    return "aiqa-test-" + name.toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40);
+  }
+
+  /** Inserts a small delay between API calls to stay within Jira rate limits. */
+  private throttle(): Promise<void> {
+    const ms = this.config.throttleMs ?? 100;
+    return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+  }
 
   private parseIssue(issue: JiraIssue): JiraStory {
     const rawPriority = (issue.fields.priority?.name ?? "Medium").toLowerCase();

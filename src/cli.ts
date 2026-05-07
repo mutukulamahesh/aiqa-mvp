@@ -637,7 +637,11 @@ program
           const summary = await adapter.pushResults(failedResults)
             .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
           if (summary) {
-            console.log(`   Jira  → ${summary.created.length} defect(s) created: ${summary.created.join(", ") || "none"}`);
+            const { created, commented, failed } = summary;
+            console.log(`   Jira  → created=${created.length}, updated=${commented.length}, failed=${failed.length}`);
+            if (created.length)   console.log(`           created:  ${created.join(", ")}`);
+            if (commented.length) console.log(`           updated:  ${commented.join(", ")}`);
+            if (failed.length)    console.log(`           failed:   ${failed.map(f => f.testName).join(", ")}`);
           }
         }
       }
@@ -729,7 +733,14 @@ program
     const summary = await adapter.pushResults(failures)
       .catch(e => { console.error(`❌ Jira push failed: ${(e as Error).message}`); process.exit(1); });
 
-    console.log(`✅ Created ${summary.created.length} defect(s): ${summary.created.join(", ") || "none"}`);
+    const { created, commented, failed: syncFailed } = summary;
+    console.log(`✅ Jira sync: created=${created.length}, updated=${commented.length}, failed=${syncFailed.length}`);
+    if (created.length)   console.log(`   Created:  ${created.join(", ")}`);
+    if (commented.length) console.log(`   Updated:  ${commented.join(", ")}`);
+    if (syncFailed.length) {
+      console.log(`   Failed (${syncFailed.length}):`);
+      syncFailed.forEach(f => console.log(`     - ${f.testName}: ${f.error.slice(0, 120)}`));
+    }
 
     if (opts.xray) {
       await adapter.syncXrayResults(opts.xray, allResults.map(r => ({ ...r })))

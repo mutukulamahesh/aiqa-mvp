@@ -169,6 +169,8 @@ describe("JiraAdapter — mock mode", () => {
       { testName: "Dashboard", passed: true },
     ]);
     expect(summary.created).toHaveLength(0);
+    expect(summary.commented).toHaveLength(0);
+    expect(summary.failed).toHaveLength(0);
     expect(summary.skipped).toBe(2);
   });
 
@@ -208,12 +210,13 @@ describe("JiraAdapter — mock mode", () => {
 
 function makeAdapterWithTransport(handler: Handler): JiraAdapter {
   const transport = makeTransport(handler);
-  // Access internal client via a subclass that exposes it for testing
+  // throttleMs: 0 disables inter-call delays so tests run at full speed
   const adapter = new JiraAdapter({
     baseUrl:    "https://test.atlassian.net",
     email:      "user@test.com",
     apiToken:   "token123",
     projectKey: "AIQA",
+    throttleMs: 0,
   });
   // Patch the private client with one that uses our test transport
   (adapter as unknown as { client: JiraClient }).client = new JiraClient(
@@ -224,6 +227,9 @@ function makeAdapterWithTransport(handler: Handler): JiraAdapter {
   );
   return adapter;
 }
+
+/** Minimal valid JiraSearchResult with no issues (used in dedup search stubs). */
+const NO_DUPLICATES = { issues: [], total: 0, maxResults: 50 };
 
 describe("JiraAdapter — real client (injectable transport)", () => {
   test("fetchStories calls searchIssues and maps priority correctly", async () => {
@@ -253,10 +259,14 @@ describe("JiraAdapter — real client (injectable transport)", () => {
   });
 
   test("pushResults creates one bug per failed test", async () => {
-    let callCount = 0;
-    const adapter = makeAdapterWithTransport(() => {
-      callCount++;
-      return { status: 201, json: { id: `1000${callCount}`, key: `AIQA-${100 + callCount}` } };
+    let createCount = 0;
+    const adapter = makeAdapterWithTransport((opts) => {
+      if (opts.method === "GET") {
+        // dedup search — no existing issues
+        return { status: 200, json: NO_DUPLICATES };
+      }
+      createCount++;
+      return { status: 201, json: { id: `1000${createCount}`, key: `AIQA-${100 + createCount}` } };
     });
 
     const summary = await adapter.pushResults([
@@ -266,8 +276,10 @@ describe("JiraAdapter — real client (injectable transport)", () => {
     ]);
 
     expect(summary.created).toHaveLength(2);
+    expect(summary.commented).toHaveLength(0);
+    expect(summary.failed).toHaveLength(0);
     expect(summary.skipped).toBe(1);
-    expect(callCount).toBe(2);
+    expect(createCount).toBe(2);
   });
 
   test("pushResults skips all when no failures", async () => {
@@ -282,6 +294,68 @@ describe("JiraAdapter — real client (injectable transport)", () => {
     expect(callCount).toBe(0);
     expect(summary.created).toHaveLength(0);
     expect(summary.skipped).toBe(2);
+  });
+
+  test("pushResults adds comment when duplicate fingerprint found (dedup)", async () => {
+    let commentBody = "";
+    const adapter = makeAdapterWithTransport((opts, body) => {
+      if (opts.method === "GET") {
+        // dedup search returns one existing open issue
+        return {
+          status: 200,
+          json: {
+            issues: [{
+              id: "10001", key: "AIQA-100",
+              fields: {
+                summary:   "[AIQA] Test failed: Login",
+                status:    { name: "Open" },
+                priority:  { name: "High" },
+                issuetype: { name: "Bug" },
+              },
+            }],
+            total: 1, maxResults: 50,
+          },
+        };
+      }
+      // POST to comment endpoint
+      commentBody = body;
+      return { status: 201, json: { id: "comment-99" } };
+    });
+
+    const summary = await adapter.pushResults([
+      { testName: "Login smoke", passed: false, error: "Timeout" },
+    ]);
+
+    expect(summary.created).toHaveLength(0);
+    expect(summary.commented).toHaveLength(1);
+    expect(summary.commented[0]).toBe("AIQA-100");
+    expect(summary.failed).toHaveLength(0);
+    expect(commentBody).toContain("Timeout");
+  });
+
+  test("pushResults continues after a Jira API error (partial failure)", async () => {
+    let createCount = 0;
+    const adapter = makeAdapterWithTransport((opts) => {
+      if (opts.method === "GET") {
+        return { status: 200, json: NO_DUPLICATES };
+      }
+      createCount++;
+      if (createCount === 1) {
+        // First create fails with a 500
+        return { status: 500, json: { errorMessages: ["Internal Server Error"] } };
+      }
+      return { status: 201, json: { id: "10002", key: "AIQA-102" } };
+    });
+
+    const summary = await adapter.pushResults([
+      { testName: "Login smoke",   passed: false, error: "Timeout" },
+      { testName: "Checkout flow", passed: false, error: "Not found" },
+    ]);
+
+    expect(summary.created).toHaveLength(1);
+    expect(summary.created[0]).toBe("AIQA-102");
+    expect(summary.failed).toHaveLength(1);
+    expect(summary.failed[0].testName).toBe("Login smoke");
   });
 
   test("syncXrayResults sends to Xray endpoint path", async () => {
@@ -301,7 +375,10 @@ describe("JiraAdapter — real client (injectable transport)", () => {
 
   test("bug description uses ADF format", async () => {
     let capturedBody = "";
-    const adapter = makeAdapterWithTransport((_opts, body) => {
+    const adapter = makeAdapterWithTransport((opts, body) => {
+      if (opts.method === "GET") {
+        return { status: 200, json: NO_DUPLICATES };
+      }
       capturedBody = body;
       return { status: 201, json: { id: "10099", key: "AIQA-99" } };
     });
@@ -313,5 +390,45 @@ describe("JiraAdapter — real client (injectable transport)", () => {
     const payload = JSON.parse(capturedBody);
     expect(payload.fields.description.type).toBe("doc");
     expect(payload.fields.description.version).toBe(1);
+  });
+
+  test("created issues carry aiqa and fingerprint labels", async () => {
+    let capturedBody = "";
+    const adapter = makeAdapterWithTransport((opts, body) => {
+      if (opts.method === "GET") return { status: 200, json: NO_DUPLICATES };
+      capturedBody = body;
+      return { status: 201, json: { id: "10010", key: "AIQA-10" } };
+    });
+
+    await adapter.pushResults([
+      { testName: "Login smoke", passed: false, error: "TimeoutError: selector" },
+    ]);
+
+    const payload = JSON.parse(capturedBody);
+    expect(payload.fields.labels).toContain("aiqa");
+    expect(payload.fields.labels).toContain("aiqa-auto");
+    expect(payload.fields.labels.some((l: string) => l.startsWith("aiqa-fp-"))).toBe(true);
+    expect(payload.fields.labels.some((l: string) => l.startsWith("aiqa-test-"))).toBe(true);
+  });
+
+  test("dedup search failure falls back to create (non-fatal)", async () => {
+    let createCount = 0;
+    const adapter = makeAdapterWithTransport((opts) => {
+      if (opts.method === "GET") {
+        // search returns HTTP 500 — should be treated as "no duplicate"
+        return { status: 500, json: { errorMessages: ["Search service unavailable"] } };
+      }
+      createCount++;
+      return { status: 201, json: { id: "10001", key: "AIQA-101" } };
+    });
+
+    const summary = await adapter.pushResults([
+      { testName: "Smoke test", passed: false, error: "Timed out" },
+    ]);
+
+    // Should create a new issue despite the search failure
+    expect(summary.created).toHaveLength(1);
+    expect(summary.failed).toHaveLength(0);
+    expect(createCount).toBe(1);
   });
 });
