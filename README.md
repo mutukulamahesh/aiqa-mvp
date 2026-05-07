@@ -1,8 +1,8 @@
 # AIQA — Enterprise AI QA Platform
 
-A plug-and-play, AI-powered QA platform that unifies web automation, API testing, and autonomous test generation into a single config-driven system.
+A plug-and-play, AI-powered QA platform that unifies web automation, API testing, database validation, and autonomous test generation into a single config-driven system.
 
-> Full platform vision: see [VISION.md](VISION.md)
+> Full platform vision: see [VISION.md](VISION.md) · Full backlog: see [BACKLOG.md](BACKLOG.md)
 
 ---
 
@@ -11,14 +11,17 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **Init a project** in one command — folder structure, sample test, ready to run
 - **Explore any app** autonomously and map its pages and flows
 - **Generate test files** per page or per flow — no manual test writing
-- **Run tests** defined in YAML — web UI, API, or mixed
+- **Run tests** defined in YAML — web UI, API, database, or mixed
 - **Orchestrate the full pipeline** — one command: explore → map → generate → run → score
 - **Self-heal broken selectors** — when a locator fails, AIQA repairs it via LLM and caches the fix
 - **Analytics after every run** — top unstable pages, most healed selectors, LLM calls saved
 - **Diagnose failures** automatically with AI root-cause analysis and screenshots
 - **Score readiness** — get a 0–100 grade on your test coverage
 - **HTML reports** generated automatically after every run
-- **Plug in real LLM** (Claude) at any time — no code changes needed
+- **Import existing test cases** from CSV, Excel, or Gherkin — no rewrite needed
+- **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
+- **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
+- **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA) — no code changes needed
 
 ---
 
@@ -84,10 +87,7 @@ Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starte
 Navigates the app, maps all pages, forms, buttons, and internal links into a structured JSON file.
 
 ```bash
-# Save into a project folder
 npx ts-node src/cli.ts explore https://yourapp.com --out myproject --max-pages 20
-
-# Or save to an explicit path
 npx ts-node src/cli.ts explore https://yourapp.com --output exploration.json
 ```
 
@@ -96,16 +96,6 @@ Options:
 - `--output <file>` — explicit output file path
 - `--max-pages <n>` — maximum pages to crawl (default: 10)
 
-Output:
-```
-✅ Explored 5 page(s), 17 internal link(s)
-   • https://yourapp.com          — Home
-   • https://yourapp.com/about    — About
-   • https://yourapp.com/contact  — Contact
-
-   Saved → myproject/exploration.json
-```
-
 ---
 
 ### `aiqa generate [exploration]` — Generate test scenarios
@@ -113,13 +103,8 @@ Output:
 Reads an exploration file, identifies user flows or individual pages, and generates ready-to-run YAML test files.
 
 ```bash
-# Generate one test per page (recommended for new projects)
 npx ts-node src/cli.ts generate --out myproject --per-page
-
-# Generate one test per flow (auth, forms, navigation)
 npx ts-node src/cli.ts generate --out myproject
-
-# Explicit paths
 npx ts-node src/cli.ts generate exploration.json --output tests/
 ```
 
@@ -129,13 +114,29 @@ Options:
 - `--per-page` — one test file per discovered page instead of per flow
 - `--jira <projectKey>` — also pull mock Jira stories and generate scenarios
 
+---
+
+### `aiqa import --file <path>` — Import existing test cases
+
+Converts CSV, Excel (.xlsx), or Gherkin (.feature) test cases into AIQA YAML format. Handles structured files directly; falls back to LLM translation for free-form text.
+
+```bash
+npx ts-node src/cli.ts import --file tests/cases.csv --out myproject
+npx ts-node src/cli.ts import --file tests/cases.xlsx --out myproject
+npx ts-node src/cli.ts import --file tests/login.feature --out myproject
+npx ts-node src/cli.ts import --file tests/cases.csv --run --headless   # import and run immediately
+```
+
+Options:
+- `--file <path>` — input file (CSV, XLSX, or .feature)
+- `--out <folder>` — output project folder
+- `--run` — execute imported tests immediately after conversion
+- `--headless` — headless mode when used with `--run`
+
 Output:
 ```
-   ✔ page_home.yaml      [navigation]
-   ✔ page_about.yaml     [navigation]
-   ✔ page_contact.yaml   [navigation]
-
-✅ Generated 3 scenario(s) → myproject/tests/
+   ✔ Imported 6 test case(s) from cases.csv
+   ✔ Saved → myproject/tests/imported_cases.yaml
 ```
 
 ---
@@ -164,10 +165,7 @@ On failure the DebuggerAgent automatically classifies the error, suggests a fix,
 ### `aiqa run-all [dir]` — Run all tests in a directory
 
 ```bash
-# Using project folder (recommended)
 npx ts-node src/cli.ts run-all --out myproject --headless
-
-# Explicit directory
 npx ts-node src/cli.ts run-all myproject/tests/ --headless --report myproject/results/report.html
 ```
 
@@ -178,14 +176,6 @@ Options:
 - `--results <file>` — explicit JSON results output path
 - `--base-url <url>` — base URL shown in the report header
 
-Output:
-```
-   Ran   : 4 test(s)
-   Passed: 4   Failed: 0
-   JSON  → myproject/results/run-2026-01-15T10-30-45.json
-   HTML  → myproject/results/report.html
-```
-
 ---
 
 ### `aiqa orchestrate --url <url>` — Full pipeline in one command
@@ -194,7 +184,7 @@ Runs the complete pipeline: Explore → Map flows → Generate scenarios → Run
 
 ```bash
 npx ts-node src/cli.ts orchestrate --url https://yourapp.com --headless
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run   # generate only, skip execution
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run
 npx ts-node src/cli.ts orchestrate --url https://yourapp.com --out myproject
 ```
 
@@ -224,13 +214,9 @@ Output:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-On the first run the healer cache is cold. From run 2 onward, previously healed selectors are reused directly and the analytics block appears.
-
 ---
 
 ### `aiqa score <results.json>` — Readiness scoring
-
-Computes a 0–100 readiness score from saved test results.
 
 ```bash
 npx ts-node src/cli.ts score myproject/results/run-2026-01-15T10-30-45.json
@@ -243,8 +229,6 @@ Output:
    Tests   : 7/8 passed  (87%)
    Coverage: UI, Assertions
    Issues  : 1 test failed
-
-   Good coverage. Address failing tests before releasing.
 ```
 
 ---
@@ -277,27 +261,52 @@ test:
 
 ```yaml
 test:
-  name: "User API — fetch and assert"
+  name: "User API — create and verify"
   steps:
     - api:
-        method: GET
-        url: "https://api.example.com/users/1"
-        assert_status: 200
-        store_as: user
+        method: POST
+        url: "https://api.example.com/users"
+        body:
+          name: "Alice"
+          email: "alice@example.com"
+        assert_status: 201
+        store_as: newUser
     - assert:
-        value: "{{ user.name }}"
-        equals: "Alice"
+        value: "{{ newUser.email }}"
+        equals: "alice@example.com"
+```
+
+### Database validation
+
+```yaml
+test:
+  name: "User creation — API + DB verification"
+  steps:
     - api:
         method: POST
-        url: "https://api.example.com/posts"
-        body:
-          title: "Test post"
-          userId: 1
+        url: "{{ base_url }}/api/users"
+        body: { name: "Alice", email: "alice@example.com" }
         assert_status: 201
-        store_as: post
+        store_as: created
+
+    - db:
+        query: "SELECT * FROM users WHERE id = {{ created.id }}"
+        assert_rows: 1
+        assert_field:
+          name: "Alice"
+          email: "alice@example.com"
+        store_as: dbUser
+
     - assert:
-        value: "{{ post.title }}"
-        equals: "Test post"
+        value: "{{ dbUser.name }}"
+        equals: "Alice"
+```
+
+DB steps execute against a real PostgreSQL database when `DB_URL` is set, or against an in-memory mock in CI. Writes are blocked by default (`db.readOnly: true`) — set `db.readOnly: false` in your environment config to allow them.
+
+```bash
+export DB_URL="postgresql://user:pass@localhost:5432/mydb"
+npm install knex pg   # only required for real DB connections
 ```
 
 ### Supported step types
@@ -311,6 +320,7 @@ test:
 | `assert: { url }` | Assert current URL contains substring |
 | `assert: { value, equals }` | Assert a stored variable equals expected |
 | `api: { method, url, ... }` | Make an HTTP request, optionally store response |
+| `db: { query, ... }` | Execute SQL, assert rows/fields, store results |
 
 ### Template variables
 
@@ -327,11 +337,63 @@ steps:
       equals: "London"
 ```
 
+### Retries
+
+```yaml
+test:
+  name: "Flaky login"
+  retries: 2        # retry up to 2x on transient failures only
+  steps:
+    - navigate: "https://yourapp.com/login"
+    - click: "Sign in"
+```
+
+Retries only trigger on transient errors (timeouts, network failures). Assertion failures never retry.
+
+---
+
+## Environment Configuration
+
+AIQA uses per-environment YAML profiles for all runtime settings. The profile is selected via `--env` flag or `AIQA_ENV` env var (default: `dev`).
+
+```bash
+npx ts-node src/cli.ts run-all --env staging --headless
+```
+
+```yaml
+# config/environments/staging.yaml
+environment: staging
+
+urls:
+  base: "https://staging.example.com"
+  api:  "https://staging.example.com/api"
+
+timeouts:
+  action:     15000
+  navigation: 45000
+  api:        20000
+
+execution:
+  workers:        4
+  retries:        2
+  headless:       true
+  circuitBreaker: 5     # abort suite after 5 consecutive failures
+
+db:
+  readOnly: true        # set false to allow INSERT/UPDATE/DELETE
+
+llm:
+  provider: anthropic
+  fallback: [mock]
+```
+
+Three profiles are included: `dev.yaml`, `staging.yaml`, `prod.yaml`. All settings have sensible defaults — unknown keys are rejected at startup via Zod validation.
+
 ---
 
 ## LLM Integration
 
-AIQA works out of the box without any API key and upgrades seamlessly to a real provider when one is configured. Five providers are supported — pick whichever you have access to.
+AIQA works out of the box without any API key and upgrades seamlessly when one is configured. Five providers are supported.
 
 ### Supported providers
 
@@ -343,114 +405,109 @@ AIQA works out of the box without any API key and upgrades seamlessly to a real 
 | `nvidia` | `NVIDIA_API_KEY` | Free API at [build.nvidia.com](https://build.nvidia.com) — OpenAI-compatible |
 | `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash default |
 
-### Quick start
-
 ```bash
-# Anthropic
 export ANTHROPIC_API_KEY="sk-ant-..."
 npm install @anthropic-ai/sdk
-
-# OpenAI
-export OPENAI_API_KEY="sk-..."
-
-# NVIDIA (free tier available)
-export NVIDIA_API_KEY="nvapi-..."
-
-# Gemini
-export GEMINI_API_KEY="AIza..."
 ```
 
 No code changes required — the factory auto-detects whichever key is present (priority: Anthropic → OpenAI → NVIDIA → Gemini → mock).
 
-### Configuring via YAML environment profile
+### Fallback chains
 
 ```yaml
-# config/environments/prod.yaml
 llm:
   provider: anthropic
   fallback: [openai, mock]   # tried in order if primary fails
-  model: claude-opus-4-7     # optional — overrides provider default
 ```
 
-### Fallback chains
-
-Set `LLM_FALLBACK` or configure `fallback:` in the YAML profile to build a resilience chain:
-
-```bash
-export LLM_PROVIDER=anthropic
-export LLM_FALLBACK=openai,mock
-```
-
-- Transient failures (rate limits, server errors) advance to the next provider
-- Non-retryable failures (invalid API key, bad request) fail immediately
-- A warning is logged whenever a fallback provider is activated
+Transient failures (rate limits, server errors) advance to the next provider automatically.
 
 ---
 
 ## Project Structure
 
 ```
+config/
+  environments/
+    dev.yaml              ← development profile
+    staging.yaml          ← staging profile
+    prod.yaml             ← production profile
+
 src/
-  cli.ts                        # CLI entry point (all commands)
+  cli.ts                  ← CLI entry point (all commands)
+  errors.ts               ← AssertionError, TransientError
   dsl/
-    types.ts                    # DSL type definitions
-    DslParser.ts                # YAML → TestDefinition parser
+    types.ts              ← DSL type definitions
+    DslParser.ts          ← YAML → TestDefinition parser
   execution/
-    ExecutionContext.ts          # Runtime variable store + template resolver
-    StepInterpreter.ts          # Thin orchestrator — routes steps to handlers
-    HandlerRegistry.ts          # Handler registration and lookup
-    APIExecutor.ts              # HTTP fetch wrapper with timeout + abort
+    ExecutionContext.ts   ← Runtime variable store + template resolver
+    StepInterpreter.ts   ← Routes steps to handlers; owns DB teardown
+    HandlerRegistry.ts   ← Handler registration and lookup
+    APIExecutor.ts        ← HTTP fetch wrapper with timeout + abort
+    WorkerContext.ts      ← AsyncLocalStorage log buffering (parallel safety)
   handlers/
-    UIActionHandler.ts          # navigate, click, fill
-    AssertionHandler.ts         # assert (text, url, equals)
-    APIActionHandler.ts         # api step execution
+    UIActionHandler.ts   ← navigate, click, fill
+    AssertionHandler.ts  ← assert (text, url, equals)
+    APIActionHandler.ts  ← api step execution
+    DBActionHandler.ts   ← db step — query, assert_rows, assert_field, store_as
   adapter/
-    AdapterActions.ts           # Browser adapter interface (includes screenshot)
-    PlaywrightAdapter.ts        # Playwright implementation + transparent selector healing
+    AdapterActions.ts    ← Browser adapter interface
+    PlaywrightAdapter.ts ← Playwright + transparent selector healing
+  db/
+    DBAdapter.ts          ← DBAdapter interface + QueryResult type
+    DBAdapterFactory.ts   ← Auto-selects Mock (CI) or Knex (DB_URL set)
+    MockDBAdapter.ts      ← Seedable in-memory adapter for unit tests
+    KnexDBAdapter.ts      ← PostgreSQL via Knex (optional, requires knex pg)
   runner/
-    TestRunner.ts               # End-to-end test orchestration, retry, circuit breaker
+    TestRunner.ts         ← End-to-end orchestration, retry, circuit breaker
   reporters/
-    HTMLReporter.ts             # Self-contained HTML report generator
+    HTMLReporter.ts       ← Self-contained HTML report generator
+  config/
+    ConfigLoader.ts       ← Zod-validated YAML config loader + secret checks
   llm/
-    LLMProvider.ts              # Interface, types, createLLMProvider() factory
-    MockLLMProvider.ts          # Rule-based, no API key needed
-    AnthropicLLMProvider.ts     # Claude (requires @anthropic-ai/sdk)
-    OpenAILLMProvider.ts        # OpenAI + NVIDIA (fetch-based, no extra deps)
-    GeminiLLMProvider.ts        # Google Gemini (fetch-based, no extra deps)
-    FallbackLLMProvider.ts      # Chains providers; retryable-error classification; degradation warning
+    LLMProvider.ts        ← Interface + createLLMProvider() factory
+    MockLLMProvider.ts    ← Rule-based, no API key needed
+    AnthropicLLMProvider.ts
+    OpenAILLMProvider.ts  ← Also used for NVIDIA (OpenAI-compatible)
+    GeminiLLMProvider.ts
+    FallbackLLMProvider.ts ← Provider chain with retryable-error classification
   agents/
-    OrchestratorAgent.ts        # Full pipeline coordinator: Explorer → FlowMapper → Generator → Runner → Scorer
-    DebuggerAgent.ts            # Failure classification + fix suggestions (memory-backed)
-    AppExplorer.ts              # Playwright-based app crawler
-    FlowMapper.ts               # Flow identification + healer-seeded step generation
-    ScenarioGenerator.ts        # Flow → YAML test file generator
-    ReadinessScorer.ts          # 0–100 readiness score
+    OrchestratorAgent.ts  ← Full pipeline: Explorer → FlowMapper → Generator → Runner → Scorer
+    DebuggerAgent.ts      ← Failure classification + fix suggestions (memory-backed)
+    AppExplorer.ts        ← Playwright-based app crawler
+    FlowMapper.ts         ← Flow identification + healer-seeded step generation
+    ScenarioGenerator.ts  ← Flow → YAML test file generator
+    ReadinessScorer.ts    ← 0–100 readiness score
   healer/
-    SelectorHealer.ts           # LLM-powered locator repair with semantic scoring + visibility guard
-    HealerCache.ts              # Persisted selector store — confidence, score decay, lifecycle state
-    HealerAnalytics.ts          # Analytics: unstable pages, healed selectors, flakiest steps, LLM savings
-    contextKey.ts               # SPA context fingerprint — SHA-256 of page title + headings
+    SelectorHealer.ts     ← LLM-powered locator repair, semantic scoring, visibility guard
+    HealerCache.ts        ← Persisted selector store — confidence, score decay, lifecycle
+    HealerAnalytics.ts    ← Unstable pages, healed selectors, flakiest steps, LLM savings
+    contextKey.ts         ← SPA context fingerprint (SHA-256 of page title + headings)
   memory/
-    MemoryStore.ts              # Cross-run flakiness scores + known-pattern cache
-    types.ts                    # KnownPattern, StepMemory, MemoryData
+    MemoryStore.ts        ← Cross-run flakiness scores + known-pattern cache
+    types.ts              ← KnownPattern, StepMemory, MemoryData
+  importers/
+    CSVImporter.ts
+    ExcelImporter.ts
+    TextImporter.ts       ← Gherkin + free-text
+    TestCaseTranslator.ts ← LLM-based translation to AIQA YAML
+    ImportOrchestrator.ts ← Selects importer by file type, runs translation
   integrations/
-    JiraAdapter.ts              # Jira story → flow converter (mock + stub)
+    JiraAdapter.ts        ← Jira story → flow converter
 
 .aiqa/
-  healer-cache.json             # Persisted healer selector store (created on first heal)
-  healer-runs.json              # Run history for analytics (created after first orchestrate run)
+  healer-cache.json       ← Persisted healer selector store (auto-created)
+  healer-runs.json        ← Run history for analytics (auto-created)
 
 tests/
-  example.yaml                  # Web automation example
-  api_example.yaml              # API testing example
-```
-
----
-
-## Building for production
-
-```bash
-npm run build        # compile TypeScript → dist/
+  saucedemo/              ← End-to-end YAML examples (Sauce Demo app)
+  db/                     ← DB handler unit tests
+  config/                 ← Config schema unit tests
+  healer/                 ← Healer + analytics unit tests
+  agents/                 ← FlowMapper + Orchestrator unit tests
+  importer/               ← CSV/Excel/Gherkin importer unit tests
+  llm/                    ← LLM provider unit tests
+  memory/                 ← Memory store unit tests
 ```
 
 ---
@@ -458,9 +515,12 @@ npm run build        # compile TypeScript → dist/
 ## Technologies
 
 - [TypeScript](https://www.typescriptlang.org/)
-- [Playwright](https://playwright.dev/) — web automation, app crawling, and screenshots
+- [Playwright](https://playwright.dev/) — web automation, app crawling, screenshots
 - [js-yaml](https://github.com/nodeca/js-yaml) — YAML test file parsing
+- [Zod](https://zod.dev/) — config schema validation
 - [Commander.js](https://github.com/tj/commander.js) — CLI interface
+- [ExcelJS](https://github.com/exceljs/exceljs) — Excel test case import
+- [Knex](https://knexjs.org/) *(optional)* — PostgreSQL adapter; install with `npm install knex pg`
 
 ---
 
