@@ -11,10 +11,13 @@ import { WaitHandler } from "../handlers/WaitHandler";
 import { StoreHandler } from "../handlers/StoreHandler";
 import { ConditionHandler } from "../handlers/ConditionHandler";
 import { LoopHandler } from "../handlers/LoopHandler";
+import { JudgeHandler } from "../handlers/JudgeHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
 import { wrapWithDepthGuard } from "./DepthGuard";
+import { createLLMProvider } from "../llm/LLMProvider";
+import { getConfig } from "../config/ConfigLoader";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -30,6 +33,8 @@ export class StepInterpreter {
         this.execute(step, adapter, ctx)
     );
 
+    const llmConfig = (() => { try { return getConfig().llm; } catch { return undefined; } })();
+
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
       .register(new AssertionHandler())
@@ -38,7 +43,8 @@ export class StepInterpreter {
       .register(new WaitHandler())
       .register(new StoreHandler())
       .register(new ConditionHandler(runSubStep))
-      .register(new LoopHandler(runSubStep));
+      .register(new LoopHandler(runSubStep))
+      .register(new JudgeHandler(createLLMProvider(llmConfig)));
   }
 
   async execute(

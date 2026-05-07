@@ -21,6 +21,9 @@ export class MockLLMProvider implements LLMProvider {
     if (sys.includes("yaml") || sys.includes("test scenario")) {
       return { content: this.handleScenarioGen(req.userMessage), model: this.name };
     }
+    if (sys.includes("evaluation judge")) {
+      return { content: this.handleJudge(req.userMessage), model: this.name };
+    }
 
     return { content: JSON.stringify({ result: "mock" }), model: this.name };
   }
@@ -115,6 +118,20 @@ export class MockLLMProvider implements LLMProvider {
     }
 
     return JSON.stringify({ flows });
+  }
+
+  // ── Judge handler ────────────────────────────────────────────────────────
+
+  private handleJudge(message: string): string {
+    const msg = message.toLowerCase();
+    // Low score when criteria explicitly mention failure/incorrectness
+    const score = msg.includes("fail") || msg.includes("incorrect") || msg.includes("wrong") ? 0.2 : 0.9;
+    return JSON.stringify({
+      score,
+      reason: score >= 0.5
+        ? "Mock evaluation: the value meets the specified criteria."
+        : "Mock evaluation: the value does not meet the specified criteria.",
+    });
   }
 
   // ── Scenario generation handler ──────────────────────────────────────────

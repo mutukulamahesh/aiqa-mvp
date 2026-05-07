@@ -236,6 +236,22 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // judge
+  if ("judge" in raw) {
+    const j = raw.judge as Record<string, unknown> | undefined;
+    if (!j) throw new Error(`Step[${idx}] judge: empty`);
+    if (typeof j.value   !== "string") throw new Error(`Step[${idx}] judge: missing "value"`);
+    if (typeof j.prompt  !== "string") throw new Error(`Step[${idx}] judge: missing "prompt"`);
+    if (typeof j.pass_if !== "string") throw new Error(`Step[${idx}] judge: missing "pass_if"`);
+    return {
+      action:   "judge",
+      value:    j.value,
+      prompt:   j.prompt,
+      pass_if:  j.pass_if,
+      ...(typeof j.store_as === "string" ? { store_as: j.store_as } : {}),
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -255,6 +271,6 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
 
   throw new Error(
     `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db, ` +
-    `wait_for_element, wait_ms, wait_for_url, store, if, for_each. Got: ${JSON.stringify(raw)}`
+    `wait_for_element, wait_ms, wait_for_url, store, if, for_each, judge. Got: ${JSON.stringify(raw)}`
   );
 }

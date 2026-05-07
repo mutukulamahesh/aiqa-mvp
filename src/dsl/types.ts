@@ -30,7 +30,14 @@ export type StepAction =
   | { action: "wait_for_url";     url: string }
   | { action: "store";            selector: string; attribute?: string; as: string }
   | { action: "if";               variable: string; equals: string; steps: StepAction[] }
-  | { action: "for_each";         over: string; as: string; steps: StepAction[] };
+  | { action: "for_each";         over: string; as: string; steps: StepAction[] }
+  | {
+      action:    "judge";
+      value:     string;
+      prompt:    string;
+      pass_if:   string;
+      store_as?: string;
+    };
 
 export interface TestDefinition {
   name:      string;
