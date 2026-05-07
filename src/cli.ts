@@ -612,25 +612,33 @@ program
     }
 
     // Jira defect auto-creation
+    // Jira failure intentionally only warns — it must never affect the suite exit code.
+    // (jira-sync exits 1 on failure because that's its sole purpose; run-all's purpose is running tests.)
     if (opts.jiraDefects) {
-      const jiraCfg = config.jira;
+      const jiraCfg  = config.jira;
       const apiToken = process.env.JIRA_API_TOKEN;
-      const adapter = new JiraAdapter({
-        baseUrl:    jiraCfg?.baseUrl,
-        email:      jiraCfg?.email,
-        apiToken:   apiToken,
-        projectKey: jiraCfg?.projectKey,
-      });
-      const failedResults = allResults
-        .filter(r => !r.passed)
-        .map(r => ({ testName: r.testName, passed: false, error: r.error }));
-      if (failedResults.length === 0) {
-        console.log(`   Jira  → no failures, nothing to create`);
+      if (!apiToken) {
+        console.warn(`   ⚠️  --jira-defects set but JIRA_API_TOKEN is not in env`);
+      } else if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
+        console.warn(`   ⚠️  --jira-defects set but jira.baseUrl / jira.email not configured`);
       } else {
-        const summary = await adapter.pushResults(failedResults)
-          .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
-        if (summary) {
-          console.log(`   Jira  → ${summary.created.length} defect(s) created: ${summary.created.join(", ") || "none"}`);
+        const adapter = new JiraAdapter({
+          baseUrl:    jiraCfg.baseUrl,
+          email:      jiraCfg.email,
+          apiToken,
+          projectKey: jiraCfg?.projectKey,
+        });
+        const failedResults = allResults
+          .filter(r => !r.passed)
+          .map(r => ({ testName: r.testName, passed: false, error: r.error }));
+        if (failedResults.length === 0) {
+          console.log(`   Jira  → no failures, nothing to create`);
+        } else {
+          const summary = await adapter.pushResults(failedResults)
+            .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
+          if (summary) {
+            console.log(`   Jira  → ${summary.created.length} defect(s) created: ${summary.created.join(", ") || "none"}`);
+          }
         }
       }
     }
@@ -697,6 +705,18 @@ program
       }
       console.log();
       process.exit(0);
+    }
+
+    // Early credential check — fail fast before making any API calls.
+    // jira-sync exits 1 on credential failure; run-all --jira-defects only warns.
+    // The asymmetry is intentional: jira-sync's sole purpose is Jira I/O, so failure is fatal.
+    if (!apiToken) {
+      console.error("❌ JIRA_API_TOKEN not set — add it to your .env file");
+      process.exit(1);
+    }
+    if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
+      console.error("❌ jira.baseUrl and jira.email must be set in your environment config");
+      process.exit(1);
     }
 
     const adapter = new JiraAdapter({
