@@ -19,6 +19,7 @@ import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
 import { HealerAnalytics } from "./healer/HealerAnalytics";
+import { cleanArtifacts, warnLargeFile } from "./utils/StorageManager";
 
 const program = new Command();
 
@@ -292,6 +293,7 @@ program
     scenarios.forEach(s => {
       const filePath = path.join(outDir, `${s.fileName}.yaml`);
       fs.writeFileSync(filePath, s.yaml);
+      warnLargeFile(filePath, Buffer.byteLength(s.yaml, "utf-8"));
       if (s.validated) {
         console.log(`   ✔ ${s.fileName}.yaml  [${s.flowType}]`);
         validCount++;
@@ -357,9 +359,10 @@ program
   .option("--allure [dir]",         "Generate Allure JSON results (default dir: allure-results/)")
   .option("--slack",                "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
   .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
+  .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
-    allure?: string | boolean; slack?: boolean; email?: string;
+    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -523,7 +526,7 @@ program
 
     // Trend tracking (always when --out is set)
     if (resultsDir) {
-      const tracker = new TrendTracker(resultsDir);
+      const tracker = new TrendTracker(resultsDir, config.storage.maxHistory);
       const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
       const rpt     = scorer2.score(allResults, new Map());
       tracker.append({
@@ -539,6 +542,24 @@ program
       });
       const trendLine = tracker.formatTrend();
       if (trendLine) console.log(trendLine);
+
+      // Artifact cleanup when --retain-runs is specified
+      const retainN = opts.retainRuns
+        ? Math.max(1, parseInt(opts.retainRuns, 10))
+        : undefined;
+      if (retainN !== undefined) {
+        const historyPath  = path.join(resultsDir, "history.json");
+        const screenshotDir = config.screenshots.dir
+          ? path.resolve(process.cwd(), config.screenshots.dir)
+          : undefined;
+        const allureDir    = typeof opts.allure === "string"
+          ? path.resolve(process.cwd(), opts.allure)
+          : opts.allure !== undefined
+            ? path.resolve(process.cwd(), "allure-results")
+            : undefined;
+        const dirs = [screenshotDir, allureDir].filter((d): d is string => !!d);
+        if (dirs.length > 0) cleanArtifacts({ historyPath, dirs, retainRuns: retainN });
+      }
     }
 
     console.log(`─────────────────────────────────────────\n`);
@@ -903,7 +924,11 @@ program
       const yamlDir = path.join(outRoot, "tests");
       fs.mkdirSync(yamlDir, { recursive: true });
       for (const s of result.scenarios) {
-        if (s.validated) fs.writeFileSync(path.join(yamlDir, `${s.fileName}.yaml`), s.yaml);
+        if (s.validated) {
+          const yPath = path.join(yamlDir, `${s.fileName}.yaml`);
+          fs.writeFileSync(yPath, s.yaml);
+          warnLargeFile(yPath, Buffer.byteLength(s.yaml, "utf-8"));
+        }
       }
       console.log(`   Tests       → ${yamlDir}/ (${result.scenarios.filter(s => s.validated).length} files)`);
     }
@@ -928,7 +953,7 @@ program
 
     // Trend tracking
     if (outRoot && result.results.length > 0 && result.report) {
-      const tracker = new TrendTracker(path.join(outRoot, "results"));
+      const tracker = new TrendTracker(path.join(outRoot, "results"), config.storage.maxHistory);
       tracker.append({
         runId:      result.runId,
         date:       new Date().toISOString(),

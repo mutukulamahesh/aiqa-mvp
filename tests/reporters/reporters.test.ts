@@ -108,11 +108,18 @@ describe("TrendTracker", () => {
     expect(tracker.read()).toEqual([]);
   });
 
-  test("caps history at 500 entries", () => {
+  test("caps history at 200 entries by default", () => {
     const dir     = tmpDir();
     const tracker = new TrendTracker(dir);
-    for (let i = 0; i < 510; i++) tracker.append(makeRecord({ runId: `r${i}` }));
-    expect(tracker.read().length).toBe(500);
+    for (let i = 0; i < 210; i++) tracker.append(makeRecord({ runId: `r${i}` }));
+    expect(tracker.read().length).toBe(200);
+  });
+
+  test("caps history at custom maxHistory when specified", () => {
+    const dir     = tmpDir();
+    const tracker = new TrendTracker(dir, 50);
+    for (let i = 0; i < 60; i++) tracker.append(makeRecord({ runId: `r${i}` }));
+    expect(tracker.read().length).toBe(50);
   });
 
   test("concurrent write: does not lose either record", () => {

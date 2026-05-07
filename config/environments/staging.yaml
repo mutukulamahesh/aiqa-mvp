@@ -27,6 +27,10 @@ results:
 features:
   llmEnabled: true
 
+storage:
+  maxHistory:   200
+  maxArtifacts: 10
+
 llm:
   provider: anthropic
   fallback: [mock]

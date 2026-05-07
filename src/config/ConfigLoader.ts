@@ -54,6 +54,11 @@ const EnvConfigSchema = z.object({
     readOnly: z.boolean().default(true),
   }).default({ readOnly: true }),
 
+  storage: z.object({
+    maxHistory:   z.number().int().positive().default(200), // entries kept in history.json + healer-runs.json
+    maxArtifacts: z.number().int().positive().default(10),  // run artifact sets retained by --retain-runs
+  }).default({ maxHistory: 200, maxArtifacts: 10 }),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.

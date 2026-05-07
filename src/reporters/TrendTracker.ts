@@ -14,12 +14,10 @@ export interface TrendRecord {
   tags?:      string[];
 }
 
-const MAX_HISTORY = 500;
-
 export class TrendTracker {
   private readonly filePath: string;
 
-  constructor(resultsDir: string) {
+  constructor(resultsDir: string, private readonly maxHistory = 200) {
     this.filePath = path.join(resultsDir, "history.json");
     fs.mkdirSync(resultsDir, { recursive: true });
   }
@@ -89,8 +87,8 @@ export class TrendTracker {
   }
 
   private flush(records: TrendRecord[]): void {
-    const trimmed = records.length > MAX_HISTORY
-      ? records.slice(records.length - MAX_HISTORY)
+    const trimmed = records.length > this.maxHistory
+      ? records.slice(records.length - this.maxHistory)
       : records;
     const tmp = `${this.filePath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(trimmed, null, 2), "utf-8");

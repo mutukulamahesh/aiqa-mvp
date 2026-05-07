@@ -1,6 +1,7 @@
 import * as fs   from "fs";
 import * as path from "path";
 import { KnownPattern, MemoryData, StepMemory } from "./types";
+import { truncField } from "../utils/StorageManager";
 
 export { KnownPattern, MemoryData, StepMemory };
 
@@ -125,6 +126,10 @@ export class MemoryStore {
     if (!entry.knownPattern) {
       entry.knownPattern = {
         ...pattern,
+        // Truncate LLM-generated strings so a single large diagnosis can't bloat the file
+        failureClass: truncField(pattern.failureClass),
+        rootCause:    truncField(pattern.rootCause),
+        suggestedFix: truncField(pattern.suggestedFix),
         firstSeen:              new Date().toISOString(),
         hitCount:               0,
         failuresSinceDiagnosis: 0,

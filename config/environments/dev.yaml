@@ -27,6 +27,10 @@ results:
 features:
   llmEnabled: true
 
+storage:
+  maxHistory:   200   # entries retained in history.json and healer-runs.json
+  maxArtifacts: 10    # artifact sets kept when using --retain-runs
+
 # LLM provider selection.
 # provider: anthropic | openai | nvidia | gemini | mock
 # fallback:  ordered list tried when primary fails (optional)
