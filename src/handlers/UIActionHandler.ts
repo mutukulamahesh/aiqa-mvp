@@ -5,6 +5,7 @@ import { StepHandler } from "../execution/HandlerRegistry";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
+import { wwrite } from "../execution/WorkerContext";
 
 export class UIActionHandler implements StepHandler {
   readonly handles = ["navigate", "click", "fill"];
@@ -17,15 +18,16 @@ export class UIActionHandler implements StepHandler {
     switch (step.action) {
       case "navigate": {
         const url = ctx.resolve(step.target);
-        console.log(`  ▶ navigate  → ${url}`);
+        wwrite(`  ▶ navigate  → ${url}`);
         await adapter.navigate(url);
-        ctx.setCurrentUrl(url);
+        // Read back the actual landed URL (may differ from requested due to redirects)
+        ctx.setCurrentUrl(await adapter.currentUrl());
         break;
       }
 
       case "click": {
         const target = ctx.resolve(step.target);
-        console.log(`  ▶ click     → "${target}"`);
+        wwrite(`  ▶ click     → "${target}"`);
         await adapter.click(target);
         break;
       }
@@ -33,7 +35,7 @@ export class UIActionHandler implements StepHandler {
       case "fill": {
         const target = ctx.resolve(step.target);
         const value  = ctx.resolve(step.value);
-        console.log(`  ▶ fill      → "${target}" = "${value}"`);
+        wwrite(`  ▶ fill      → "${target}" = "${value}"`);
         await adapter.fill(target, value);
         break;
       }

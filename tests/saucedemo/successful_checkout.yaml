@@ -1,0 +1,28 @@
+test:
+  name: "Successful Checkout"
+  tags: [saucedemo]
+  steps:
+    - navigate: "https://www.saucedemo.com/"
+    - fill:
+        target: "username"
+        value: "standard_user"
+    - fill:
+        target: "password"
+        value: "secret_sauce"
+    - click: '[data-test="login-button"]'
+    - click: '[data-test="add-to-cart-sauce-labs-backpack"]'
+    - click: ".shopping_cart_link"
+    - click: '[data-test="checkout"]'
+    - fill:
+        target: '[data-test="firstName"]'
+        value: "John"
+    - fill:
+        target: '[data-test="lastName"]'
+        value: "Doe"
+    - fill:
+        target: '[data-test="postalCode"]'
+        value: "75001"
+    - click: '[data-test="continue"]'
+    - click: '[data-test="finish"]'
+    - assert:
+        text: "Thank you"

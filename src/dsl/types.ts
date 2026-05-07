@@ -6,8 +6,8 @@ export type StepAction =
   | { action: "navigate"; target: string }
   | { action: "click";    target: string }
   | { action: "fill";     target: string; value: string }
-  | { action: "assert"; kind: "text" | "url"; value: string }
-  | { action: "assert"; kind: "equals";       value: string; equals: string }
+  | { action: "assert"; kind: "text" | "url" | "visible"; value: string }
+  | { action: "assert"; kind: "equals";                   value: string; equals: string }
   | {
       action:        "api";
       method:        string;
@@ -16,10 +16,20 @@ export type StepAction =
       body?:         unknown;
       store_as?:     string;
       assert_status?: number;
+    }
+  | {
+      action:        "db";
+      query:         string;
+      params?:       unknown[];
+      store_as?:     string;
+      assert_rows?:  number;
+      assert_field?: Record<string, unknown>;
     };
 
 export interface TestDefinition {
-  name: string;
+  name:      string;
+  tags?:     string[];
+  retries?:  number;   // max retry attempts on transient failures (timeout/locator)
   variables?: Record<string, string>;
-  steps: StepAction[];
+  steps:     StepAction[];
 }

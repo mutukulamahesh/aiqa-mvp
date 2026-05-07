@@ -13,6 +13,8 @@ export interface APICallResult {
   duration_ms: number;
 }
 
+import { AssertionError, TransientError } from "../errors";
+
 export class APIExecutor {
   async call(params: APICallParams): Promise<APICallResult> {
     const start      = Date.now();
@@ -37,15 +39,15 @@ export class APIExecutor {
       const data = await res.json().catch(() => null);
 
       if (params.assert_status != null && res.status !== params.assert_status) {
-        throw new Error(`Expected HTTP ${params.assert_status}, got ${res.status}`);
+        throw new AssertionError(`Expected HTTP ${params.assert_status}, got ${res.status}`);
       }
 
       return { status: res.status, data, duration_ms: Date.now() - start };
     } catch (err) {
       if ((err as Error).name === "AbortError") {
-        throw new Error(`API call timed out after ${params.timeout_ms ?? 15_000}ms: ${params.url}`);
+        throw new TransientError(`API call timed out after ${params.timeout_ms ?? 15_000}ms: ${params.url}`);
       }
-      throw err;
+      throw new TransientError((err as Error).message);
     } finally {
       clearTimeout(timer);
     }

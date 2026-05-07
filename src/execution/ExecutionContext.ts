@@ -1,17 +1,19 @@
-/**
- * ExecutionContext — holds the runtime state for a single test run.
- *
- * Responsibilities:
- *   - Store/retrieve named variables (set from DSL or adapter results)
- *   - Resolve {{ variable }} template expressions in strings
- *   - Track current URL (for URL assertions)
- */
+import { EnvConfig } from "../config/ConfigLoader";
+
 export class ExecutionContext {
   private variables: Map<string, unknown> = new Map();
+  readonly config: EnvConfig | null;
 
-  constructor(initial: Record<string, string> = {}) {
+  constructor(initial: Record<string, string> = {}, config: EnvConfig | null = null) {
+    this.config = config;
     for (const [k, v] of Object.entries(initial)) {
       this.variables.set(k, v);
+    }
+    // Expose config values as resolvable template variables
+    if (config) {
+      this.variables.set("env.base",    config.urls.base);
+      this.variables.set("env.api",     config.urls.api);
+      this.variables.set("env.name",    config.environment);
     }
   }
 

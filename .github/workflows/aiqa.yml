@@ -1,0 +1,160 @@
+name: AIQA Test Suite
+
+on:
+  push:
+    branches: [main, phase2]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: aiqa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Run tests (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [staging]
+        # Uncomment to add prod when a prod test suite exists:
+        # environment: [staging, prod]
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      NODE_ENV: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Ensure output directories exist
+        run: mkdir -p results/results results/screenshots
+
+      - name: Run AIQA test suite (${{ matrix.environment }})
+        id: aiqa
+        run: |
+          set +e
+          npx ts-node src/cli.ts \
+            --env ${{ matrix.environment }} \
+            run-all tests/ \
+            --headless \
+            --workers 2 \
+            --out results \
+            --circuit-breaker 5 2>&1 | tee /tmp/aiqa-output.txt
+          AIQA_EXIT=${PIPESTATUS[0]}
+
+          PASSED=$(grep -oP 'Passed\s*:\s*\K\d+' /tmp/aiqa-output.txt | head -1 || echo "?")
+          FAILED=$(grep -oP 'Failed\s*:\s*\K\d+' /tmp/aiqa-output.txt | head -1 || echo "?")
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+          exit $AIQA_EXIT
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## AIQA Results — \`${{ matrix.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Result | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ✅ Passed | ${{ steps.aiqa.outputs.passed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Failed | ${{ steps.aiqa.outputs.failed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) · commit \`${{ github.sha }}\`_" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqa-report-${{ matrix.environment }}-${{ github.run_number }}
+          path: results/results/report.html
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload JSON results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqa-results-json-${{ matrix.environment }}-${{ github.run_number }}
+          path: results/results/run-*.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiqa-screenshots-${{ matrix.environment }}-${{ github.run_number }}
+          path: results/screenshots/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  smoke:
+    name: Smoke gate (tags=smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: test
+    if: github.event_name == 'pull_request'
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      NODE_ENV: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Ensure output directories exist
+        run: mkdir -p results/results results/screenshots
+
+      - name: Run smoke tests only
+        run: |
+          npx ts-node src/cli.ts \
+            --env staging \
+            run-all tests/ \
+            --headless \
+            --workers 2 \
+            --tags smoke \
+            --circuit-breaker 3

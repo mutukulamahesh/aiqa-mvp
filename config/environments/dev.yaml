@@ -1,0 +1,50 @@
+environment: dev
+
+urls:
+  base: "https://www.saucedemo.com"
+  api:  "http://localhost:3000/api"
+
+timeouts:
+  action:     10000   # ms — per Playwright action (click, fill, assert)
+  navigation: 30000   # ms — page.goto / waitForURL
+  api:        15000   # ms — HTTP request timeout
+
+execution:
+  workers:        1
+  retries:        0
+  headless:       false
+  maxPages:       20
+  maxDepth:       3
+  circuitBreaker: 5
+
+screenshots:
+  onFailure:  true
+  dir:        "results/screenshots"
+
+results:
+  dir:        "results"
+
+features:
+  llmEnabled: true
+
+# LLM provider selection.
+# provider: anthropic | openai | nvidia | gemini | mock
+# fallback:  ordered list tried when primary fails (optional)
+# model:     override the provider default (optional)
+# API keys stay in .env — never commit them here.
+llm:
+  provider: mock
+  fallback: []
+
+# db_schema — route→table hints for FlowMapper DB suggestion (EPIC-10).
+# Uncomment and extend when you want generated tests to include db: validation steps.
+# method: which HTTP verbs on this route write to the table (default: all mutating verbs).
+#
+# db_schema:
+#   /api/users:
+#     table: users
+#     pk:    id
+#   /api/orders:
+#     table:  orders
+#     pk:     id
+#     method: [POST, DELETE]

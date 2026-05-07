@@ -4,22 +4,34 @@
   "description": "Enterprise AI QA Platform — Minimal Working MVP",
   "main": "dist/cli.js",
   "bin": {
-    "aiqa": "dist/cli.js"
+    "aiqa": "bin/aiqa.js"
   },
   "scripts": {
     "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "dev": "ts-node src/cli.ts",
-    "run:test": "ts-node src/cli.ts run"
+    "run:test": "ts-node src/cli.ts run",
+    "stress": "bash scripts/stress-test.sh",
+    "test:epic03": "ts-node scripts/test-epic-03.ts",
+    "test:ci": "ts-node src/cli.ts --env staging run-all tests/ --headless --workers 4 --out results --circuit-breaker 5"
   },
   "dependencies": {
     "@playwright/test": "^1.42.1",
-    "playwright": "^1.42.1",
+    "@types/dotenv": "^6.1.1",
+    "commander": "^12.0.0",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "js-yaml": "^4.1.0",
-    "commander": "^12.0.0"
+    "playwright": "^1.42.1",
+    "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.24",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   }

@@ -1,0 +1,14 @@
+test:
+  name: "Valid Login"
+  tags: [saucedemo]
+  steps:
+    - navigate: "https://www.saucedemo.com/"
+    - fill:
+        target: "username"
+        value: "standard_user"
+    - fill:
+        target: "password"
+        value: "secret_sauce"
+    - click: '[data-test="login-button"]'
+    - assert:
+        url: "inventory"

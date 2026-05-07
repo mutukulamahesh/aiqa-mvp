@@ -3,6 +3,7 @@ import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
 import { APIExecutor } from "../execution/APIExecutor";
+import { wwrite } from "../execution/WorkerContext";
 
 /** Recursively resolve {{ }} templates in string leaves of an object/array tree. */
 function resolveBody(val: unknown, ctx: ExecutionContext): unknown {
@@ -31,7 +32,7 @@ export class APIActionHandler implements StepHandler {
     const method = step.method.toUpperCase();
     const body   = step.body != null ? resolveBody(step.body, ctx) : undefined;
 
-    console.log(`  ▶ api       → ${method} ${url}`);
+    wwrite(`  ▶ api       → ${method} ${url}`);
 
     const result = await this.executor.call({
       method,
@@ -41,11 +42,11 @@ export class APIActionHandler implements StepHandler {
       assert_status: step.assert_status,
     });
 
-    console.log(`      ↳ HTTP ${result.status} (${result.duration_ms}ms)`);
+    wwrite(`      ↳ HTTP ${result.status} (${result.duration_ms}ms)`);
 
     if (step.store_as) {
       ctx.set(step.store_as, result.data);
-      console.log(`      ↳ stored as "${step.store_as}"`);
+      wwrite(`      ↳ stored as "${step.store_as}"`);
     }
   }
 }

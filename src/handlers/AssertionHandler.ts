@@ -9,6 +9,8 @@ import { StepHandler } from "../execution/HandlerRegistry";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
+import { wwrite } from "../execution/WorkerContext";
+import { AssertionError } from "../errors";
 
 export class AssertionHandler implements StepHandler {
   readonly handles = ["assert"];
@@ -24,23 +26,29 @@ export class AssertionHandler implements StepHandler {
 
     switch (step.kind) {
       case "text": {
-        console.log(`  ▶ assert    → text visible: "${value}"`);
+        wwrite(`  ▶ assert    → text visible: "${value}"`);
         await adapter.assertTextVisible(value);
         break;
       }
 
       case "url": {
-        console.log(`  ▶ assert    → url contains: "${value}"`);
+        wwrite(`  ▶ assert    → url contains: "${value}"`);
         await adapter.assertUrlContains(value);
+        break;
+      }
+
+      case "visible": {
+        wwrite(`  ▶ assert    → element visible: "${value}"`);
+        await adapter.assertElementVisible(value);
         break;
       }
 
       case "equals": {
         if (!step.equals) throw new Error(`AssertionHandler: assert kind "equals" is missing the "equals" field`);
         const expected = ctx.resolve(step.equals);
-        console.log(`  ▶ assert    → "${value}" equals "${expected}"`);
+        wwrite(`  ▶ assert    → "${value}" equals "${expected}"`);
         if (value !== expected) {
-          throw new Error(`assertEquals: expected "${expected}", got "${value}"`);
+          throw new AssertionError(`assertEquals: expected "${expected}", got "${value}"`);
         }
         break;
       }

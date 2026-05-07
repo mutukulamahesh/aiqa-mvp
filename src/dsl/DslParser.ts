@@ -37,35 +37,56 @@ type RawStep =
 
 interface RawTestFile {
   test: {
-    name: string;
+    name:      string;
+    tags?:     string | string[];
+    retries?:  number;
     variables?: Record<string, string>;
-    steps: RawStep[];
+    steps:     RawStep[];
   };
+}
+
+/** Parse a TestDefinition directly from a YAML string (used by importers for validation). */
+export function parseTestDefinition(content: string): TestDefinition {
+  const raw = yaml.load(content) as RawTestFile;
+  return buildDefinition(raw, "<string>");
 }
 
 export function parseTestFile(filePath: string): TestDefinition {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Test file not found: ${filePath}`);
   }
-
   const raw = yaml.load(fs.readFileSync(filePath, "utf-8")) as RawTestFile;
+  return buildDefinition(raw, filePath);
+}
 
+function buildDefinition(raw: RawTestFile, source: string): TestDefinition {
   if (!raw?.test) {
-    throw new Error(`Invalid test file: missing top-level "test:" key`);
+    throw new Error(`Invalid test (${source}): missing top-level "test:" key`);
   }
   if (!raw.test.name) {
-    throw new Error(`Invalid test file: missing "test.name"`);
+    throw new Error(`Invalid test (${source}): missing "test.name"`);
   }
   if (!Array.isArray(raw.test.steps) || raw.test.steps.length === 0) {
-    throw new Error(`Invalid test file: "test.steps" must be a non-empty array`);
+    throw new Error(`Invalid test (${source}): "test.steps" must be a non-empty array`);
   }
 
-  const steps: StepAction[] = raw.test.steps.map((rawStep, idx) => {
-    return parseStep(rawStep as Record<string, unknown>, idx);
-  });
+  const steps: StepAction[] = raw.test.steps.map((rawStep, idx) =>
+    parseStep(rawStep as Record<string, unknown>, idx)
+  );
+
+  const rawTags = raw.test.tags;
+  const tags: string[] = rawTags
+    ? (Array.isArray(rawTags) ? rawTags : [rawTags]).map(t => String(t).trim()).filter(Boolean)
+    : [];
+
+  const retries = typeof raw.test.retries === "number"
+    ? Math.max(0, Math.floor(raw.test.retries))
+    : 0;
 
   return {
-    name: raw.test.name,
+    name:      raw.test.name,
+    tags,
+    retries,
     variables: raw.test.variables ?? {},
     steps,
   };
@@ -109,11 +130,29 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     if ("url" in assert && typeof assert.url === "string") {
       return { action: "assert", kind: "url", value: assert.url };
     }
+    if ("visible" in assert && typeof assert.visible === "string") {
+      return { action: "assert", kind: "visible", value: assert.visible };
+    }
     if ("value" in assert && typeof assert.value === "string") {
       if (!assert.equals) throw new Error(`Step[${idx}] assert.value: missing "equals"`);
       return { action: "assert", kind: "equals", value: assert.value, equals: assert.equals };
     }
-    throw new Error(`Step[${idx}] assert: must have "text", "url", or "value+equals" key`);
+    throw new Error(`Step[${idx}] assert: must have "text", "url", "visible", or "value+equals" key`);
+  }
+
+  // db
+  if ("db" in raw) {
+    const db = raw.db as Record<string, unknown> | undefined;
+    if (!db) throw new Error(`Step[${idx}] db: empty`);
+    if (typeof db.query !== "string") throw new Error(`Step[${idx}] db: missing "query"`);
+    return {
+      action:       "db",
+      query:        db.query,
+      params:       Array.isArray(db.params) ? db.params : undefined,
+      store_as:     typeof db.store_as === "string" ? db.store_as : undefined,
+      assert_rows:  typeof db.assert_rows === "number" ? db.assert_rows : undefined,
+      assert_field: db.assert_field ? (db.assert_field as Record<string, unknown>) : undefined,
+    };
   }
 
   // api
@@ -134,6 +173,6 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   }
 
   throw new Error(
-    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api. Got: ${JSON.stringify(raw)}`
+    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db. Got: ${JSON.stringify(raw)}`
   );
 }
