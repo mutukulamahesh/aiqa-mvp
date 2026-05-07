@@ -18,7 +18,13 @@ const FIELD_MAX  = 2000;
 const HEADER_MAX = 150;
 
 function trunc(s: string, max: number): string {
-  return s.length <= max ? s : s.slice(0, max - 1) + "…";
+  if (s.length <= max) return s;
+  // Scan back up to 20 chars to avoid cutting mid-word or mid-markdown-token (*bold*, `code`)
+  let cut = max - 1;
+  const floor = Math.max(cut - 20, 0);
+  while (cut > floor && s[cut] !== " " && s[cut] !== "\n") cut--;
+  if (cut <= floor) cut = max - 1; // no safe boundary found — hard cut
+  return s.slice(0, cut) + "…";
 }
 
 export class SlackNotifier {

@@ -68,15 +68,21 @@ export class AllureReporter {
         testAttachments.push({ name: "Debug Analysis", source: debugName, type: "application/json" });
       }
 
+      // Ensure every step has at least 1 ms so Allure timelines are non-zero.
+      // Parent duration must wrap all children — take whichever is larger.
+      const effectiveDurs = result.stepResults.map(s => Math.max(1, s.durationMs));
+      const stepTotalMs   = effectiveDurs.reduce((a, b) => a + b, 0);
+      const totalMs       = Math.max(result.durationMs > 0 ? result.durationMs : 0, stepTotalMs);
       const now   = Date.now();
       const stop  = now;
-      const start = now - result.durationMs;
+      const start = now - totalMs;
 
-      // Build steps with accurate timing, error details, and screenshot attachments
+      // Build steps — screenshots attached at step level, debug JSON at test level
       let cursor = start;
-      const steps: AllureStep[] = result.stepResults.map(s => {
+      const steps: AllureStep[] = result.stepResults.map((s, i) => {
+        const dur       = effectiveDurs[i];
         const stepStart = cursor;
-        cursor += s.durationMs;
+        cursor += dur;
 
         const attachments: AllureAttachment[] = [];
         const screenshotFile = screenshotMap.get(s.index);
@@ -97,7 +103,7 @@ export class AllureReporter {
           status:        stepStatus,
           stage:         "finished",
           start:         stepStart,
-          stop:          stepStart + s.durationMs,
+          stop:          stepStart + dur,
           statusDetails: s.error
             ? { message: s.error, trace: s.errorClass ?? undefined }
             : {},

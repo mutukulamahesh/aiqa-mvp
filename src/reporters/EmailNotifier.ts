@@ -88,7 +88,7 @@ export class EmailNotifier {
         attachments.push({ filename: "aiqa-report.html", path: summary.reportPath, contentType: "text/html" });
       } else {
         const sizeMb = (sizeBytes / 1024 / 1024).toFixed(1);
-        reportNote   = `Report too large to attach (${sizeMb} MB) — see artifacts at: ${summary.reportPath}`;
+        reportNote   = `Report too large to attach (${sizeMb} MB) — Run ID: ${summary.runId} — see artifacts at: ${summary.reportPath}`;
       }
     }
 

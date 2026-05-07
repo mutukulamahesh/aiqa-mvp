@@ -32,11 +32,20 @@ export class TrendTracker {
 
     // Re-check mtime — if it changed another worker wrote while we were working
     if (this.mtime() !== mtimeBefore) {
+      const mtimeConflict = this.mtime();
       const fresh = this.read();
       const seen  = new Set(fresh.map(r => r.runId));
-      // Preserve all entries from the concurrent writer; append ours if not already there
       if (!seen.has(record.runId)) fresh.push(record);
-      this.flush(fresh);
+
+      // Rare second collision: another worker wrote while we were re-reading — retry once
+      if (this.mtime() !== mtimeConflict) {
+        const fresh2 = this.read();
+        const seen2  = new Set(fresh2.map(r => r.runId));
+        if (!seen2.has(record.runId)) fresh2.push(record);
+        this.flush(fresh2);
+      } else {
+        this.flush(fresh);
+      }
     } else {
       this.flush(history);
     }
