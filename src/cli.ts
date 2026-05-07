@@ -10,6 +10,10 @@ import { ScenarioGenerator } from "./agents/ScenarioGenerator";
 import { ReadinessScorer } from "./agents/ReadinessScorer";
 import { JiraAdapter } from "./integrations/JiraAdapter";
 import { HTMLReporter } from "./reporters/HTMLReporter";
+import { TrendTracker } from "./reporters/TrendTracker";
+import { SlackNotifier } from "./reporters/SlackNotifier";
+import { EmailNotifier } from "./reporters/EmailNotifier";
+import { AllureReporter } from "./reporters/AllureReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
@@ -350,8 +354,12 @@ program
   .option("--workers <n>",          "Number of tests to run in parallel (default: from env config)")
   .option("--tags <tags>",          "Only run tests whose tags include at least one of these (comma-separated)")
   .option("--circuit-breaker <n>",  "Abort suite after N consecutive failures (default: from env config)")
+  .option("--allure [dir]",         "Generate Allure JSON results (default dir: allure-results/)")
+  .option("--slack",                "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
+  .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
+    allure?: string | boolean; slack?: boolean; email?: string;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -495,13 +503,44 @@ program
         ? path.join(resultsDir, "report.html")
         : path.resolve(process.cwd(), "report/index.html");
 
+    const baseUrlLabel = opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? "");
     new HTMLReporter().generate(allResults, reportPath, {
-      baseUrl: opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? ""),
+      baseUrl: baseUrlLabel,
       circuitBreaker: circuitOpen
         ? { triggered: true, threshold: cbThreshold, skipped: skippedByCircuit }
         : undefined,
     });
     console.log(`   HTML  → ${reportPath}`);
+
+    // Allure results
+    if (opts.allure !== undefined) {
+      const allureDir = typeof opts.allure === "string"
+        ? path.resolve(process.cwd(), opts.allure)
+        : path.resolve(process.cwd(), "allure-results");
+      new AllureReporter().generate(allResults, allureDir);
+      console.log(`   Allure→ ${allureDir}`);
+    }
+
+    // Trend tracking (always when --out is set)
+    if (resultsDir) {
+      const tracker = new TrendTracker(resultsDir);
+      const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
+      const rpt     = scorer2.score(allResults, new Map());
+      tracker.append({
+        runId:      runTimestamp(),
+        date:       new Date().toISOString(),
+        passed,
+        failed,
+        total:      allResults.length,
+        score:      rpt.score,
+        grade:      rpt.grade,
+        durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+        url:        baseUrlLabel || undefined,
+      });
+      const trendLine = tracker.formatTrend();
+      if (trendLine) console.log(trendLine);
+    }
+
     console.log(`─────────────────────────────────────────\n`);
     const suiteHealerReport = sharedHealer.getReport();
     if (suiteHealerReport) console.log(suiteHealerReport);
@@ -510,6 +549,45 @@ program
       sharedMemory.save();
       const memReport = sharedMemory.getReport();
       if (memReport) console.log(memReport);
+    }
+
+    // Slack notification
+    if (opts.slack) {
+      const slack = SlackNotifier.fromEnv();
+      if (slack) {
+        const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
+        const rpt     = scorer2.score(allResults, new Map());
+        await slack.send({
+          runId: runTimestamp(), passed, failed, total: allResults.length,
+          score: rpt.score, grade: rpt.grade,
+          durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+          baseUrl: baseUrlLabel || undefined,
+          reportUrl: undefined,
+        }).catch(e => console.warn(`   ⚠️  Slack notification failed: ${e.message}`));
+        console.log(`   Slack → sent`);
+      } else {
+        console.warn(`   ⚠️  --slack set but SLACK_WEBHOOK_URL is not in env`);
+      }
+    }
+
+    // Email notification
+    if (opts.email) {
+      const recipients = opts.email.split(",").map(s => s.trim()).filter(Boolean);
+      const mailer = EmailNotifier.fromEnv(recipients);
+      if (mailer) {
+        const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
+        const rpt     = scorer2.score(allResults, new Map());
+        await mailer.send({
+          runId: runTimestamp(), passed, failed, total: allResults.length,
+          score: rpt.score, grade: rpt.grade,
+          durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+          baseUrl: baseUrlLabel || undefined,
+          reportPath,
+        }).catch(e => console.warn(`   ⚠️  Email notification failed: ${e.message}`));
+        console.log(`   Email → sent to ${recipients.join(", ")}`);
+      } else {
+        console.warn(`   ⚠️  --email set but SMTP_HOST is not in env`);
+      }
     }
 
     process.exit(failed > 0 ? 1 : 0);
@@ -768,6 +846,9 @@ program
   .option("--dry-run",             "Explore, map flows and generate scenarios without running tests")
   .option("--out <dir>",           "Write exploration.json, flows.json, YAMLs and report here")
   .option("--report <path>",       "Path for HTML report (default: <out>/report.html)")
+  .option("--allure [dir]",        "Generate Allure JSON results (default dir: allure-results/)")
+  .option("--slack",               "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
+  .option("--email <recipients>",  "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .action(async (opts: {
     url:       string;
     maxPages?: string;
@@ -775,6 +856,9 @@ program
     dryRun?:   boolean;
     out?:      string;
     report?:   string;
+    allure?:   string | boolean;
+    slack?:    boolean;
+    email?:    string;
   }) => {
     const { OrchestratorAgent } = await import("./agents/OrchestratorAgent");
     const config = cfg();
@@ -831,6 +915,76 @@ program
     if (reportPath && !opts.dryRun && result.results.length > 0) {
       new HTMLReporter().generate(result.results, reportPath, { baseUrl: url });
       console.log(`   Report      → ${reportPath}`);
+    }
+
+    // Allure results
+    if (opts.allure !== undefined && result.results.length > 0) {
+      const allureDir = typeof opts.allure === "string"
+        ? path.resolve(process.cwd(), opts.allure)
+        : outRoot ? path.join(outRoot, "allure-results") : path.resolve(process.cwd(), "allure-results");
+      new AllureReporter().generate(result.results, allureDir);
+      console.log(`   Allure      → ${allureDir}`);
+    }
+
+    // Trend tracking
+    if (outRoot && result.results.length > 0 && result.report) {
+      const tracker = new TrendTracker(path.join(outRoot, "results"));
+      tracker.append({
+        runId:      result.runId,
+        date:       new Date().toISOString(),
+        passed:     result.summary.passed,
+        failed:     result.summary.failed,
+        total:      result.summary.scenarios,
+        score:      result.summary.score,
+        grade:      result.summary.grade,
+        durationMs: result.summary.timings.test_runner ?? 0,
+        url,
+      });
+      const trendLine = tracker.formatTrend();
+      if (trendLine) console.log(trendLine);
+    }
+
+    // Slack notification
+    if (opts.slack && result.results.length > 0) {
+      const slack = SlackNotifier.fromEnv();
+      if (slack) {
+        await slack.send({
+          runId:      result.runId,
+          passed:     result.summary.passed,
+          failed:     result.summary.failed,
+          total:      result.summary.scenarios,
+          score:      result.summary.score,
+          grade:      result.summary.grade,
+          durationMs: result.summary.timings.test_runner ?? 0,
+          baseUrl:    url,
+          reportUrl:  undefined,
+        }).catch(e => console.warn(`   ⚠️  Slack notification failed: ${e.message}`));
+        console.log(`   Slack       → sent`);
+      } else {
+        console.warn(`   ⚠️  --slack set but SLACK_WEBHOOK_URL is not in env`);
+      }
+    }
+
+    // Email notification
+    if (opts.email && result.results.length > 0) {
+      const recipients = opts.email.split(",").map(s => s.trim()).filter(Boolean);
+      const mailer = EmailNotifier.fromEnv(recipients);
+      if (mailer) {
+        await mailer.send({
+          runId:      result.runId,
+          passed:     result.summary.passed,
+          failed:     result.summary.failed,
+          total:      result.summary.scenarios,
+          score:      result.summary.score,
+          grade:      result.summary.grade,
+          durationMs: result.summary.timings.test_runner ?? 0,
+          baseUrl:    url,
+          reportPath: reportPath ?? undefined,
+        }).catch(e => console.warn(`   ⚠️  Email notification failed: ${e.message}`));
+        console.log(`   Email       → sent to ${recipients.join(", ")}`);
+      } else {
+        console.warn(`   ⚠️  --email set but SMTP_HOST is not in env`);
+      }
     }
 
     // Warnings
