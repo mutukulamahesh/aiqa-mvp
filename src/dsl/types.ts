@@ -25,7 +25,7 @@ export type StepAction =
       assert_rows?:  number;
       assert_field?: Record<string, unknown>;
     }
-  | { action: "wait_for_element"; selector: string }
+  | { action: "wait_for_element"; selector: string; timeout?: number }
   | { action: "wait_ms";          ms: number }
   | { action: "wait_for_url";     url: string }
   | { action: "store";            selector: string; attribute?: string; as: string }

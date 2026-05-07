@@ -8,6 +8,7 @@ import { SubStepExecutor } from "./ConditionHandler";
 
 export class LoopHandler implements StepHandler {
   readonly handles = ["for_each"];
+  static readonly MAX_ITERATIONS = 100;
 
   constructor(private readonly executeSubStep: SubStepExecutor) {}
 
@@ -20,7 +21,13 @@ export class LoopHandler implements StepHandler {
 
     if (!Array.isArray(list)) {
       throw new AssertionError(
-        `for_each: "${step.over}" must resolve to an array, got ${list === undefined ? "undefined" : typeof list}`
+        `for_each "${step.over}" expected array, got ${list === undefined ? "undefined" : typeof list}`
+      );
+    }
+
+    if (list.length > LoopHandler.MAX_ITERATIONS) {
+      throw new AssertionError(
+        `for_each exceeded maxIterations (${LoopHandler.MAX_ITERATIONS})`
       );
     }
 

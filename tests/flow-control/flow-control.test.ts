@@ -1,11 +1,12 @@
 import { WaitHandler }      from "../../src/handlers/WaitHandler";
 import { StoreHandler }     from "../../src/handlers/StoreHandler";
-import { ConditionHandler } from "../../src/handlers/ConditionHandler";
+import { ConditionHandler, SubStepExecutor } from "../../src/handlers/ConditionHandler";
 import { LoopHandler }      from "../../src/handlers/LoopHandler";
 import { ExecutionContext }  from "../../src/execution/ExecutionContext";
 import { parseTestDefinition } from "../../src/dsl/DslParser";
 import { AdapterActions }   from "../../src/adapter/AdapterActions";
 import { StepAction }       from "../../src/dsl/types";
+import { wrapWithDepthGuard } from "../../src/execution/DepthGuard";
 
 // ── Minimal adapter stub ──────────────────────────────────────────────────────
 
@@ -68,11 +69,11 @@ describe("WaitHandler — wait_for_element", () => {
     expect(calls[0]).toBe("#confirm");
   });
 
-  test("propagates adapter error", async () => {
+  test("propagates adapter error as timed-out message", async () => {
     const adapter = makeAdapter({ waitForSelector: async () => { throw new Error("timeout"); } });
     await expect(
       new WaitHandler().execute({ action: "wait_for_element", selector: "#ghost" }, adapter, makeCtx())
-    ).rejects.toThrow("timeout");
+    ).rejects.toThrow('wait_for_element "#ghost" timed out after 10000ms');
   });
 });
 
@@ -264,14 +265,23 @@ describe("LoopHandler — for_each", () => {
     ctx.set("notAList", "just a string");
     await expect(
       handler.execute({ action: "for_each", over: "notAList", as: "item", steps: [] }, makeAdapter(), ctx)
-    ).rejects.toThrow("must resolve to an array");
+    ).rejects.toThrow("expected array, got string");
   });
 
   test("throws AssertionError when variable is undefined", async () => {
     const { handler } = makeLoopHandler();
     await expect(
       handler.execute({ action: "for_each", over: "missing", as: "item", steps: [] }, makeAdapter(), makeCtx())
-    ).rejects.toThrow("must resolve to an array");
+    ).rejects.toThrow("expected array, got undefined");
+  });
+
+  test("throws when list length exceeds maxIterations", async () => {
+    const { handler } = makeLoopHandler();
+    const ctx = makeCtx();
+    ctx.set("bigList", Array(LoopHandler.MAX_ITERATIONS + 1).fill(0));
+    await expect(
+      handler.execute({ action: "for_each", over: "bigList", as: "item", steps: [] }, makeAdapter(), ctx)
+    ).rejects.toThrow(`for_each exceeded maxIterations (${LoopHandler.MAX_ITERATIONS})`);
   });
 
   test("each iteration binds current item under 'as' key — dot notation works", async () => {
@@ -306,18 +316,167 @@ describe("LoopHandler — for_each", () => {
   });
 });
 
+// ── WaitHandler — timeout error ───────────────────────────────────────────────
+
+describe("WaitHandler — wait_for_element timeout error", () => {
+  test("wraps adapter failure with clear timed-out message", async () => {
+    const adapter = makeAdapter({ waitForSelector: async () => { throw new Error("locator timeout"); } });
+    await expect(
+      new WaitHandler().execute({ action: "wait_for_element", selector: "#spinner" }, adapter, makeCtx())
+    ).rejects.toThrow('wait_for_element "#spinner" timed out after 10000ms');
+  });
+
+  test("resolves template before including selector in error", async () => {
+    const adapter = makeAdapter({ waitForSelector: async () => { throw new Error("timeout"); } });
+    const ctx = makeCtx({ id: "btn" });
+    await expect(
+      new WaitHandler().execute({ action: "wait_for_element", selector: "#{{ id }}" }, adapter, ctx)
+    ).rejects.toThrow('wait_for_element "#btn" timed out after 10000ms');
+  });
+
+  test("uses custom timeout in error message when step.timeout is set", async () => {
+    const adapter = makeAdapter({ waitForSelector: async () => { throw new Error("timeout"); } });
+    await expect(
+      new WaitHandler().execute({ action: "wait_for_element", selector: "#btn", timeout: 5000 }, adapter, makeCtx())
+    ).rejects.toThrow('wait_for_element "#btn" timed out after 5000ms');
+  });
+
+  test("passes custom timeout to adapter.waitForSelector", async () => {
+    const calls: [string, number | undefined][] = [];
+    const adapter = makeAdapter({ waitForSelector: async (sel, ms) => { calls.push([sel, ms]); } });
+    await new WaitHandler().execute({ action: "wait_for_element", selector: "#el", timeout: 3000 }, adapter, makeCtx());
+    expect(calls[0]).toEqual(["#el", 3000]);
+  });
+
+  test("defaults to 10 000 ms when no step.timeout (config not loaded)", async () => {
+    const calls: [string, number | undefined][] = [];
+    const adapter = makeAdapter({ waitForSelector: async (sel, ms) => { calls.push([sel, ms]); } });
+    await new WaitHandler().execute({ action: "wait_for_element", selector: "#el" }, adapter, makeCtx());
+    expect(calls[0]).toEqual(["#el", 10000]);
+  });
+
+  test("normalises timeout: 0 to 1ms (Playwright 0 means 'no timeout')", async () => {
+    const calls: [string, number | undefined][] = [];
+    const adapter = makeAdapter({ waitForSelector: async (sel, ms) => { calls.push([sel, ms]); } });
+    await new WaitHandler().execute({ action: "wait_for_element", selector: "#el", timeout: 0 }, adapter, makeCtx());
+    expect(calls[0][1]).toBe(1);
+  });
+
+  test("error message reflects normalised 1ms when timeout: 0 fails", async () => {
+    const adapter = makeAdapter({ waitForSelector: async () => { throw new Error("miss"); } });
+    await expect(
+      new WaitHandler().execute({ action: "wait_for_element", selector: "#el", timeout: 0 }, adapter, makeCtx())
+    ).rejects.toThrow('wait_for_element "#el" timed out after 1ms');
+  });
+});
+
+// ── StoreHandler — error messages ────────────────────────────────────────────
+
+describe("StoreHandler — error messages", () => {
+  test("wraps getElementText failure with selector-not-found message", async () => {
+    const adapter = makeAdapter({ getElementText: async () => { throw new Error("no element"); } });
+    await expect(
+      new StoreHandler().execute({ action: "store", selector: "#missing", as: "v" }, adapter, makeCtx())
+    ).rejects.toThrow('store failed: selector "#missing" not found');
+  });
+
+  test("wraps getElementAttribute failure with attribute-not-found message", async () => {
+    const adapter = makeAdapter({ getElementAttribute: async () => { throw new Error("no attr"); } });
+    await expect(
+      new StoreHandler().execute({ action: "store", selector: "#el", attribute: "data-x", as: "v" }, adapter, makeCtx())
+    ).rejects.toThrow('store failed: attribute "data-x" not found on "#el"');
+  });
+});
+
+// ── DepthGuard ────────────────────────────────────────────────────────────────
+
+describe("wrapWithDepthGuard", () => {
+  test("allows calls within maxDepth", async () => {
+    let callCount = 0;
+    const base: SubStepExecutor = async () => { callCount++; };
+    const guarded = wrapWithDepthGuard(base, 3);
+    await guarded({ action: "navigate", target: "/" } as StepAction, makeAdapter(), makeCtx());
+    expect(callCount).toBe(1);
+  });
+
+  test("throws when nesting exceeds maxDepth", async () => {
+    let guarded: SubStepExecutor;
+    let callDepth = 0;
+    const recursive: SubStepExecutor = async (step, adapter, ctx) => {
+      callDepth++;
+      if (callDepth < 20) await guarded(step, adapter, ctx);
+    };
+    guarded = wrapWithDepthGuard(recursive, 5);
+    await expect(
+      guarded({ action: "navigate", target: "/" } as StepAction, makeAdapter(), makeCtx())
+    ).rejects.toThrow("Max step nesting depth exceeded (5)");
+  });
+
+  test("depth resets correctly after a successful call", async () => {
+    let callCount = 0;
+    const base: SubStepExecutor = async () => { callCount++; };
+    const guarded = wrapWithDepthGuard(base, 2);
+    const step = { action: "navigate", target: "/" } as StepAction;
+    await guarded(step, makeAdapter(), makeCtx());
+    await guarded(step, makeAdapter(), makeCtx());
+    await guarded(step, makeAdapter(), makeCtx());
+    expect(callCount).toBe(3);
+  });
+
+  test("depth resets after a failed call", async () => {
+    const failing: SubStepExecutor = async () => { throw new Error("boom"); };
+    const guarded = wrapWithDepthGuard(failing, 3);
+    const step = { action: "navigate", target: "/" } as StepAction;
+    await expect(guarded(step, makeAdapter(), makeCtx())).rejects.toThrow("boom");
+    // Depth should be back to 0 — second call should not false-trigger depth guard
+    await expect(guarded(step, makeAdapter(), makeCtx())).rejects.toThrow("boom");
+  });
+});
+
 // ── DslParser — new step types ────────────────────────────────────────────────
 
 describe("DslParser — flow control steps", () => {
   function parse(yaml: string) { return parseTestDefinition(yaml).steps[0]; }
 
-  test("parses wait_for_element", () => {
+  test("parses wait_for_element (string shorthand)", () => {
     expect(parse(`
 test:
   name: t
   steps:
     - wait_for_element: "#submit"
 `)).toEqual({ action: "wait_for_element", selector: "#submit" });
+  });
+
+  test("parses wait_for_element (object form with timeout)", () => {
+    expect(parse(`
+test:
+  name: t
+  steps:
+    - wait_for_element:
+        selector: "#login"
+        timeout: 5000
+`)).toEqual({ action: "wait_for_element", selector: "#login", timeout: 5000 });
+  });
+
+  test("parses wait_for_element (object form without timeout)", () => {
+    expect(parse(`
+test:
+  name: t
+  steps:
+    - wait_for_element:
+        selector: "#login"
+`)).toEqual({ action: "wait_for_element", selector: "#login" });
+  });
+
+  test("throws on wait_for_element with negative timeout", () => {
+    expect(() => parse(`
+test:
+  name: t
+  steps:
+    - wait_for_element:
+        selector: "#el"
+        timeout: -100
+`)).toThrow("timeout");
   });
 
   test("parses wait_ms", () => {

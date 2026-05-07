@@ -155,10 +155,29 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
-  // wait_for_element
+  // wait_for_element — two forms:
+  //   wait_for_element: "#submit"               (shorthand)
+  //   wait_for_element:                         (object, allows optional timeout)
+  //     selector: "#submit"
+  //     timeout: 5000
   if ("wait_for_element" in raw) {
-    if (typeof raw.wait_for_element !== "string") throw new Error(`Step[${idx}] wait_for_element: must be a string selector`);
-    return { action: "wait_for_element", selector: raw.wait_for_element };
+    const wfe = raw.wait_for_element;
+    if (typeof wfe === "string") {
+      return { action: "wait_for_element", selector: wfe };
+    }
+    if (wfe && typeof wfe === "object") {
+      const w = wfe as Record<string, unknown>;
+      if (typeof w.selector !== "string") throw new Error(`Step[${idx}] wait_for_element: missing "selector"`);
+      if (w.timeout !== undefined && (typeof w.timeout !== "number" || w.timeout < 0)) {
+        throw new Error(`Step[${idx}] wait_for_element: "timeout" must be a non-negative number`);
+      }
+      return {
+        action:   "wait_for_element",
+        selector: w.selector,
+        ...(typeof w.timeout === "number" ? { timeout: w.timeout } : {}),
+      };
+    }
+    throw new Error(`Step[${idx}] wait_for_element: must be a string selector or object with "selector"`);
   }
 
   // wait_ms

@@ -14,6 +14,7 @@ import { LoopHandler } from "../handlers/LoopHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
+import { wrapWithDepthGuard } from "./DepthGuard";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -24,8 +25,10 @@ export class StepInterpreter {
 
     // Sub-step executor passed to branching/looping handlers so they reuse
     // the full interpreter pipeline (healer, memory, error classification).
-    const runSubStep = (step: StepAction, adapter: AdapterActions, ctx: ExecutionContext) =>
-      this.execute(step, adapter, ctx);
+    const runSubStep = wrapWithDepthGuard(
+      (step: StepAction, adapter: AdapterActions, ctx: ExecutionContext) =>
+        this.execute(step, adapter, ctx)
+    );
 
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())

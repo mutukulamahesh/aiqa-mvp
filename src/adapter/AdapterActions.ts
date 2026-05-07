@@ -13,7 +13,7 @@ export interface AdapterActions {
   /** Returns the browser's actual current URL (after redirects). */
   currentUrl(): Promise<string>;
   /** Wait until a CSS selector is visible on the page. */
-  waitForSelector(selector: string): Promise<void>;
+  waitForSelector(selector: string, timeout?: number): Promise<void>;
   /** Wait until the current URL contains the given substring. */
   waitForUrl(substring: string): Promise<void>;
   /** Return the inner text of the first matching element. */

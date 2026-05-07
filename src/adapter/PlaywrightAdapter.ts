@@ -109,10 +109,11 @@ export class PlaywrightAdapter implements AdapterActions {
     return page.url();
   }
 
-  async waitForSelector(selector: string): Promise<void> {
+  async waitForSelector(selector: string, timeout?: number): Promise<void> {
     const page = await this.ensureLaunched();
-    await page.locator(selector).first().waitFor({ state: "visible", timeout: this.timeout })
-      .catch(() => { throw new TransientError(`waitForSelector: "${selector}" not visible within ${this.timeout}ms`); });
+    const ms = timeout ?? this.timeout;
+    await page.locator(selector).first().waitFor({ state: "visible", timeout: ms })
+      .catch(() => { throw new TransientError(`waitForSelector: "${selector}" not visible within ${ms}ms`); });
   }
 
   async waitForUrl(substring: string): Promise<void> {
