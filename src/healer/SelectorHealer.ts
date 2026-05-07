@@ -72,7 +72,10 @@ export class SelectorHealer {
   // ── LLM healing ───────────────────────────────────────────────────────────
 
   async heal(descriptor: string, page: Page, pageUrl: string): Promise<string | null> {
-    if (this.llm.name === "mock") return null;
+    if (this.llm.name === "mock") {
+      process.stderr.write(`[healer] disabled (mock LLM provider) — skipping heal for "${descriptor}"\n`);
+      return null;
+    }
 
     const [candidates, pageTitle] = await Promise.all([
       this.extractCandidates(page),
@@ -349,6 +352,7 @@ export class SelectorHealer {
   static computeContextHash(s: string): string { return contextHash(s); }
 
   private emit(partial: Omit<HealerEvent, "ts">): void {
+    // shift() is O(n) — acceptable at MAX_EVENTS=500; revisit if cap grows significantly.
     if (this.events.length >= SelectorHealer.MAX_EVENTS) this.events.shift();
     this.events.push({ ts: new Date().toISOString(), ...partial });
   }

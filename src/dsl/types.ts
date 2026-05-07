@@ -2,6 +2,9 @@
  * DSL Types — the shape of a parsed test YAML file
  */
 
+/** Comparison operators supported by the `if:` step. */
+export type IfOperator = "equals" | "not_equals" | "contains" | "gt" | "lt" | "gte" | "lte";
+
 export type StepAction =
   | { action: "navigate"; target: string }
   | { action: "click";    target: string }
@@ -29,7 +32,7 @@ export type StepAction =
   | { action: "wait_ms";          ms: number }
   | { action: "wait_for_url";     url: string }
   | { action: "store";            selector: string; attribute?: string; as: string }
-  | { action: "if";               variable: string; equals: string; steps: StepAction[] }
+  | { action: "if"; variable: string; operator: IfOperator; operand: string; steps: StepAction[] }
   | { action: "for_each";         over: string; as: string; steps: StepAction[] }
   | {
       action:    "judge";

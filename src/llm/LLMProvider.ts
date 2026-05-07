@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+// Provider modules are lazy-loaded via require() so that missing optional dependencies
+// (e.g. no @anthropic-ai/sdk installed) only throw at runtime when that provider is
+// actually used — not at import time when another provider is configured.
 /**
  * Canonical LLM prompt format. Every provider translates this internally —
  * callers never deal with provider-specific wire formats.
@@ -53,7 +57,6 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
       process.stderr.write(`[LLM] Primary provider "${resolved.provider}" unavailable (${msg}); using fallback.\n`);
       const fallbacks = resolved.fallback.map(name => buildSingle(name));
       if (fallbacks.length === 1) return fallbacks[0];
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { FallbackLLMProvider } = require("./FallbackLLMProvider");
       return new FallbackLLMProvider(fallbacks);
     }
@@ -62,7 +65,6 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
 
   if (!resolved.fallback?.length) return primary;
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { FallbackLLMProvider } = require("./FallbackLLMProvider");
   return new FallbackLLMProvider([
     primary,
@@ -93,21 +95,18 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
     case "anthropic": {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { AnthropicLLMProvider } = require("./AnthropicLLMProvider");
       return new AnthropicLLMProvider(key, model);
     }
     case "openai": {
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new Error("OPENAI_API_KEY is not set");
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { OpenAILLMProvider } = require("./OpenAILLMProvider");
       return new OpenAILLMProvider({ apiKey: key, model });
     }
     case "nvidia": {
       const key = process.env.NVIDIA_API_KEY;
       if (!key) throw new Error("NVIDIA_API_KEY is not set");
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { OpenAILLMProvider } = require("./OpenAILLMProvider");
       return new OpenAILLMProvider({
         apiKey:  key,
@@ -118,12 +117,10 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
     case "gemini": {
       const key = process.env.GEMINI_API_KEY;
       if (!key) throw new Error("GEMINI_API_KEY is not set");
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { GeminiLLMProvider } = require("./GeminiLLMProvider");
       return new GeminiLLMProvider(key, model);
     }
     default: {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { MockLLMProvider } = require("./MockLLMProvider");
       return new MockLLMProvider();
     }

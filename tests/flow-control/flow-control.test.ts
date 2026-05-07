@@ -162,7 +162,7 @@ describe("ConditionHandler — if branching", () => {
     const { handler, executed } = makeConditionHandler();
     const ctx = makeCtx({ role: "admin" });
     await handler.execute({
-      action: "if", variable: "{{ role }}", equals: "admin",
+      action: "if", variable: "{{ role }}", operator: "equals", operand: "admin",
       steps: [{ action: "navigate", target: "/admin" }],
     }, makeAdapter(), ctx);
     expect(executed).toHaveLength(1);
@@ -173,7 +173,7 @@ describe("ConditionHandler — if branching", () => {
     const { handler, executed } = makeConditionHandler();
     const ctx = makeCtx({ role: "viewer" });
     await handler.execute({
-      action: "if", variable: "{{ role }}", equals: "admin",
+      action: "if", variable: "{{ role }}", operator: "equals", operand: "admin",
       steps: [{ action: "navigate", target: "/admin" }],
     }, makeAdapter(), ctx);
     expect(executed).toHaveLength(0);
@@ -183,7 +183,7 @@ describe("ConditionHandler — if branching", () => {
     const { handler, executed } = makeConditionHandler();
     const ctx = makeCtx({ flag: "yes" });
     await handler.execute({
-      action: "if", variable: "{{ flag }}", equals: "yes",
+      action: "if", variable: "{{ flag }}", operator: "equals", operand: "yes",
       steps: [
         { action: "navigate", target: "/a" },
         { action: "navigate", target: "/b" },
@@ -197,7 +197,7 @@ describe("ConditionHandler — if branching", () => {
     const { handler, executed } = makeConditionHandler();
     const ctx = makeCtx({ current: "active", expected: "active" });
     await handler.execute({
-      action: "if", variable: "{{ current }}", equals: "{{ expected }}",
+      action: "if", variable: "{{ current }}", operator: "equals", operand: "{{ expected }}",
       steps: [{ action: "navigate", target: "/ok" }],
     }, makeAdapter(), ctx);
     expect(executed).toHaveLength(1);
@@ -207,7 +207,7 @@ describe("ConditionHandler — if branching", () => {
     const { handler, executed } = makeConditionHandler();
     const ctx = makeCtx({ x: "y" });
     await expect(
-      handler.execute({ action: "if", variable: "{{ x }}", equals: "y", steps: [] }, makeAdapter(), ctx)
+      handler.execute({ action: "if", variable: "{{ x }}", operator: "equals", operand: "y", steps: [] }, makeAdapter(), ctx)
     ).resolves.toBeUndefined();
     expect(executed).toHaveLength(0);
   });
@@ -531,7 +531,7 @@ test:
         steps:
           - navigate: /admin
 `);
-    expect(step).toMatchObject({ action: "if", variable: "{{ role }}", equals: "admin" });
+    expect(step).toMatchObject({ action: "if", variable: "{{ role }}", operator: "equals", operand: "admin" });
     expect((step as { steps: unknown[] }).steps).toHaveLength(1);
   });
 

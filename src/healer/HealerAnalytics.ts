@@ -268,7 +268,10 @@ export class HealerAnalytics {
   }
 
   private saveRuns(runs: RunRecord[]): void {
-    const trimmed = runs.length > this.maxHistory ? runs.slice(-this.maxHistory) : runs;
+    const sorted = [...runs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+    const trimmed = sorted.length > this.maxHistory ? sorted.slice(-this.maxHistory) : sorted;
     try {
       atomicWrite(this.logFile, JSON.stringify(trimmed, null, 2));
     } catch { /* best-effort */ }

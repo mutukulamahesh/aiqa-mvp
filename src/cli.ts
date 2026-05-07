@@ -442,6 +442,7 @@ program
     let consecutiveFails = 0;
     let circuitOpen      = false;
     let skippedByCircuit = 0;
+    let skippedByParse   = 0;
 
     const runSlot = async () => {
       while (cursor < files.length) {
@@ -459,6 +460,7 @@ program
           testDef = parseTestFile(file);
         } catch (err) {
           console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
+          skippedByParse++;
           continue;
         }
 
@@ -483,9 +485,13 @@ program
     const passed     = allResults.filter(r => r.passed).length;
     const retried    = allResults.filter(r => r.retryCount > 0).length;
     const failed     = allResults.length - passed;
+    // Capture once — reused for trend tracker, Slack, and email so all three share the same runId.
+    const runId = runTimestamp();
+    const { ReadinessScorer } = await import("./agents/ReadinessScorer");
+    const rpt = new ReadinessScorer().score(allResults, new Map());
 
     console.log(`─────────────────────────────────────────`);
-    console.log(`   Ran    : ${allResults.length} test(s)${skippedByCircuit ? `  (${skippedByCircuit} skipped by circuit breaker)` : ""}`);
+    console.log(`   Ran    : ${allResults.length} test(s)${skippedByCircuit ? `  (${skippedByCircuit} skipped by circuit breaker)` : ""}${skippedByParse ? `  (${skippedByParse} skipped — parse error)` : ""}`);
     console.log(`   Passed : ${passed}   Failed: ${failed}${retried ? `   Retried: ${retried}` : ""}`);
     if (circuitOpen) console.log(`   ⚡ Suite aborted — circuit breaker triggered at ${cbThreshold} consecutive failures`);
 
@@ -527,10 +533,8 @@ program
     // Trend tracking (always when --out is set)
     if (resultsDir) {
       const tracker = new TrendTracker(resultsDir, config.storage.maxHistory);
-      const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
-      const rpt     = scorer2.score(allResults, new Map());
       tracker.append({
-        runId:      runTimestamp(),
+        runId,
         date:       new Date().toISOString(),
         passed,
         failed,
@@ -576,10 +580,8 @@ program
     if (opts.slack) {
       const slack = SlackNotifier.fromEnv();
       if (slack) {
-        const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
-        const rpt     = scorer2.score(allResults, new Map());
         await slack.send({
-          runId: runTimestamp(), passed, failed, total: allResults.length,
+          runId, passed, failed, total: allResults.length,
           score: rpt.score, grade: rpt.grade,
           durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
           baseUrl: baseUrlLabel || undefined,
@@ -596,10 +598,8 @@ program
       const recipients = opts.email.split(",").map(s => s.trim()).filter(Boolean);
       const mailer = EmailNotifier.fromEnv(recipients);
       if (mailer) {
-        const scorer2 = new (await import("./agents/ReadinessScorer")).ReadinessScorer();
-        const rpt     = scorer2.score(allResults, new Map());
         await mailer.send({
-          runId: runTimestamp(), passed, failed, total: allResults.length,
+          runId, passed, failed, total: allResults.length,
           score: rpt.score, grade: rpt.grade,
           durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
           baseUrl: baseUrlLabel || undefined,
@@ -830,16 +830,19 @@ program
       const workers       = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
       const headless      = opts.headless ?? config.execution.headless;
       const runnerOpts    = { headless, timeout: config.timeouts.action };
-      const allResults: Awaited<ReturnType<TestRunner["run"]>>[] = [];
 
-      const slots = Array.from({ length: workers }, async () => {
-        for (const file of validFiles) {
+      const orderedImport: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(validFiles.length).fill(null);
+      let importCursor = 0;
+      const runSlot = async () => {
+        while (importCursor < validFiles.length) {
+          const idx  = importCursor++;
+          const file = validFiles[idx];
           const testDef = parseTestFile(file);
-          const result  = await new TestRunner(runnerOpts).run(testDef);
-          allResults.push(result);
+          orderedImport[idx] = await new TestRunner(runnerOpts).run(testDef);
         }
-      });
-      await Promise.all(slots);
+      };
+      await Promise.all(Array.from({ length: workers }, runSlot));
+      const allResults = orderedImport.filter((r): r is NonNullable<typeof r> => r !== null);
 
       const passed = allResults.filter(r => r.passed).length;
       const failed = allResults.length - passed;

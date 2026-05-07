@@ -6,7 +6,10 @@ const FIELD_MAX_BYTES = 2048;
 /** Truncates a string to maxBytes and appends "…" if cut. Shared safe-logging utility. */
 export function truncField(s: string, maxBytes = FIELD_MAX_BYTES): string {
   if (s.length <= maxBytes) return s;
-  return s.slice(0, maxBytes - 1) + "…";
+  const cut = s.slice(0, maxBytes - 1);
+  // Avoid double-ellipsis if the prefix already ends with the ellipsis character
+  if (cut.endsWith("…")) return cut;
+  return cut + "…";
 }
 
 /** Warns to stderr when a generated file exceeds threshold (default 1 MB). */
@@ -14,7 +17,7 @@ export function warnLargeFile(filePath: string, sizeBytes: number, thresholdByte
   if (sizeBytes > thresholdBytes) {
     const mb = (sizeBytes / 1024 / 1024).toFixed(1);
     const lim = (thresholdBytes / 1024 / 1024).toFixed(0);
-    process.stderr.write(`[warn] Large test file detected (>${lim}MB): ${path.basename(filePath)} (${mb} MB)\n`);
+    process.stderr.write(`[warn] Large test file detected (>${lim}MB): ${filePath} (${mb} MB)\n`);
   }
 }
 
@@ -62,16 +65,27 @@ export function cleanArtifacts(opts: CleanOptions): number {
 
 /** Returns the mtime threshold in ms-epoch below which artifacts should be deleted. */
 function getCutoffMs(historyPath: string, retainRuns: number): number {
-  if (!fs.existsSync(historyPath)) return 0;
+  if (!fs.existsSync(historyPath)) {
+    process.stderr.write("[cleanup] history unavailable — skipping artifact cleanup\n");
+    return 0;
+  }
+  let raw: unknown;
   try {
-    const raw = JSON.parse(fs.readFileSync(historyPath, "utf-8"));
-    if (!Array.isArray(raw)) return 0;
-    const dated = raw.filter(r => typeof r.date === "string");
-    if (dated.length <= retainRuns) return 0;
-    const sorted = [...dated].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
-    // Cutoff is the start of the (retainRuns+1)-th oldest run — everything before it is deleted
-    return new Date(sorted[retainRuns].date).getTime();
-  } catch { return 0; }
+    raw = JSON.parse(fs.readFileSync(historyPath, "utf-8"));
+  } catch {
+    process.stderr.write("[cleanup] history unavailable — skipping artifact cleanup\n");
+    return 0;
+  }
+  if (!Array.isArray(raw) || raw.length === 0) {
+    process.stderr.write("[cleanup] history unavailable — skipping artifact cleanup\n");
+    return 0;
+  }
+  const dated = (raw as Array<{ date?: unknown }>).filter(r => typeof r.date === "string") as Array<{ date: string }>;
+  if (dated.length <= retainRuns) return 0;
+  // Sort oldest → newest, then trim from oldest end
+  const sorted = [...dated].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+  );
+  // Cutoff is the date of the (N+1)-th oldest run — everything before it is deleted
+  return new Date(sorted[sorted.length - retainRuns - 1].date).getTime();
 }

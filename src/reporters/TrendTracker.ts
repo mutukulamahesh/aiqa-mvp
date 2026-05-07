@@ -87,9 +87,12 @@ export class TrendTracker {
   }
 
   private flush(records: TrendRecord[]): void {
-    const trimmed = records.length > this.maxHistory
-      ? records.slice(records.length - this.maxHistory)
-      : records;
+    const sorted = [...records].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+    const trimmed = sorted.length > this.maxHistory
+      ? sorted.slice(sorted.length - this.maxHistory)
+      : sorted;
     const tmp = `${this.filePath}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(trimmed, null, 2), "utf-8");
     fs.renameSync(tmp, this.filePath);

@@ -12,7 +12,7 @@ export class KnexDBAdapter implements DBAdapter {
   private knex: any;
   private closed = false;
 
-  constructor(connectionString: string) {
+  constructor(connectionString: string, private readonly readOnly = true) {
     // Dynamic require so Knex is optional — only needed when DB_URL is set.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     let knexFactory: (config: unknown) => unknown;
@@ -23,6 +23,7 @@ export class KnexDBAdapter implements DBAdapter {
         "KnexDBAdapter requires knex: run `npm install knex pg` to enable real DB testing."
       );
     }
+    const ro = this.readOnly;
     this.knex = knexFactory({
       client: "pg",
       connection: connectionString,
@@ -32,6 +33,18 @@ export class KnexDBAdapter implements DBAdapter {
         // Surface pool exhaustion as a clear error rather than an opaque hang
         acquireTimeoutMillis:  30_000,
         idleTimeoutMillis:     600_000,
+        // Enforce read-only at the connection level when configured — prevents destructive
+        // queries even if the DSL author passes a DROP/DELETE/UPDATE statement.
+        afterCreate: (
+          conn: { query: (sql: string, cb: (err: Error | null) => void) => void },
+          done: (err: Error | null, conn: unknown) => void,
+        ) => {
+          if (ro) {
+            conn.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY", err => done(err, conn));
+          } else {
+            done(null, conn);
+          }
+        },
       },
     });
     // Diagnostic: log pool config once at init so operator can correlate with worker count.

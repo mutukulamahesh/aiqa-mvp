@@ -59,6 +59,12 @@ const EnvConfigSchema = z.object({
     maxArtifacts: z.number().int().positive().default(10),  // run artifact sets retained by --retain-runs
   }).default({ maxHistory: 200, maxArtifacts: 10 }),
 
+  // api security — empty allowlist means "allow all"; denylist is always evaluated first.
+  api: z.object({
+    allowlist: z.array(z.string()).default([]),  // URL prefixes that are permitted (empty = allow all)
+    denylist:  z.array(z.string()).default([]),  // URL prefixes that are always blocked
+  }).default({ allowlist: [], denylist: [] }),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.
@@ -81,7 +87,14 @@ const CONFIG_DIR = path.resolve(process.cwd(), "config", "environments");
 let _loaded: EnvConfig | null = null;
 
 export function loadConfig(env: string = "dev"): EnvConfig {
-  if (_loaded) return _loaded;
+  if (_loaded) {
+    if (_loaded.environment !== env) {
+      throw new Error(
+        `Config already loaded for "${_loaded.environment}" — cannot reload for "${env}" in the same process. Call resetConfig() first.`
+      );
+    }
+    return _loaded;
+  }
 
   const filePath = path.join(CONFIG_DIR, `${env}.yaml`);
 

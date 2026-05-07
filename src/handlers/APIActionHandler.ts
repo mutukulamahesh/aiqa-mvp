@@ -32,6 +32,17 @@ export class APIActionHandler implements StepHandler {
     const method = step.method.toUpperCase();
     const body   = step.body != null ? resolveBody(step.body, ctx) : undefined;
 
+    // SSRF guard — denylist checked first, then allowlist (empty allowlist = allow all)
+    const apiCfg = ctx.config?.api;
+    if (apiCfg) {
+      if (apiCfg.denylist.some(prefix => url.startsWith(prefix))) {
+        throw new Error(`api step blocked — URL matches denylist: ${url}`);
+      }
+      if (apiCfg.allowlist.length > 0 && !apiCfg.allowlist.some(prefix => url.startsWith(prefix))) {
+        throw new Error(`api step blocked — URL not in allowlist: ${url}`);
+      }
+    }
+
     wwrite(`  ▶ api       → ${method} ${url}`);
 
     const result = await this.executor.call({

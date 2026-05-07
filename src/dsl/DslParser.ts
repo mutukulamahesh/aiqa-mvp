@@ -211,12 +211,26 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     const c = raw.if as Record<string, unknown> | undefined;
     if (!c) throw new Error(`Step[${idx}] if: empty`);
     if (typeof c.variable !== "string") throw new Error(`Step[${idx}] if: missing "variable"`);
-    if (typeof c.equals   !== "string") throw new Error(`Step[${idx}] if: missing "equals"`);
     if (!Array.isArray(c.steps))        throw new Error(`Step[${idx}] if: missing "steps" array`);
+
+    // Resolve operator + operand. `equals:` is the canonical backward-compat shorthand.
+    const OP_KEYS: Record<string, import("./types").IfOperator> = {
+      equals:     "equals",
+      not_equals: "not_equals",
+      contains:   "contains",
+      gt:         "gt",
+      lt:         "lt",
+      gte:        "gte",
+      lte:        "lte",
+    };
+    const opKey = Object.keys(OP_KEYS).find(k => typeof c[k] === "string");
+    if (!opKey) throw new Error(`Step[${idx}] if: must specify one of equals/not_equals/contains/gt/lt/gte/lte`);
+
     return {
       action:   "if",
       variable: c.variable,
-      equals:   c.equals,
+      operator: OP_KEYS[opKey],
+      operand:  c[opKey] as string,
       steps:    (c.steps as Record<string, unknown>[]).map((s, i) => parseStep(s, i)),
     };
   }
