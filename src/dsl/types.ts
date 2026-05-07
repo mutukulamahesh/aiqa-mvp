@@ -24,7 +24,13 @@ export type StepAction =
       store_as?:     string;
       assert_rows?:  number;
       assert_field?: Record<string, unknown>;
-    };
+    }
+  | { action: "wait_for_element"; selector: string }
+  | { action: "wait_ms";          ms: number }
+  | { action: "wait_for_url";     url: string }
+  | { action: "store";            selector: string; attribute?: string; as: string }
+  | { action: "if";               variable: string; equals: string; steps: StepAction[] }
+  | { action: "for_each";         over: string; as: string; steps: StepAction[] };
 
 export interface TestDefinition {
   name:      string;

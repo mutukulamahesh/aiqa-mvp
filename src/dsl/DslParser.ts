@@ -155,6 +155,68 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // wait_for_element
+  if ("wait_for_element" in raw) {
+    if (typeof raw.wait_for_element !== "string") throw new Error(`Step[${idx}] wait_for_element: must be a string selector`);
+    return { action: "wait_for_element", selector: raw.wait_for_element };
+  }
+
+  // wait_ms
+  if ("wait_ms" in raw) {
+    if (typeof raw.wait_ms !== "number" || raw.wait_ms < 0) throw new Error(`Step[${idx}] wait_ms: must be a non-negative number`);
+    return { action: "wait_ms", ms: raw.wait_ms };
+  }
+
+  // wait_for_url
+  if ("wait_for_url" in raw) {
+    if (typeof raw.wait_for_url !== "string") throw new Error(`Step[${idx}] wait_for_url: must be a string`);
+    return { action: "wait_for_url", url: raw.wait_for_url };
+  }
+
+  // store
+  if ("store" in raw) {
+    const s = raw.store as Record<string, unknown> | undefined;
+    if (!s) throw new Error(`Step[${idx}] store: empty`);
+    if (typeof s.selector !== "string") throw new Error(`Step[${idx}] store: missing "selector"`);
+    if (typeof s.as !== "string")       throw new Error(`Step[${idx}] store: missing "as"`);
+    return {
+      action:    "store",
+      selector:  s.selector,
+      attribute: typeof s.attribute === "string" ? s.attribute : undefined,
+      as:        s.as,
+    };
+  }
+
+  // if
+  if ("if" in raw) {
+    const c = raw.if as Record<string, unknown> | undefined;
+    if (!c) throw new Error(`Step[${idx}] if: empty`);
+    if (typeof c.variable !== "string") throw new Error(`Step[${idx}] if: missing "variable"`);
+    if (typeof c.equals   !== "string") throw new Error(`Step[${idx}] if: missing "equals"`);
+    if (!Array.isArray(c.steps))        throw new Error(`Step[${idx}] if: missing "steps" array`);
+    return {
+      action:   "if",
+      variable: c.variable,
+      equals:   c.equals,
+      steps:    (c.steps as Record<string, unknown>[]).map((s, i) => parseStep(s, i)),
+    };
+  }
+
+  // for_each
+  if ("for_each" in raw) {
+    const f = raw.for_each as Record<string, unknown> | undefined;
+    if (!f) throw new Error(`Step[${idx}] for_each: empty`);
+    if (typeof f.over !== "string") throw new Error(`Step[${idx}] for_each: missing "over"`);
+    if (typeof f.as   !== "string") throw new Error(`Step[${idx}] for_each: missing "as"`);
+    if (!Array.isArray(f.steps))    throw new Error(`Step[${idx}] for_each: missing "steps" array`);
+    return {
+      action: "for_each",
+      over:   f.over,
+      as:     f.as,
+      steps:  (f.steps as Record<string, unknown>[]).map((s, i) => parseStep(s, i)),
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -173,6 +235,7 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   }
 
   throw new Error(
-    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db. Got: ${JSON.stringify(raw)}`
+    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db, ` +
+    `wait_for_element, wait_ms, wait_for_url, store, if, for_each. Got: ${JSON.stringify(raw)}`
   );
 }
