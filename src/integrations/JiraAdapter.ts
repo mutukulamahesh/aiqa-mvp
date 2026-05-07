@@ -19,7 +19,7 @@ export interface JiraConfig {
   apiToken?:   string;
   projectKey?: string;
   useMock?:    boolean;  // default true when credentials are absent
-  throttleMs?: number;  // ms between API calls; default 100; set 0 to disable (e.g. in tests)
+  throttleMs?: number;  // minimum ms between consecutive API calls; default 100; set 0 to disable (e.g. in tests)
 }
 
 export interface PushResultItem {
@@ -45,7 +45,7 @@ export interface PushResultSummary {
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class JiraAdapter {
-  private useMock: boolean;
+  private readonly useMock: boolean;
   private readonly client: JiraClient | null;
 
   constructor(private readonly config: JiraConfig = {}) {
@@ -89,7 +89,7 @@ export class JiraAdapter {
 
   // ── Push results → Jira defects ───────────────────────────────────────────
 
-  async pushResults(results: PushResultItem[]): Promise<PushResultSummary> {
+  async pushResults(results: PushResultItem[], runId?: string): Promise<PushResultSummary> {
     const key = this.config.projectKey ?? "DEMO";
 
     if (!this.client) {
@@ -106,7 +106,7 @@ export class JiraAdapter {
     const commented: string[]        = [];
     const failed:    FailureRecord[] = [];
     let   skipped = 0;
-    const runId = new Date().toISOString();
+    const effectiveRunId = runId ?? new Date().toISOString();
 
     for (const r of results) {
       if (r.passed) { skipped++; continue; }
@@ -132,7 +132,7 @@ export class JiraAdapter {
         if (existingKey) {
           // Duplicate found — add a comment instead of opening a second bug
           const commentText =
-            `Test "${r.testName}" failed again in AIQA run ${runId}.` +
+            `Test "${r.testName}" failed again in AIQA run ${effectiveRunId}.` +
             (r.error ? `\n\nError:\n${r.error}` : "");
           await this.throttle();
           await this.client.addComment(existingKey, commentText);
@@ -140,7 +140,7 @@ export class JiraAdapter {
           process.stderr.write(`[jira] updated existing defect ${existingKey} for "${r.testName}"\n`);
         } else {
           const bodyText =
-            `Test "${r.testName}" failed in AIQA run ${runId}.` +
+            `Test "${r.testName}" failed in AIQA run ${effectiveRunId}.` +
             (r.error ? `\n\nError:\n${r.error}` : "");
           const issue = await this.client.createIssue({
             project:     { key },
@@ -196,7 +196,7 @@ export class JiraAdapter {
 
   /** Stable fingerprint: same test name + same error class → same label across runs. */
   private fingerprint(testName: string, error?: string): string {
-    const errorClass = error?.match(/^[A-Za-z]+(?:Error|Exception)/)?.[0] ?? "";
+    const errorClass = error?.match(/[A-Za-z]+(?:Error|Exception)/)?.[0] ?? "";
     return "aiqa-fp-" + crypto.createHash("sha256")
       .update(`${testName}|${errorClass}`)
       .digest("hex")
@@ -208,13 +208,20 @@ export class JiraAdapter {
     return "aiqa-test-" + name.toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 40);
+      .slice(0, 40)
+      .replace(/-$/, "");
   }
 
-  /** Inserts a small delay between API calls to stay within Jira rate limits. */
-  private throttle(): Promise<void> {
+  private lastCallTime = 0;
+
+  /** Enforces a minimum gap of throttleMs between consecutive API calls. No-op on the very first call. */
+  private async throttle(): Promise<void> {
     const ms = this.config.throttleMs ?? 100;
-    return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
+    if (ms <= 0) return;
+    const elapsed = Date.now() - this.lastCallTime;
+    const wait    = Math.max(0, ms - elapsed);
+    if (wait > 0) await new Promise<void>(resolve => setTimeout(resolve, wait));
+    this.lastCallTime = Date.now();
   }
 
   private parseIssue(issue: JiraIssue): JiraStory {

@@ -634,7 +634,7 @@ program
         if (failedResults.length === 0) {
           console.log(`   Jira  → no failures, nothing to create`);
         } else {
-          const summary = await adapter.pushResults(failedResults)
+          const summary = await adapter.pushResults(failedResults, runId)
             .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
           if (summary) {
             const { created, commented, failed } = summary;
@@ -730,7 +730,9 @@ program
       projectKey,
     });
 
-    const summary = await adapter.pushResults(failures)
+    // Derive run ID from the results filename so Jira issues link back to the same run.
+    const runIdFromFile = path.basename(resultsPath, ".json").replace(/^run-/, "");
+    const summary = await adapter.pushResults(failures, runIdFromFile)
       .catch(e => { console.error(`❌ Jira push failed: ${(e as Error).message}`); process.exit(1); });
 
     const { created, commented, failed: syncFailed } = summary;
