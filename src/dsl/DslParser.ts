@@ -223,8 +223,10 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
       gte:        "gte",
       lte:        "lte",
     };
-    const opKey = Object.keys(OP_KEYS).find(k => typeof c[k] === "string");
-    if (!opKey) throw new Error(`Step[${idx}] if: must specify one of equals/not_equals/contains/gt/lt/gte/lte`);
+    const matchedKeys = Object.keys(OP_KEYS).filter(k => typeof c[k] === "string");
+    if (matchedKeys.length === 0) throw new Error(`Step[${idx}] if: must specify one of equals/not_equals/contains/gt/lt/gte/lte`);
+    if (matchedKeys.length > 1)   throw new Error(`Step[${idx}] if: conflicting operator keys — specify exactly one of [${matchedKeys.join(", ")}]`);
+    const opKey = matchedKeys[0];
 
     return {
       action:   "if",

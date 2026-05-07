@@ -360,9 +360,10 @@ program
   .option("--slack",                "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
   .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
+  .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
-    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string;
+    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -487,7 +488,6 @@ program
     const failed     = allResults.length - passed;
     // Capture once — reused for trend tracker, Slack, and email so all three share the same runId.
     const runId = runTimestamp();
-    const { ReadinessScorer } = await import("./agents/ReadinessScorer");
     const rpt = new ReadinessScorer().score(allResults, new Map());
 
     console.log(`─────────────────────────────────────────`);
@@ -611,7 +611,113 @@ program
       }
     }
 
+    // Jira defect auto-creation
+    if (opts.jiraDefects) {
+      const jiraCfg = config.jira;
+      const apiToken = process.env.JIRA_API_TOKEN;
+      const adapter = new JiraAdapter({
+        baseUrl:    jiraCfg?.baseUrl,
+        email:      jiraCfg?.email,
+        apiToken:   apiToken,
+        projectKey: jiraCfg?.projectKey,
+      });
+      const failedResults = allResults
+        .filter(r => !r.passed)
+        .map(r => ({ testName: r.testName, passed: false, error: r.error }));
+      if (failedResults.length === 0) {
+        console.log(`   Jira  → no failures, nothing to create`);
+      } else {
+        const summary = await adapter.pushResults(failedResults)
+          .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
+        if (summary) {
+          console.log(`   Jira  → ${summary.created.length} defect(s) created: ${summary.created.join(", ") || "none"}`);
+        }
+      }
+    }
+
     process.exit(failed > 0 ? 1 : 0);
+  });
+
+// ── jira-sync ─────────────────────────────────────────────────────────────────
+
+program
+  .command("jira-sync <results>")
+  .description("Push a run-results JSON file to Jira — create bugs for failures, sync Xray if configured")
+  .option("--project <key>",        "Override jira.projectKey from config")
+  .option("--dry-run",              "Print what would be created without calling Jira")
+  .option("--xray <executionKey>",  "Sync results to an Xray test execution (e.g. AIQA-99)")
+  .action(async (resultsFile: string, opts: { project?: string; dryRun?: boolean; xray?: string }) => {
+    const config   = cfg();
+    const jiraCfg  = config.jira;
+    const apiToken = process.env.JIRA_API_TOKEN;
+
+    const resultsPath = path.resolve(process.cwd(), resultsFile);
+    if (!fs.existsSync(resultsPath)) {
+      console.error(`❌ Results file not found: ${resultsPath}`);
+      process.exit(1);
+    }
+
+    let allResults: { testName: string; passed: boolean; error?: string }[];
+    try {
+      allResults = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
+    } catch (err) {
+      console.error(`❌ Failed to parse results JSON: ${(err as Error).message}`);
+      process.exit(1);
+    }
+
+    const projectKey = opts.project ?? jiraCfg?.projectKey;
+    if (!projectKey) {
+      console.error("❌ No project key — set jira.projectKey in config or pass --project <key>");
+      process.exit(1);
+    }
+
+    const failures = allResults.filter(r => !r.passed);
+    const passes   = allResults.length - failures.length;
+
+    console.log(`\n📋 AIQA Jira Sync  [env: ${config.environment}]`);
+    console.log(`   Results file : ${resultsPath}`);
+    console.log(`   Project key  : ${projectKey}`);
+    console.log(`   Total tests  : ${allResults.length}  (${passes} passed, ${failures.length} failed)`);
+    if (opts.dryRun) console.log(`   Mode         : DRY RUN — no Jira calls will be made`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    if (failures.length === 0) {
+      console.log(`✅ All tests passed — nothing to create in Jira.\n`);
+      process.exit(0);
+    }
+
+    if (opts.dryRun) {
+      console.log(`Would create ${failures.length} bug(s) in project "${projectKey}":`);
+      failures.forEach((r, i) => {
+        console.log(`  ${i + 1}. [AIQA] Test failed: ${r.testName}`);
+        if (r.error) console.log(`     Error: ${r.error.slice(0, 120)}`);
+      });
+      if (opts.xray) {
+        console.log(`\nWould sync ${allResults.length} result(s) to Xray execution: ${opts.xray}`);
+      }
+      console.log();
+      process.exit(0);
+    }
+
+    const adapter = new JiraAdapter({
+      baseUrl:    jiraCfg?.baseUrl,
+      email:      jiraCfg?.email,
+      apiToken,
+      projectKey,
+    });
+
+    const summary = await adapter.pushResults(failures)
+      .catch(e => { console.error(`❌ Jira push failed: ${(e as Error).message}`); process.exit(1); });
+
+    console.log(`✅ Created ${summary.created.length} defect(s): ${summary.created.join(", ") || "none"}`);
+
+    if (opts.xray) {
+      await adapter.syncXrayResults(opts.xray, allResults.map(r => ({ ...r })))
+        .catch(e => console.warn(`⚠️  Xray sync failed: ${(e as Error).message}`));
+    }
+
+    console.log();
+    process.exit(0);
   });
 
 // ── help ──────────────────────────────────────────────────────────────────────
@@ -668,12 +774,32 @@ COMMANDS — Analysis
   score <results.json>  Compute 0-100 readiness score
   help                  Show this guide
 
+COMMANDS — Jira Integration
+  jira-sync <results>   Push test results JSON to Jira
+    --project <key>       Override jira.projectKey from config
+    --dry-run             Preview without creating issues
+    --xray <execKey>      Also sync to Xray test execution
+
+  run-all also accepts:
+    --jira-defects        Auto-create Jira bug for each failed test
+
+  Required env vars:
+    JIRA_API_TOKEN        Your Atlassian API token (never commit!)
+
+  Required config (config/environments/<env>.yaml):
+    jira:
+      baseUrl:    https://yourorg.atlassian.net
+      projectKey: AIQA
+      email:      you@example.com
+
 EXAMPLES
   aiqa orchestrate --url https://example.com --out my-app --headless
   aiqa explore https://example.com --out my-app --max-pages 20 --depth 4
   aiqa generate --out my-app --per-page
   aiqa run-all --out my-app --headless --workers 4
-  aiqa run-all --out my-app --tags smoke
+  aiqa run-all --out my-app --tags smoke --jira-defects
+  aiqa jira-sync my-app/results/run-2024-01-01.json --dry-run
+  aiqa jira-sync my-app/results/run-2024-01-01.json
   aiqa score my-app/results/run-2024-01-01.json
 `);
   });

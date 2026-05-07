@@ -40,7 +40,18 @@ llm:
   provider: mock
   fallback: []
 
-# db_schema — route→table hints for FlowMapper DB suggestion (EPIC-10).
+# Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
+# Uncomment and fill in when connecting to a real Jira project.
+#
+jira:
+  baseUrl:                "https://aiqajira.atlassian.net"
+  projectKey:             "AIQA"
+  email:                  "mmk.mutu@gmail.com"
+  createDefectsOnFailure: false   # set true to auto-create bugs when using run-all
+  xraySyncEnabled:        false   # set true + testPlanKey to push results to Xray
+  # testPlanKey:          "AIQA-1"
+
+# db_schema — route→table hints for FlowMapper DB suggestion.
 # Uncomment and extend when you want generated tests to include db: validation steps.
 # method: which HTTP verbs on this route write to the table (default: all mutating verbs).
 #

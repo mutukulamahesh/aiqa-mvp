@@ -65,6 +65,16 @@ const EnvConfigSchema = z.object({
     denylist:  z.array(z.string()).default([]),  // URL prefixes that are always blocked
   }).default({ allowlist: [], denylist: [] }),
 
+  // Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
+  jira: z.object({
+    baseUrl:                z.string().optional(),   // e.g. "https://aiqajira.atlassian.net"
+    projectKey:             z.string().optional(),   // e.g. "AIQA"
+    email:                  z.string().email().optional(),
+    createDefectsOnFailure: z.boolean().default(false),
+    xraySyncEnabled:        z.boolean().default(false),
+    testPlanKey:            z.string().optional(),   // Xray test plan issue key
+  }).optional(),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.
@@ -167,8 +177,18 @@ export function checkSecrets(): { missing: string[]; warnings: string[] } {
     }
   }
 
-  if (process.env["JIRA_API_TOKEN"] && !process.env["JIRA_EMAIL"]) {
-    warnings.push("JIRA_API_TOKEN set but JIRA_EMAIL missing — Jira integration will fail");
+  const hasJiraToken = !!process.env["JIRA_API_TOKEN"];
+  const jiraCfg = _loaded?.jira;
+
+  if (jiraCfg?.baseUrl || jiraCfg?.email || hasJiraToken) {
+    if (!jiraCfg?.baseUrl)   warnings.push("jira.baseUrl not set — Jira integration will use mock mode");
+    if (!jiraCfg?.email)     warnings.push("jira.email not set — Jira integration will use mock mode");
+    if (!jiraCfg?.projectKey)warnings.push("jira.projectKey not set — Jira commands require a project key");
+    if (!hasJiraToken)       warnings.push("JIRA_API_TOKEN not set — Jira integration will use mock mode");
+  }
+
+  if (hasJiraToken && !jiraCfg?.email) {
+    warnings.push("JIRA_API_TOKEN set but jira.email missing in config — Jira integration will fail");
   }
 
   return { missing, warnings };

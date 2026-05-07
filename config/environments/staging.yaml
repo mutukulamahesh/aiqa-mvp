@@ -35,7 +35,15 @@ llm:
   provider: anthropic
   fallback: [mock]
 
-# db_schema — route→table hints for FlowMapper DB suggestion (EPIC-10).
+# Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
+jira:
+  baseUrl:                "https://aiqajira.atlassian.net"
+  projectKey:             "AIQA"
+  email:                  "mmk.mutu@gmail.com"
+  createDefectsOnFailure: true    # auto-create bugs on CI failures
+  xraySyncEnabled:        false
+
+# db_schema — route→table hints for FlowMapper DB suggestion.
 # Uncomment and extend when you want generated tests to include db: validation steps.
 #
 # db_schema:

@@ -12,7 +12,13 @@ export class DBActionHandler implements StepHandler {
   private adapter: DBAdapter;
 
   constructor(adapter?: DBAdapter) {
-    this.adapter = adapter ?? createDBAdapter();
+    if (adapter) {
+      this.adapter = adapter;
+    } else {
+      let readOnly = true;
+      try { readOnly = getConfig().db.readOnly; } catch { /* config not loaded — stay safe */ }
+      this.adapter = createDBAdapter(readOnly);
+    }
   }
 
   async execute(
