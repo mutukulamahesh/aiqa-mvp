@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import { z } from "zod";
 import { StepHandler } from "../execution/HandlerRegistry";
 import { StepAction } from "../dsl/types";
@@ -46,7 +47,16 @@ const MAX_VALUE_LENGTH = 5_000;
 export class JudgeHandler implements StepHandler {
   readonly handles = ["judge"];
 
+  // Per-execution cache: re-evaluating the same (value, prompt) pair during a retry
+  // must return the same score to keep test outcomes deterministic.
+  // Scope: one JudgeHandler instance = one StepInterpreter = one test execution.
+  private readonly resultCache = new Map<string, { score: number; reason: string }>();
+
   constructor(private readonly llm: LLMProvider) {}
+
+  private cacheKey(value: string, prompt: string): string {
+    return crypto.createHash("sha256").update(`${value}\x00${prompt}`).digest("hex");
+  }
 
   async execute(step: StepAction, _adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
     if (step.action !== "judge") return;
@@ -68,41 +78,59 @@ export class JudgeHandler implements StepHandler {
       ? `${prompt}\nNote: input was truncated for length.`
       : prompt;
 
-    wwrite(`  ▶ judge      → evaluating via ${this.llm.name}`);
+    // ── Determinism cache: reuse result on retry instead of re-calling LLM ───
+    // Cache stores the normalized score so every consumer (compare, store, log) sees
+    // the identical value — no risk of toFixed(3) producing different results per call.
+    const key    = this.cacheKey(safeValue, safePrompt);
+    const cached = this.resultCache.get(key);
 
-    // ── Call LLM ─────────────────────────────────────────────────────────────
-    const res = await this.llm.complete({
-      system:      SYSTEM_PROMPT,
-      userMessage: `Value:\n${safeValue}\n\nCriteria:\n${safePrompt}`,
-      maxTokens:   150,
-    });
+    let score:  number;
+    let reason: string;
 
-    // ── Parse & validate — fail hard on any format deviation ─────────────────
-    let parsed: { score: number; reason: string };
-    try {
-      parsed = JudgeResponseSchema.parse(JSON.parse(res.content));
-    } catch {
-      throw new AssertionError("judge failed: invalid LLM response format");
+    if (cached) {
+      wwrite(`  ▶ judge      → cache hit (skipping LLM call)`);
+      score  = cached.score;
+      reason = cached.reason;
+    } else {
+      wwrite(`  ▶ judge      → evaluating via ${this.llm.name}`);
+
+      // ── Call LLM ─────────────────────────────────────────────────────────────
+      const res = await this.llm.complete({
+        system:      SYSTEM_PROMPT,
+        userMessage: `Value:\n${safeValue}\n\nCriteria:\n${safePrompt}`,
+        maxTokens:   150,
+      });
+
+      // ── Parse & validate — fail hard on any format deviation ─────────────────
+      let parsed: { score: number; reason: string };
+      try {
+        parsed = JudgeResponseSchema.parse(JSON.parse(res.content));
+      } catch {
+        throw new AssertionError("judge failed: invalid LLM response format");
+      }
+
+      // ── Normalize to 3 dp before caching — comparison, storage, and log all
+      //    read from the cache entry, guaranteeing one canonical value. ─────────
+      score  = Number(parsed.score.toFixed(3));
+      reason = parsed.reason;
+      this.resultCache.set(key, { score, reason });
     }
-
-    // ── Normalize score to 3 decimal places for stable comparisons ───────────
-    const score = Number(parsed.score.toFixed(3));
 
     // ── Evaluate pass_if (deterministic — never delegated to the LLM) ────────
     const { op, threshold } = parsePassIf(step.pass_if);
     const passed  = applyOp(op, score, threshold);
     const verdict = passed ? "pass" : "fail";
 
-    wlog(`      ↳ score=${score}  verdict=${verdict}  reason="${parsed.reason}"`);
+    wlog(`      ↳ score=${score}  verdict=${verdict}  reason="${reason}"`);
 
     // ── Store before asserting so the result is available for debugging ───────
     if (step.store_as) {
-      ctx.set(step.store_as, { score, verdict, reason: parsed.reason });
+      ctx.set(step.store_as, { score, verdict, reason });
     }
 
     if (!passed) {
       throw new AssertionError(
-        `Judge failed (score: ${score} ${op} ${threshold})\nReason: ${parsed.reason}`
+        `Judge failed (score: ${score} ${op} ${threshold})\nReason: ${reason}`
       );
     }
   }

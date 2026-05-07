@@ -50,6 +50,8 @@ export function makeStepKey(testName: string, stepIndex: number, action: string)
  */
 export class MemoryStore {
   private data: MemoryData;
+  // Mtime captured at load; used to detect concurrent writes before saving.
+  private loadMtime: number | null = null;
 
   constructor(
     private readonly filePath?: string,
@@ -166,8 +168,16 @@ export class MemoryStore {
   save(): void {
     if (!this.filePath) return;
     this.data.updated = new Date().toISOString();
-    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2), "utf-8");
+    const currentMtime = fileMtime(this.filePath);
+    if (this.loadMtime !== null && currentMtime !== null && currentMtime !== this.loadMtime) {
+      // Another worker wrote the file since we loaded — merge external changes.
+      try {
+        const diskRaw = JSON.parse(fs.readFileSync(this.filePath, "utf-8")) as MemoryData;
+        this.data = mergeMemoryData(diskRaw, this.data);
+      } catch { /* merge failed — proceed with our state */ }
+    }
+    atomicWrite(this.filePath, JSON.stringify(this.data, null, 2));
+    this.loadMtime = fileMtime(this.filePath); // update baseline for next save
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -202,6 +212,7 @@ export class MemoryStore {
   private load(filePath: string, suiteId: string): MemoryData {
     if (!fs.existsSync(filePath)) return this.fresh(suiteId);
     try {
+      this.loadMtime = fileMtime(filePath);
       const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as MemoryData;
       return {
         suiteId:       raw.suiteId       ?? suiteId,
@@ -210,7 +221,49 @@ export class MemoryStore {
         steps:         raw.steps         ?? {},
       };
     } catch {
+      this.loadMtime = null;
       return this.fresh(suiteId);
     }
   }
+}
+
+function atomicWrite(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, "utf-8");
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* ignore cleanup failure */ }
+    throw err;
+  }
+}
+
+function fileMtime(filePath: string): number | null {
+  try { return fs.statSync(filePath).mtimeMs; } catch { return null; }
+}
+
+/**
+ * Merges two MemoryData snapshots. `overlay` is our in-memory state; `base`
+ * is what another worker wrote to disk between our load and save.
+ * — Steps: union all keys; for conflicts keep the entry with the higher runCount.
+ * — llmCallsSaved: take max (avoids double-counting cross-worker cache hits).
+ */
+function mergeMemoryData(base: MemoryData, overlay: MemoryData): MemoryData {
+  const mergedSteps: Record<string, StepMemory> = {};
+  const allKeys = new Set([...Object.keys(base.steps), ...Object.keys(overlay.steps)]);
+
+  for (const key of allKeys) {
+    const b = base.steps[key];
+    const o = overlay.steps[key];
+    if (!b) { mergedSteps[key] = o; continue; }
+    if (!o) { mergedSteps[key] = b; continue; }
+    mergedSteps[key] = o.runCount >= b.runCount ? o : b;
+  }
+
+  return {
+    ...overlay,
+    steps:         mergedSteps,
+    llmCallsSaved: Math.max(base.llmCallsSaved, overlay.llmCallsSaved),
+  };
 }

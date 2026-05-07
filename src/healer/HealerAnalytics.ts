@@ -63,9 +63,19 @@ export class HealerAnalytics {
   // ── Run recording ──────────────────────────────────────────────────────────
 
   recordRun(record: RunRecord): void {
-    const runs = this.loadRuns();
+    const preMtime = fileMtime(this.logFile);
+    const runs     = this.loadRuns();
     runs.push(record);
-    this.saveRuns(runs);
+
+    const postMtime = fileMtime(this.logFile);
+    if (postMtime !== null && preMtime !== postMtime) {
+      // Another worker appended while we were loading — re-read and deduplicate by runId.
+      const fresh = this.loadRuns();
+      if (!fresh.some(r => r.runId === record.runId)) fresh.push(record);
+      this.saveRuns(fresh);
+    } else {
+      this.saveRuns(runs);
+    }
   }
 
   getMemoryReuseTrend(lastN = 10): RunRecord[] {
@@ -258,8 +268,23 @@ export class HealerAnalytics {
 
   private saveRuns(runs: RunRecord[]): void {
     try {
-      fs.mkdirSync(path.dirname(this.logFile), { recursive: true });
-      fs.writeFileSync(this.logFile, JSON.stringify(runs, null, 2));
+      atomicWrite(this.logFile, JSON.stringify(runs, null, 2));
     } catch { /* best-effort */ }
   }
+}
+
+function atomicWrite(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, "utf-8");
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* ignore cleanup failure */ }
+    throw err;
+  }
+}
+
+function fileMtime(filePath: string): number | null {
+  try { return fs.statSync(filePath).mtimeMs; } catch { return null; }
 }

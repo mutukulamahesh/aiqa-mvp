@@ -487,6 +487,12 @@ Each worker gets its own isolated browser context — no shared state, no race c
 
 `if` and `for_each` blocks are protected against infinite recursion. The engine enforces a maximum nesting depth and throws a clear error before the stack overflows.
 
+### Concurrency safety
+
+All file-based stores (`healer-cache.json`, `memory.json`, `healer-runs.json`) use atomic writes — data is written to a temp file then renamed in one POSIX-atomic operation. Concurrent workers can never read a partially-written file. On write conflict (another worker saved while we were loading), files are re-read and merged before writing.
+
+The DB connection pool is shared across workers within a process and safely closed once at teardown. Pool exhaustion surfaces as a clear error rather than an opaque hang.
+
 ---
 
 ## Intelligence Layer
