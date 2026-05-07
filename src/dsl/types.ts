@@ -16,6 +16,14 @@ export type StepAction =
       body?:         unknown;
       store_as?:     string;
       assert_status?: number;
+    }
+  | {
+      action:        "db";
+      query:         string;
+      params?:       unknown[];
+      store_as?:     string;
+      assert_rows?:  number;
+      assert_field?: Record<string, unknown>;
     };
 
 export interface TestDefinition {

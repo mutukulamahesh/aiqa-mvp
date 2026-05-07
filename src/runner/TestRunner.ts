@@ -93,14 +93,16 @@ export class TestRunner {
     const testId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const store: WorkerStore = { testId, testName: test.name, logs: [] };
 
-    const result = await workerStorage.run(store, () => this._runWithRetry(test, testId));
-
-    if (store.logs.length) {
-      process.stdout.write(store.logs.join(""));
-      store.logs = [];
+    try {
+      const result = await workerStorage.run(store, () => this._runWithRetry(test, testId));
+      return result;
+    } finally {
+      if (store.logs.length) {
+        process.stdout.write(store.logs.join(""));
+        store.logs = [];
+      }
+      await this.interpreter.teardown();
     }
-
-    return result;
   }
 
   // ── Retry wrapper ─────────────────────────────────────────────────────────

@@ -35,3 +35,16 @@ features:
 llm:
   provider: mock
   fallback: []
+
+# db_schema — route→table hints for FlowMapper DB suggestion (EPIC-10).
+# Uncomment and extend when you want generated tests to include db: validation steps.
+# method: which HTTP verbs on this route write to the table (default: all mutating verbs).
+#
+# db_schema:
+#   /api/users:
+#     table: users
+#     pk:    id
+#   /api/orders:
+#     table:  orders
+#     pk:     id
+#     method: [POST, DELETE]

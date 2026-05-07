@@ -140,6 +140,21 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     throw new Error(`Step[${idx}] assert: must have "text", "url", "visible", or "value+equals" key`);
   }
 
+  // db
+  if ("db" in raw) {
+    const db = raw.db as Record<string, unknown> | undefined;
+    if (!db) throw new Error(`Step[${idx}] db: empty`);
+    if (typeof db.query !== "string") throw new Error(`Step[${idx}] db: missing "query"`);
+    return {
+      action:       "db",
+      query:        db.query,
+      params:       Array.isArray(db.params) ? db.params : undefined,
+      store_as:     typeof db.store_as === "string" ? db.store_as : undefined,
+      assert_rows:  typeof db.assert_rows === "number" ? db.assert_rows : undefined,
+      assert_field: db.assert_field ? (db.assert_field as Record<string, unknown>) : undefined,
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -158,6 +173,6 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   }
 
   throw new Error(
-    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api. Got: ${JSON.stringify(raw)}`
+    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db. Got: ${JSON.stringify(raw)}`
   );
 }

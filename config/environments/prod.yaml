@@ -30,3 +30,15 @@ features:
 llm:
   provider: anthropic
   fallback: [mock]
+
+# db_schema — route→table hints for FlowMapper DB suggestion (EPIC-10).
+# Uncomment and extend when you want generated tests to include db: validation steps.
+#
+# db_schema:
+#   /api/users:
+#     table: users
+#     pk:    id
+#   /api/orders:
+#     table:  orders
+#     pk:     id
+#     method: [POST, DELETE]

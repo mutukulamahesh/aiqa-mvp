@@ -49,6 +49,22 @@ const EnvConfigSchema = z.object({
     fallback: z.array(z.enum(["anthropic", "openai", "nvidia", "gemini", "mock"])).default([]),
     model:    z.string().optional(),
   }).default({ provider: "mock", fallback: [] }),
+
+  db: z.object({
+    readOnly: z.boolean().default(true),
+  }).default({ readOnly: true }),
+
+  // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
+  // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
+  // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.
+  db_schema: z.record(
+    z.string(),
+    z.object({
+      table:  z.string(),
+      pk:     z.string().default("id"),
+      method: z.array(z.enum(["POST", "PUT", "PATCH", "DELETE"])).default(["POST", "PUT", "PATCH", "DELETE"]),
+    })
+  ).optional(),
 });
 
 export type EnvConfig = z.infer<typeof EnvConfigSchema>;
