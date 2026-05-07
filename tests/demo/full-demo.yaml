@@ -1,0 +1,197 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AIQA Feature Showcase — full-demo.yaml
+#
+# Exercises every built-in step type in one test.
+#
+# Public endpoints used (no credentials or running server required):
+#   https://jsonplaceholder.typicode.com  — fake REST API (GET/POST)
+#   https://www.saucedemo.com            — demo e-commerce site (login, inventory)
+#
+# Run (mock LLM, no API key needed):
+#   npx ts-node src/cli.ts run tests/demo/full-demo.yaml --headless
+#
+# Run with a real LLM judge:
+#   ANTHROPIC_API_KEY=sk-ant-... npx ts-node src/cli.ts run tests/demo/full-demo.yaml --headless
+# ─────────────────────────────────────────────────────────────────────────────
+
+test:
+  name: "AIQA Feature Showcase — all 13 step types"
+  tags: [demo, smoke, api, ui, judge]
+  retries: 1
+  variables:
+    api_base:      "https://jsonplaceholder.typicode.com"
+    expected_user: "Leanne Graham"
+    expected_city: "Gwenborough"
+
+  steps:
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 1 — API TESTING
+    # Fetches a known public resource, asserts fields, creates a new post.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # GET a single user — store the full response object
+    - api:
+        method: GET
+        url: "{{ api_base }}/users/1"
+        assert_status: 200
+        store_as: user
+
+    # Assert a top-level string field
+    - assert:
+        value: "{{ user.name }}"
+        equals: "{{ expected_user }}"
+
+    # Assert a deeply nested field (address.city)
+    - assert:
+        value: "{{ user.address.city }}"
+        equals: "{{ expected_city }}"
+
+    # POST — create a new resource, confirm the server echoes it back
+    - api:
+        method: POST
+        url: "{{ api_base }}/posts"
+        body:
+          title: "AIQA demo post"
+          body:  "Automated quality check powered by AIQA"
+          userId: 1
+        assert_status: 201
+        store_as: new_post
+
+    - assert:
+        value: "{{ new_post.title }}"
+        equals: "AIQA demo post"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 2 — LLM JUDGE
+    # Asks an LLM to score the post title against a quality criterion.
+    # With mock LLM this always scores 0.9 (passes). Swap in a real key for
+    # genuine AI evaluation.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    - judge:
+        value:    "{{ new_post.title }}"
+        prompt:   "Is this a clear, professional post title suitable for a tech blog? Score high if concise and descriptive."
+        pass_if:  "score >= 0.5"
+        store_as: title_score
+
+    # The verdict (pass/fail) is stored — assert it like any other variable
+    - assert:
+        value: "{{ title_score.verdict }}"
+        equals: "pass"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 3 — CONDITIONAL LOGIC
+    # Branching based on a stored value.  Only the inner steps run when the
+    # condition matches; the outer test continues regardless.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    - if:
+        variable: "user.name"
+        equals:   "Leanne Graham"
+        steps:
+          - assert:
+              value:  "{{ user.company.name }}"
+              equals: "Romaguera-Crona"
+          - assert:
+              value:  "{{ user.email }}"
+              equals: "Sincere@april.biz"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 4 — LOOP
+    # Fetches 5 comments for post 1, then iterates over each one to assert
+    # that every comment belongs to the correct post.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    - api:
+        method: GET
+        url: "{{ api_base }}/posts/1/comments"
+        assert_status: 200
+        store_as: comments
+
+    - for_each:
+        over: "comments"
+        as:   "comment"
+        steps:
+          - assert:
+              value:  "{{ comment.postId }}"
+              equals: "1"
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 5 — WEB UI AUTOMATION
+    # Logs in to the Saucedemo demo shop (public credentials, always available),
+    # captures page state, and verifies the inventory page loads correctly.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # Navigate to the login page
+    - navigate: "https://www.saucedemo.com"
+
+    # Wait until the username field is present before typing
+    - wait_for_element: "#user-name"
+
+    # Fill in the login form (standard_user is the public demo account)
+    - fill:
+        target: "#user-name"
+        value:  "standard_user"
+    - fill:
+        target: "#password"
+        value:  "secret_sauce"
+
+    # Click the login button
+    - click: "Login"
+
+    # Wait for the URL to reflect a successful login
+    - wait_for_url: "inventory"
+
+    # Assert the page heading is visible
+    - assert:
+        text: "Products"
+
+    # Assert the URL contains the expected path
+    - assert:
+        url: "inventory"
+
+    # Assert an element is present in the DOM
+    - assert:
+        visible: ".inventory_list"
+
+    # Capture the page title into a variable
+    - store:
+        selector: ".title"
+        as: page_title
+
+    # Assert the stored value matches what we expect
+    - assert:
+        value:  "{{ page_title }}"
+        equals: "Products"
+
+    # Pause briefly before the next action (useful to let animations settle)
+    - wait_ms: 300
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PART 6 — DATABASE TESTING (requires DATABASE_URL)
+    # Uncomment this block when a PostgreSQL connection is configured.
+    #
+    # Set in your environment profile (config/environments/dev.yaml):
+    #   db_schema:
+    #     host: localhost
+    #     port: 5432
+    #     database: myapp
+    #     user: postgres
+    #     password: postgres
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # - db:
+    #     query: "SELECT id, username FROM users WHERE active = true ORDER BY id LIMIT 5"
+    #     assert_rows: 5
+    #     store_as: active_users
+    #
+    # - assert:
+    #     value: "{{ active_users[0].username }}"
+    #     equals: "admin"
+    #
+    # - db:
+    #     query: "SELECT COUNT(*) AS total FROM orders WHERE status = $1"
+    #     params: ["completed"]
+    #     assert_field:
+    #       total: 42

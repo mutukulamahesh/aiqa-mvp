@@ -1,24 +1,21 @@
 # AIQA — Enterprise AI QA Platform
 
-A plug-and-play, AI-powered QA platform that unifies web automation, API testing, and autonomous test generation into a single config-driven system.
+> One YAML file. Any stack. Web, API, database, and AI — tested end-to-end.
 
-> Full platform vision: see [VISION.md](VISION.md)
+AIQA is a plug-and-play, AI-powered test automation platform. Write tests in a simple YAML DSL, run them locally or in CI, and let the platform autonomously explore your app, generate test suites, heal broken selectors, and score your release readiness — all without changing a line of code.
 
 ---
 
-## What it does
+## What makes AIQA different
 
-- **Init a project** in one command — folder structure, sample test, ready to run
-- **Explore any app** autonomously and map its pages and flows
-- **Generate test files** per page or per flow — no manual test writing
-- **Run tests** defined in YAML — web UI, API, or mixed
-- **Orchestrate the full pipeline** — one command: explore → map → generate → run → score
-- **Self-heal broken selectors** — when a locator fails, AIQA repairs it via LLM and caches the fix
-- **Analytics after every run** — top unstable pages, most healed selectors, LLM calls saved
-- **Diagnose failures** automatically with AI root-cause analysis and screenshots
-- **Score readiness** — get a 0–100 grade on your test coverage
-- **HTML reports** generated automatically after every run
-- **Plug in real LLM** (Claude) at any time — no code changes needed
+| Feature | AIQA | Traditional tools |
+|---|---|---|
+| Test authoring | YAML — readable by anyone | Code in Python/JS |
+| Selector healing | Automatic via LLM | Manual fix required |
+| Test generation | Autonomous from live app crawl | Manual |
+| AI response validation | Built-in `judge:` step | None |
+| DB + API + UI in one file | Yes | Separate tools |
+| Works without API key | Yes (mock LLM) | N/A |
 
 ---
 
@@ -27,15 +24,17 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - Node.js v18 or higher
 - npm
 
----
-
-## Installation
-
 ```bash
 git clone https://github.com/mutukulamahesh/aiqa-mvp.git
 cd aiqa-mvp
 npm install
-npx playwright install
+npx playwright install chromium
+```
+
+Run the environment check:
+
+```bash
+npx ts-node src/cli.ts doctor
 ```
 
 ---
@@ -49,341 +48,560 @@ npx ts-node src/cli.ts generate --out myproject --per-page
 npx ts-node src/cli.ts run-all --out myproject --headless
 ```
 
-This creates a complete project folder:
+Or run the entire pipeline in a single command:
 
-```
-myproject/
-  exploration.json          ← live page map from the crawl
-  tests/
-    page_home.yaml          ← one test file per discovered page
-    page_about.yaml
-    page_contact.yaml
-  results/
-    run-2026-01-15T10-30-45.json   ← auto-saved after every run
-    report.html                    ← HTML report auto-saved after every run
-  screenshots/
-    step-3-fail.png         ← captured automatically on any step failure
+```bash
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --out myproject --headless
 ```
 
 ---
 
-## CLI Reference
+## Full Platform Demo
 
-### `aiqa init <project>` — Create a project workspace
-
-```bash
-npx ts-node src/cli.ts init myproject
-```
-
-Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starter `tests/sample.yaml`.
-
----
-
-### `aiqa explore <url>` — Crawl an application
-
-Navigates the app, maps all pages, forms, buttons, and internal links into a structured JSON file.
+[`tests/demo/full-demo.yaml`](tests/demo/full-demo.yaml) exercises every step type in one test — no server setup required.
 
 ```bash
-# Save into a project folder
-npx ts-node src/cli.ts explore https://yourapp.com --out myproject --max-pages 20
+# No API key needed — uses mock LLM
+npx ts-node src/cli.ts run tests/demo/full-demo.yaml --headless
 
-# Or save to an explicit path
-npx ts-node src/cli.ts explore https://yourapp.com --output exploration.json
+# With a real LLM judge
+ANTHROPIC_API_KEY=sk-ant-... npx ts-node src/cli.ts run tests/demo/full-demo.yaml --headless
 ```
 
-Options:
-- `--out <folder>` — project folder; saves to `<folder>/exploration.json`
-- `--output <file>` — explicit output file path
-- `--max-pages <n>` — maximum pages to crawl (default: 10)
-
-Output:
-```
-✅ Explored 5 page(s), 17 internal link(s)
-   • https://yourapp.com          — Home
-   • https://yourapp.com/about    — About
-   • https://yourapp.com/contact  — Contact
-
-   Saved → myproject/exploration.json
-```
-
----
-
-### `aiqa generate [exploration]` — Generate test scenarios
-
-Reads an exploration file, identifies user flows or individual pages, and generates ready-to-run YAML test files.
-
-```bash
-# Generate one test per page (recommended for new projects)
-npx ts-node src/cli.ts generate --out myproject --per-page
-
-# Generate one test per flow (auth, forms, navigation)
-npx ts-node src/cli.ts generate --out myproject
-
-# Explicit paths
-npx ts-node src/cli.ts generate exploration.json --output tests/
-```
-
-Options:
-- `--out <folder>` — project folder; reads `<folder>/exploration.json`, writes to `<folder>/tests/`
-- `--output <dir>` — explicit output directory
-- `--per-page` — one test file per discovered page instead of per flow
-- `--jira <projectKey>` — also pull mock Jira stories and generate scenarios
-
-Output:
-```
-   ✔ page_home.yaml      [navigation]
-   ✔ page_about.yaml     [navigation]
-   ✔ page_contact.yaml   [navigation]
-
-✅ Generated 3 scenario(s) → myproject/tests/
-```
-
----
-
-### `aiqa run <file>` — Run a single test file
-
-```bash
-npx ts-node src/cli.ts run tests/example.yaml --headless
-npx ts-node src/cli.ts run tests/example.yaml --out myproject --headless
-```
-
-Options:
-- `--headless` — run browser in headless mode (required in CI / no display)
-- `--out <folder>` — saves screenshots, results JSON, and HTML report into the project folder
-- `--report <file>` — explicit HTML report output path
-
-On failure the DebuggerAgent automatically classifies the error, suggests a fix, and captures a screenshot:
-```
-✗ FAILED: assertTextVisible: text "Submit" not found on page
-🔍 [locator_failure] Check that the selector matches what is rendered.
-📸 Screenshot → myproject/screenshots/step-3-fail.png
-```
-
----
-
-### `aiqa run-all [dir]` — Run all tests in a directory
-
-```bash
-# Using project folder (recommended)
-npx ts-node src/cli.ts run-all --out myproject --headless
-
-# Explicit directory
-npx ts-node src/cli.ts run-all myproject/tests/ --headless --report myproject/results/report.html
-```
-
-Options:
-- `--out <folder>` — project folder; runs `<folder>/tests/`, saves results + HTML to `<folder>/results/`
-- `--headless` — run browser in headless mode
-- `--report <file>` — explicit HTML report output path
-- `--results <file>` — explicit JSON results output path
-- `--base-url <url>` — base URL shown in the report header
-
-Output:
-```
-   Ran   : 4 test(s)
-   Passed: 4   Failed: 0
-   JSON  → myproject/results/run-2026-01-15T10-30-45.json
-   HTML  → myproject/results/report.html
-```
-
----
-
-### `aiqa orchestrate --url <url>` — Full pipeline in one command
-
-Runs the complete pipeline: Explore → Map flows → Generate scenarios → Run tests → Score readiness.
-
-```bash
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --headless
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run   # generate only, skip execution
-npx ts-node src/cli.ts orchestrate --url https://yourapp.com --out myproject
-```
-
-Options:
-- `--url <url>` — target application URL (required)
-- `--headless` — run browser in headless mode
-- `--dry-run` — generate scenarios but do not execute them
-- `--out <folder>` — save `orchestrator-summary.json` to this folder
-- `--max-pages <n>` — page crawl limit (default: 10)
-
-Output:
-```
-[1/5] [Explorer] Exploring https://yourapp.com
-[2/5] [FlowMapper] Mapping flows (4 pages found)
-[3/5] [Generator] Generating scenarios (3 flows)
-[4/5] [Runner] Running 3 valid scenario(s)
-[5/5] [Scorer] Scoring readiness
-
-   Status  : success
-   Score   : 75/100 (C)
-   Flows   : 3   Scenarios: 3   Passed: 2   Failed: 1
-   Memory reuse: seeded selectors: 4  ·  heals avoided: 4
-
-━━━ Healer Analytics ━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   LLM calls saved   : 4  (across 2 runs)
-   ...
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
-On the first run the healer cache is cold. From run 2 onward, previously healed selectors are reused directly and the analytics block appears.
-
----
-
-### `aiqa score <results.json>` — Readiness scoring
-
-Computes a 0–100 readiness score from saved test results.
-
-```bash
-npx ts-node src/cli.ts score myproject/results/run-2026-01-15T10-30-45.json
-```
-
-Output:
-```
-📊 Readiness Report
-   Score   : 88/100  (B)
-   Tests   : 7/8 passed  (87%)
-   Coverage: UI, Assertions
-   Issues  : 1 test failed
-
-   Good coverage. Address failing tests before releasing.
-```
+What the demo covers: API GET/POST · LLM judge · conditional branching · loop over API list · login form fill · wait/store/assert · DB stub
 
 ---
 
 ## YAML Test Format
 
-### Web automation
+Every test is a `.yaml` file. The header sets metadata; the `steps` list runs in order.
 
 ```yaml
 test:
-  name: "Login flow"
+  name: "My test"
+  tags: [smoke, regression]
+  retries: 2                   # retry on transient failures only
   variables:
-    base_url: "https://yourapp.com"
+    base_url: "https://staging.example.com"
+
   steps:
-    - navigate: "{{ base_url }}/login"
-    - fill:
-        target: "email"
-        value: "user@example.com"
-    - fill:
-        target: "password"
-        value: "secret"
-    - click: "Sign in"
+    - navigate: "{{ base_url }}"
     - assert:
-        url: "dashboard"
-    - assert:
-        text: "Welcome back"
+        text: "Welcome"
 ```
 
-### API testing
+Use `{{ variable }}` anywhere in step values. Dot notation traverses stored objects: `{{ user.address.city }}`.
+
+---
+
+## Step Reference
+
+### Web UI
+
+**`navigate`** — go to a URL
 
 ```yaml
-test:
-  name: "User API — fetch and assert"
-  steps:
-    - api:
-        method: GET
-        url: "https://api.example.com/users/1"
-        assert_status: 200
-        store_as: user
-    - assert:
-        value: "{{ user.name }}"
-        equals: "Alice"
-    - api:
-        method: POST
-        url: "https://api.example.com/posts"
-        body:
-          title: "Test post"
-          userId: 1
-        assert_status: 201
-        store_as: post
-    - assert:
-        value: "{{ post.title }}"
-        equals: "Test post"
+- navigate: "https://example.com"
+- navigate: "{{ base_url }}/login"
 ```
 
-### Supported step types
+**`click`** — click by visible text or CSS selector
 
-| Step | Description |
+```yaml
+- click: "Sign in"
+- click: "#submit-btn"
+```
+
+**`fill`** — type into an input field
+
+```yaml
+- fill:
+    target: "#email"
+    value:  "user@example.com"
+- fill:
+    target: "Password"
+    value:  "{{ env_password }}"
+```
+
+**`store`** — capture element text (or attribute) into a named variable
+
+```yaml
+- store:
+    selector:  ".order-id"
+    as:        order_id
+- store:
+    selector:  "img.avatar"
+    attribute: "src"
+    as:        avatar_url
+```
+
+---
+
+### Assertions
+
+All four assertion kinds resolve template variables before comparing.
+
+**`assert: text`** — text is visible anywhere on the page
+
+```yaml
+- assert:
+    text: "Order confirmed"
+```
+
+**`assert: url`** — current URL contains substring
+
+```yaml
+- assert:
+    url: "dashboard"
+```
+
+**`assert: visible`** — element exists in DOM
+
+```yaml
+- assert:
+    visible: ".success-banner"
+```
+
+**`assert: value + equals`** — stored/template value equals expected
+
+```yaml
+- assert:
+    value:  "{{ user.name }}"
+    equals: "Alice"
+- assert:
+    value:  "{{ page_title }}"
+    equals: "Products"
+```
+
+---
+
+### API Testing
+
+**`api`** — make an HTTP request, optionally assert status and store the response
+
+```yaml
+# GET with status check + store
+- api:
+    method: GET
+    url: "https://api.example.com/users/1"
+    assert_status: 200
+    store_as: user
+
+# Use stored fields in later steps
+- assert:
+    value:  "{{ user.name }}"
+    equals: "Alice"
+
+# POST with body
+- api:
+    method: POST
+    url: "https://api.example.com/orders"
+    headers:
+      Authorization: "Bearer {{ token }}"
+    body:
+      product_id: 42
+      quantity:   1
+    assert_status: 201
+    store_as: order
+```
+
+Supported methods: GET · POST · PUT · PATCH · DELETE · HEAD
+
+---
+
+### Database Testing
+
+**`db`** — run a SQL query (PostgreSQL). Requires `db_schema` in your environment config.
+
+```yaml
+# Assert row count
+- db:
+    query:       "SELECT * FROM users WHERE active = true"
+    assert_rows: 10
+
+# Assert a specific field value
+- db:
+    query: "SELECT status FROM orders WHERE id = 1"
+    assert_field:
+      status: "completed"
+
+# Parameterised query + store result
+- db:
+    query:    "SELECT id, name FROM products WHERE category = $1"
+    params:   ["electronics"]
+    store_as: products
+
+- assert:
+    value:  "{{ products[0].name }}"
+    equals: "Laptop Pro"
+```
+
+Configure the connection in your environment YAML:
+
+```yaml
+# config/environments/dev.yaml
+db_schema:
+  host:     localhost
+  port:     5432
+  database: myapp
+  user:     postgres
+  password: postgres
+```
+
+---
+
+### Wait Steps
+
+**`wait_for_element`** — wait until a CSS selector is visible (optional per-step timeout)
+
+```yaml
+- wait_for_element: "#submit"
+- wait_for_element:
+    selector: ".spinner"
+    timeout:  10000        # ms — overrides global default
+```
+
+**`wait_ms`** — fixed pause in milliseconds
+
+```yaml
+- wait_ms: 500
+```
+
+**`wait_for_url`** — wait until the current URL contains a substring
+
+```yaml
+- wait_for_url: "dashboard"
+- wait_for_url: "/checkout/confirmation"
+```
+
+---
+
+### Flow Control
+
+**`if`** — run sub-steps only when a variable equals a value
+
+```yaml
+- if:
+    variable: "user.role"
+    equals:   "admin"
+    steps:
+      - assert:
+          text: "Admin Panel"
+      - click: "Manage Users"
+```
+
+**`for_each`** — iterate over a stored array, exposing each item as a loop variable
+
+```yaml
+# First store a list (e.g. from an API call)
+- api:
+    method:   GET
+    url:      "https://api.example.com/orders"
+    store_as: orders
+
+# Then iterate
+- for_each:
+    over: "orders"
+    as:   "order"
+    steps:
+      - assert:
+          value:  "{{ order.status }}"
+          equals: "completed"
+```
+
+Maximum 100 iterations per loop. Nested loops are supported (depth guard prevents infinite recursion).
+
+---
+
+### LLM Judge
+
+**`judge`** — ask an LLM to score a value against natural-language criteria (0.0–1.0). The verdict is **always computed deterministically** from `pass_if` — it is never delegated to the LLM.
+
+```yaml
+- judge:
+    value:    "{{ api_response.summary }}"
+    prompt:   "Does this summary accurately describe a product without hallucinations? Score high for factual, concise text."
+    pass_if:  "score >= 0.7"
+    store_as: summary_score
+
+# The score, verdict, and reason are all stored
+- assert:
+    value:  "{{ summary_score.verdict }}"
+    equals: "pass"
+```
+
+`pass_if` operators: `>=` · `<=` · `>` · `<`
+
+Score is normalised to 3 decimal places. Input longer than 5 000 characters is truncated automatically (LLM is notified). Empty input throws immediately without calling the LLM.
+
+Works with the built-in mock LLM (no API key) and upgrades automatically when a provider key is set.
+
+---
+
+## CLI Reference
+
+| Command | Description |
 |---|---|
-| `navigate: <url>` | Navigate to a URL |
-| `click: <text>` | Click a button or link by visible text |
-| `fill: { target, value }` | Fill an input field |
-| `assert: { text }` | Assert text is visible on the page |
-| `assert: { url }` | Assert current URL contains substring |
-| `assert: { value, equals }` | Assert a stored variable equals expected |
-| `api: { method, url, ... }` | Make an HTTP request, optionally store response |
+| `init <project>` | Scaffold workspace: `tests/`, `results/`, `screenshots/` |
+| `doctor` | Check Node, Playwright, API keys |
+| `explore <url>` | Crawl app → `exploration.json` |
+| `generate` | Turn exploration into YAML test files |
+| `run <file>` | Run a single YAML test |
+| `run-all [dir]` | Run every YAML in a directory |
+| `orchestrate` | Full pipeline: explore → map → generate → run → score |
+| `import --file` | Import from Excel / CSV / text → YAML |
+| `score <results>` | Compute 0–100 readiness grade |
+| `help` | Quick-start guide |
 
-### Template variables
+### Key flags
 
-Use `{{ variable }}` anywhere in step values. Dot notation traverses stored objects:
+```bash
+# Environment
+npx ts-node src/cli.ts run-all --out myproject --env staging
 
-```yaml
-variables:
-  base_url: "https://staging.example.com"
+# Parallelism
+npx ts-node src/cli.ts run-all --out myproject --workers 4
 
-steps:
-  - navigate: "{{ base_url }}/profile"
-  - assert:
-      value: "{{ user.address.city }}"
-      equals: "London"
+# Tag filtering
+npx ts-node src/cli.ts run-all --out myproject --tags smoke,regression
+
+# Circuit breaker: abort after 3 consecutive failures
+npx ts-node src/cli.ts run-all --out myproject --circuit-breaker 3
+
+# Orchestrate without running tests (explore + generate only)
+npx ts-node src/cli.ts orchestrate --url https://yourapp.com --dry-run
+
+# Import external test cases
+npx ts-node src/cli.ts import --file test-cases.xlsx --out myproject --run
 ```
 
 ---
 
 ## LLM Integration
 
-AIQA works out of the box without any API key and upgrades seamlessly to a real provider when one is configured. Five providers are supported — pick whichever you have access to.
+AIQA works out of the box with **no API key** (rule-based mock). Set any key to enable real AI.
 
 ### Supported providers
 
 | Provider | Env var | Notes |
 |---|---|---|
 | `mock` (default) | — | Rule-based, zero dependencies, always works |
-| `anthropic` | `ANTHROPIC_API_KEY` | Claude — `npm install @anthropic-ai/sdk` required |
+| `anthropic` | `ANTHROPIC_API_KEY` | Claude — `npm install @anthropic-ai/sdk` |
 | `openai` | `OPENAI_API_KEY` | GPT-4o-mini default |
-| `nvidia` | `NVIDIA_API_KEY` | Free API at [build.nvidia.com](https://build.nvidia.com) — OpenAI-compatible |
-| `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash default |
+| `nvidia` | `NVIDIA_API_KEY` | Free tier at build.nvidia.com — OpenAI-compatible |
+| `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash |
 
-### Quick start
+The factory auto-detects whichever key is present (priority: Anthropic → OpenAI → NVIDIA → Gemini → mock). No code changes required.
 
-```bash
-# Anthropic
-export ANTHROPIC_API_KEY="sk-ant-..."
-npm install @anthropic-ai/sdk
-
-# OpenAI
-export OPENAI_API_KEY="sk-..."
-
-# NVIDIA (free tier available)
-export NVIDIA_API_KEY="nvapi-..."
-
-# Gemini
-export GEMINI_API_KEY="AIza..."
-```
-
-No code changes required — the factory auto-detects whichever key is present (priority: Anthropic → OpenAI → NVIDIA → Gemini → mock).
-
-### Configuring via YAML environment profile
+### Fallback chains
 
 ```yaml
 # config/environments/prod.yaml
 llm:
   provider: anthropic
-  fallback: [openai, mock]   # tried in order if primary fails
-  model: claude-opus-4-7     # optional — overrides provider default
+  fallback:  [openai, mock]    # tried in order if primary fails
+  model: claude-opus-4-7       # optional — overrides provider default
 ```
 
-### Fallback chains
-
-Set `LLM_FALLBACK` or configure `fallback:` in the YAML profile to build a resilience chain:
-
 ```bash
+# Or via env vars
 export LLM_PROVIDER=anthropic
 export LLM_FALLBACK=openai,mock
 ```
 
-- Transient failures (rate limits, server errors) advance to the next provider
-- Non-retryable failures (invalid API key, bad request) fail immediately
-- A warning is logged whenever a fallback provider is activated
+Transient failures (rate limits, server errors) advance to the next provider. Non-retryable errors (bad API key, malformed request) fail immediately. A warning is logged whenever a fallback activates.
+
+---
+
+## Configuration
+
+Environment profiles let you target dev / staging / prod without changing test files.
+
+```yaml
+# config/environments/staging.yaml
+environment: staging
+
+urls:
+  base: "https://staging.example.com"
+  api:  "https://api.staging.example.com"
+
+execution:
+  headless:       true
+  workers:        4
+  maxPages:       20
+  circuitBreaker: 5
+
+timeouts:
+  action:     10000
+  navigation: 30000
+
+llm:
+  provider: anthropic
+  fallback:  [mock]
+
+db_schema:
+  host:     staging-db.internal
+  port:     5432
+  database: app_staging
+  user:     qa_user
+  password: "${DB_PASSWORD}"    # injected from .env
+```
+
+Use `--env staging` on any command. Secret values are read from `.env` at startup. Missing secrets print a warning but do not abort the run.
+
+---
+
+## Resilience
+
+### Retry
+
+Add `retries:` to any test. Only transient failures (timeout, locator not found) are retried — assertion failures are not.
+
+```yaml
+test:
+  name: "Flaky login flow"
+  retries: 3
+  steps:
+    - navigate: "..."
+```
+
+### Circuit breaker
+
+Stop burning CI minutes when the app is clearly broken.
+
+```bash
+npx ts-node src/cli.ts run-all --out myproject --circuit-breaker 5
+```
+
+After 5 consecutive failures the suite aborts. Remaining tests are marked skipped.
+
+### Parallel workers
+
+```bash
+npx ts-node src/cli.ts run-all --out myproject --workers 8
+```
+
+Each worker gets its own isolated browser context — no shared state, no race conditions.
+
+### Depth guard
+
+`if` and `for_each` blocks are protected against infinite recursion. The engine enforces a maximum nesting depth and throws a clear error before the stack overflows.
+
+---
+
+## Intelligence Layer
+
+### Self-Healing Selectors
+
+When a locator fails, the `SelectorHealer` tries four repair strategies in order:
+
+1. Text match — find element by visible text
+2. Role match — find by ARIA role
+3. Semantic match — LLM suggests an equivalent selector
+4. CSS fallback — best-effort structural match
+
+Healed selectors are stored in `.aiqa/healer-cache.json` with confidence scores. On the next run they are reused immediately, saving an LLM call.
+
+### Memory Store
+
+Tracks per-step flakiness across runs. Steps that fail repeatedly get a longer retry wait automatically. The memory report is printed after every `run-all`:
+
+```
+━━━ Memory Report ━━━
+  Known patterns  : 12
+  Flaky steps     : 3
+  Avg wait boost  : +800ms on flaky steps
+━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Healer Analytics
+
+After every `orchestrate` run:
+
+```
+━━━ Healer Analytics ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  LLM calls saved   : 8  (across 3 runs)
+  Top unstable page : /checkout  (4 heals)
+  Most healed       : #submit-btn  (3 times)
+  Flakiest step     : click "Confirm" on /checkout
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### LLM Judge
+
+The `judge:` step embeds AI evaluation directly into your test suite. Useful for:
+
+- Validating AI-generated content for hallucinations
+- Scoring response quality against acceptance criteria
+- Asserting tone, completeness, or factual accuracy
+
+The score comes from the LLM; the pass/fail verdict is always computed deterministically from your `pass_if` expression.
+
+---
+
+## Test Importer
+
+Import existing test cases from any format and run them immediately.
+
+```bash
+# From Excel
+npx ts-node src/cli.ts import --file test-cases.xlsx --out myproject --run
+
+# From CSV
+npx ts-node src/cli.ts import --file test-cases.csv --tags smoke --out myproject
+
+# From Gherkin / plain text
+npx ts-node src/cli.ts import --file features/login.feature --out myproject
+
+# Save import report
+npx ts-node src/cli.ts import --file tests.csv --out myproject --report
+```
+
+Supported formats: `.xlsx` · `.xls` · `.csv` · `.feature` · `.txt`
+
+---
+
+## HTML Reports
+
+Every `run`, `run-all`, `orchestrate`, and `import --run` generates a self-contained HTML report.
+
+```bash
+npx ts-node src/cli.ts run tests/demo/full-demo.yaml --out myproject
+# → myproject/results/report.html
+```
+
+The report includes: pass/fail per test · step-level error messages · screenshots on failure · healer and memory summaries.
+
+---
+
+## CI / CD
+
+A ready-to-use GitHub Actions workflow is included.
+
+```yaml
+# .github/workflows/aiqa.yml (already in this repo)
+on:
+  push:
+    branches: [main, phase*]
+  schedule:
+    - cron: "0 2 * * *"    # nightly
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aiqa-results
+          path: results/
+```
 
 ---
 
@@ -391,66 +609,90 @@ export LLM_FALLBACK=openai,mock
 
 ```
 src/
-  cli.ts                        # CLI entry point (all commands)
+  cli.ts                    CLI entry point (all commands)
+  config/
+    ConfigLoader.ts         Zod-validated YAML environment loader + dotenv
   dsl/
-    types.ts                    # DSL type definitions
-    DslParser.ts                # YAML → TestDefinition parser
+    types.ts                All 13 step type definitions
+    DslParser.ts            YAML → TestDefinition parser
   execution/
-    ExecutionContext.ts          # Runtime variable store + template resolver
-    StepInterpreter.ts          # Thin orchestrator — routes steps to handlers
-    HandlerRegistry.ts          # Handler registration and lookup
-    APIExecutor.ts              # HTTP fetch wrapper with timeout + abort
+    ExecutionContext.ts     Runtime variable store + {{ template }} resolver
+    StepInterpreter.ts      Routes steps to handlers
+    HandlerRegistry.ts      Handler registration and lookup
+    APIExecutor.ts          HTTP fetch wrapper with timeout + abort
+    DepthGuard.ts           Recursion depth limiter for if/for_each
+    WorkerContext.ts        AsyncLocalStorage log buffering (parallel isolation)
   handlers/
-    UIActionHandler.ts          # navigate, click, fill
-    AssertionHandler.ts         # assert (text, url, equals)
-    APIActionHandler.ts         # api step execution
+    UIActionHandler.ts      navigate · click · fill
+    AssertionHandler.ts     assert (text · url · visible · equals)
+    APIActionHandler.ts     api step
+    DBActionHandler.ts      db step (Knex, PostgreSQL)
+    WaitHandler.ts          wait_for_element · wait_ms · wait_for_url
+    StoreHandler.ts         store (element text/attribute capture)
+    ConditionHandler.ts     if branching
+    LoopHandler.ts          for_each (max 100 iterations, depth guard)
+    JudgeHandler.ts         judge (LLM scoring, deterministic pass_if)
   adapter/
-    AdapterActions.ts           # Browser adapter interface (includes screenshot)
-    PlaywrightAdapter.ts        # Playwright implementation + transparent selector healing
+    AdapterActions.ts       Browser adapter interface
+    PlaywrightAdapter.ts    Playwright impl + transparent selector healing
   runner/
-    TestRunner.ts               # End-to-end test orchestration, retry, circuit breaker
+    TestRunner.ts           End-to-end orchestration, retry, circuit breaker
   reporters/
-    HTMLReporter.ts             # Self-contained HTML report generator
+    HTMLReporter.ts         Self-contained HTML report generator
   llm/
-    LLMProvider.ts              # Interface, types, createLLMProvider() factory
-    MockLLMProvider.ts          # Rule-based, no API key needed
-    AnthropicLLMProvider.ts     # Claude (requires @anthropic-ai/sdk)
-    OpenAILLMProvider.ts        # OpenAI + NVIDIA (fetch-based, no extra deps)
-    GeminiLLMProvider.ts        # Google Gemini (fetch-based, no extra deps)
-    FallbackLLMProvider.ts      # Chains providers; retryable-error classification; degradation warning
+    LLMProvider.ts          Interface + createLLMProvider() factory
+    MockLLMProvider.ts      Rule-based mock (no API key)
+    AnthropicLLMProvider.ts Claude
+    OpenAILLMProvider.ts    OpenAI + NVIDIA (fetch-based, no extra deps)
+    GeminiLLMProvider.ts    Google Gemini (fetch-based, no extra deps)
+    FallbackLLMProvider.ts  Provider chain with retryable-error classification
   agents/
-    OrchestratorAgent.ts        # Full pipeline coordinator: Explorer → FlowMapper → Generator → Runner → Scorer
-    DebuggerAgent.ts            # Failure classification + fix suggestions (memory-backed)
-    AppExplorer.ts              # Playwright-based app crawler
-    FlowMapper.ts               # Flow identification + healer-seeded step generation
-    ScenarioGenerator.ts        # Flow → YAML test file generator
-    ReadinessScorer.ts          # 0–100 readiness score
+    OrchestratorAgent.ts    Full pipeline coordinator
+    AppExplorer.ts          Playwright-based BFS app crawler
+    FlowMapper.ts           Page → user flow mapper (healer-seeded steps)
+    ScenarioGenerator.ts    Flow → valid YAML test generator
+    DebuggerAgent.ts        LLM failure classification + fix suggestions
+    ReadinessScorer.ts      0–100 readiness score with grade + recommendations
   healer/
-    SelectorHealer.ts           # LLM-powered locator repair with semantic scoring + visibility guard
-    HealerCache.ts              # Persisted selector store — confidence, score decay, lifecycle state
-    HealerAnalytics.ts          # Analytics: unstable pages, healed selectors, flakiest steps, LLM savings
-    contextKey.ts               # SPA context fingerprint — SHA-256 of page title + headings
+    SelectorHealer.ts       4-strategy LLM repair: text → role → semantic → CSS
+    HealerCache.ts          Persisted selector store with confidence scores
+    HealerAnalytics.ts      Unstable pages, healed selectors, LLM savings report
+    contextKey.ts           SPA fingerprint (SHA-256 of title + headings)
   memory/
-    MemoryStore.ts              # Cross-run flakiness scores + known-pattern cache
-    types.ts                    # KnownPattern, StepMemory, MemoryData
+    MemoryStore.ts          Cross-run flakiness scores + known-pattern cache
+    types.ts                KnownPattern · StepMemory · MemoryData
+  db/
+    DBAdapter.ts            DB adapter interface
+    KnexDBAdapter.ts        PostgreSQL implementation via Knex
+    MockDBAdapter.ts        In-memory mock for testing
+    DBAdapterFactory.ts     Selects real or mock based on config
+  importers/
+    ExcelImporter.ts        .xlsx/.xls → TestCase[]
+    CSVImporter.ts          .csv → TestCase[]
+    TextImporter.ts         .feature/.txt → TestCase[]
+    TestCaseTranslator.ts   TestCase → YAML DSL
+    ImportOrchestrator.ts   Coordinates all importers, validates output
   integrations/
-    JiraAdapter.ts              # Jira story → flow converter (mock + stub)
-
-.aiqa/
-  healer-cache.json             # Persisted healer selector store (created on first heal)
-  healer-runs.json              # Run history for analytics (created after first orchestrate run)
+    JiraAdapter.ts          Jira story → flow converter (mock + stub)
 
 tests/
-  example.yaml                  # Web automation example
-  api_example.yaml              # API testing example
-```
+  demo/
+    full-demo.yaml          All 13 step types — runs without a server
+  example.yaml              Simple web UI example
+  api_example.yaml          API testing example
+  saucedemo/                Login, checkout, add-to-cart flows
+  flow-control/             wait, store, if, for_each tests
+  judge/                    LLM judge tests (61 unit tests)
 
----
+config/
+  environments/
+    dev.yaml                Local development profile
+    staging.yaml            Staging profile
+    prod.yaml               Production profile
 
-## Building for production
-
-```bash
-npm run build        # compile TypeScript → dist/
+.aiqa/
+  healer-cache.json         Persisted healer selector store
+  healer-runs.json          Run history for analytics
 ```
 
 ---
@@ -458,9 +700,17 @@ npm run build        # compile TypeScript → dist/
 ## Technologies
 
 - [TypeScript](https://www.typescriptlang.org/)
-- [Playwright](https://playwright.dev/) — web automation, app crawling, and screenshots
-- [js-yaml](https://github.com/nodeca/js-yaml) — YAML test file parsing
+- [Playwright](https://playwright.dev/) — browser automation, crawling, screenshots
+- [Knex](https://knexjs.org/) — SQL query builder (PostgreSQL)
+- [Zod](https://zod.dev/) — runtime schema validation
+- [js-yaml](https://github.com/nodeca/js-yaml) — YAML parsing
 - [Commander.js](https://github.com/tj/commander.js) — CLI interface
+
+---
+
+## Platform Metrics
+
+**16 test suites · 444 tests · 0 failures**
 
 ---
 
