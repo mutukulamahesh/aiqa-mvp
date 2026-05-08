@@ -67,7 +67,8 @@ export class CdpAdapter {
     }
     this.target = target;
     this.attached = true;
-    // Enable lifecycle events so waitForNavigation() can listen for "load".
+    // Page.enable is required for Page.loadEventFired to be dispatched.
+    await this.send("Page.enable");
     await this.send("Page.setLifecycleEventsEnabled", { enabled: true });
   }
 
@@ -252,6 +253,15 @@ export class CdpAdapter {
 
   private waitForNavigation(timeoutMs: number): Promise<void> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        chrome.debugger.onEvent.removeListener(listener);
+        resolve();
+      };
+
       const timer = setTimeout(() => {
         chrome.debugger.onEvent.removeListener(listener);
         reject(new Error(`Navigation timed out after ${timeoutMs}ms`));
@@ -263,12 +273,13 @@ export class CdpAdapter {
         params: unknown
       ) => {
         if (source.tabId !== this.target?.tabId) return;
+        // Page.loadEventFired is the most reliable signal (requires Page.enable).
+        if (method === "Page.loadEventFired") { done(); return; }
+        // Lifecycle events as secondary triggers for SPAs / cached navigations.
         if (method === "Page.lifecycleEvent") {
           const p = params as { name: string };
-          if (p.name === "load" || p.name === "networkIdle") {
-            clearTimeout(timer);
-            chrome.debugger.onEvent.removeListener(listener);
-            resolve();
+          if (p.name === "load" || p.name === "networkIdle" || p.name === "DOMContentLoaded") {
+            done();
           }
         }
       };
