@@ -24,11 +24,8 @@ function Options() {
   const save = () => {
     const trimmed = apiKey.trim();
     chrome.storage.local.set({ [STORAGE_KEY]: { apiKey: trimmed } }, () => {
-      // Also write to session storage for the active working copy
-      chrome.storage.session.set({ "aiqa:activeKey": trimmed }, () => {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
-      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     });
   };
 

@@ -3,8 +3,9 @@
  * No Node.js SDK — plain fetch() so it works in a browser extension context.
  */
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-const MODEL   = "claude-opus-4-7";
+const API_URL  = "https://api.anthropic.com/v1/messages";
+const MODEL    = "claude-haiku-4-5-20251001";
+const TIMEOUT_MS = 60_000;
 
 interface Message {
   role:    "user" | "assistant";
@@ -30,6 +31,8 @@ export class LLMClient {
     };
     if (opts.system) body.system = opts.system;
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     const res = await fetch(API_URL, {
       method: "POST",
       headers: {
@@ -37,8 +40,9 @@ export class LLMClient {
         "anthropic-version":  "2023-06-01",
         "content-type":       "application/json",
       },
-      body: JSON.stringify(body),
-    });
+      body:   JSON.stringify(body),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");

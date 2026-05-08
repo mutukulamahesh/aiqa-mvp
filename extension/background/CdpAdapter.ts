@@ -217,11 +217,11 @@ export class CdpAdapter {
   private buildFindExpr(selector: string): string {
     if (selector.startsWith("aria=")) {
       const v = JSON.stringify(selector.slice(5));
-      return `document.querySelector('[aria-label='+${v}+']')`;
+      return `document.querySelector('[aria-label="' + CSS.escape(${v}) + '"]')`;
     }
     if (selector.startsWith("testid=")) {
       const v = JSON.stringify(selector.slice(7));
-      return `document.querySelector('[data-testid='+${v}+']')`;
+      return `document.querySelector('[data-testid="' + CSS.escape(${v}) + '"]')`;
     }
     if (selector.startsWith("text=")) {
       const v = JSON.stringify(selector.slice(5));

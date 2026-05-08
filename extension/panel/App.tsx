@@ -62,6 +62,10 @@ export function App() {
           setSteps(event.steps);
           setStatus(event.status);
           break;
+        case "recorded:yaml":
+          setYaml(event.yaml);
+          setStatus("idle");
+          break;
       }
     });
 
@@ -88,16 +92,15 @@ export function App() {
   }, []);
 
   const handleRecordToggle = useCallback(() => {
-    setStatus((prev) => {
-      if (prev === "recording") {
-        chrome.runtime.sendMessage({ type: "record:stop" });
-        return "idle";
-      }
+    if (status === "recording") {
+      chrome.runtime.sendMessage({ type: "record:stop" });
+      setStatus("idle");
+    } else {
       chrome.runtime.sendMessage({ type: "record:start" });
-      return "recording";
-    });
+      setStatus("recording");
+    }
     setErrorMsg(null);
-  }, []);
+  }, [status]);
 
   const handleGenerate = useCallback((prompt: string) => {
     setStatus("generating");

@@ -114,12 +114,13 @@ export class TestRunner {
         break;
       }
 
-      // Phase 2 / 3 — not yet implemented; skip silently.
+      // Phase 2 / 3 — not yet implemented; skip with a warning.
       case "if":
       case "for_each":
       case "api":
       case "db":
       case "judge":
+        console.warn(`AIQA: step "${step.action}" is not implemented — skipping`);
         break;
     }
   }

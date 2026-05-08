@@ -31,7 +31,22 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 function handleClick(e: MouseEvent): void {
   const target = e.target as HTMLElement | null;
-  if (!target || !isInteractive(target)) return;
+  if (!target) return;
+
+  // Anchor clicks — record the destination URL, not the click selector.
+  const anchor = target.closest<HTMLAnchorElement>("a[href]");
+  if (anchor && anchor.href) {
+    const event: RecordedEvent = {
+      type:      "navigate",
+      selector:  { css: "" },
+      url:       anchor.href,
+      timestamp: Date.now(),
+    };
+    chrome.runtime.sendMessage({ type: "recorded:event", event });
+    return;
+  }
+
+  if (!isInteractive(target)) return;
 
   // Skip clicks inside shadow DOM or iframes that we can't inspect
   if (target.tagName === "IFRAME") {
@@ -79,28 +94,16 @@ function handleBlur(e: FocusEvent): void {
   lastFillValue  = "";
 }
 
-function handleNavigate(): void {
-  const event: RecordedEvent = {
-    type:      "navigate",
-    selector:  { css: "" },
-    url:       location.href,
-    timestamp: Date.now(),
-  };
-  chrome.runtime.sendMessage({ type: "recorded:event", event });
-}
-
 function attachListeners(): void {
   document.addEventListener("click", handleClick, true);
   document.addEventListener("input", handleInput, true);
   document.addEventListener("blur",  handleBlur,  true);
-  window.addEventListener("beforeunload", handleNavigate);
 }
 
 function detachListeners(): void {
   document.removeEventListener("click", handleClick, true);
   document.removeEventListener("input", handleInput, true);
   document.removeEventListener("blur",  handleBlur,  true);
-  window.removeEventListener("beforeunload", handleNavigate);
 }
 
 // ---------------------------------------------------------------------------

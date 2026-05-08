@@ -151,6 +151,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   // Recording mode
   if (msg?.type === "record:start") {
+    recordedSteps = [];
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "record:start" });
     });
@@ -162,14 +163,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "record:stop" });
     });
+    if (recordedSteps.length > 0) {
+      broadcast({ kind: "recorded:yaml", yaml: stepsToYaml(recordedSteps) });
+    }
+    recordedSteps = [];
     sendResponse({ ok: true });
     return false;
   }
 
-  // Recorded events from content script — normalize and broadcast to panel
+  // Recorded events from content script — accumulate for YAML export on stop
   if (msg?.type === "recorded:event") {
     const step = normalizeRecordedEvent(msg.event);
-    if (step) broadcast({ kind: "recorded:step", step } as never);
+    if (step) recordedSteps.push(step);
     return false;
   }
 
@@ -181,6 +186,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ---------------------------------------------------------------------------
 
 import type { RecordedEvent, SelectorDescriptor } from "../shared/types";
+
+let recordedSteps: Array<Record<string, unknown>> = [];
 
 function selectorToString(sel: SelectorDescriptor): string {
   if (sel.ariaLabel) return `aria=${sel.ariaLabel}`;
@@ -199,10 +206,29 @@ function normalizeRecordedEvent(
     case "fill":
       return { action: "fill", target, value: event.value ?? "" };
     case "navigate":
-      return { action: "navigate", target: event.url ?? location.href };
+      return { action: "navigate", target: event.url ?? "" };
     default:
       return null;
   }
+}
+
+function stepsToYaml(steps: Array<Record<string, unknown>>): string {
+  const lines = ["test:", "  name: Recorded test", "  steps:"];
+  for (const step of steps) {
+    const { action, target, value } = step as {
+      action: string; target?: string; value?: string;
+    };
+    if (action === "navigate") {
+      lines.push(`    - navigate: ${target}`);
+    } else if (action === "click") {
+      lines.push(`    - click: ${target}`);
+    } else if (action === "fill") {
+      lines.push(`    - fill:`);
+      lines.push(`        target: ${target}`);
+      lines.push(`        value: ${value ?? ""}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------

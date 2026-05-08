@@ -43,7 +43,8 @@ export interface SavedTest {
 
 /** Events emitted by TestRunner and forwarded to the panel via port. */
 export type StepEvent =
-  | { kind: "step:start"; index: number; label: string }
-  | { kind: "step:pass";  index: number }
-  | { kind: "step:fail";  index: number; error: string }
-  | { kind: "run:done";   status: RunStatus; steps: StepResult[] };
+  | { kind: "step:start";    index: number; label: string }
+  | { kind: "step:pass";     index: number }
+  | { kind: "step:fail";     index: number; error: string }
+  | { kind: "run:done";      status: RunStatus; steps: StepResult[] }
+  | { kind: "recorded:yaml"; yaml: string };
