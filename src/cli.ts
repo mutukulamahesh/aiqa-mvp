@@ -10,11 +10,16 @@ import { ScenarioGenerator } from "./agents/ScenarioGenerator";
 import { ReadinessScorer } from "./agents/ReadinessScorer";
 import { JiraAdapter } from "./integrations/JiraAdapter";
 import { HTMLReporter } from "./reporters/HTMLReporter";
+import { TrendTracker } from "./reporters/TrendTracker";
+import { SlackNotifier } from "./reporters/SlackNotifier";
+import { EmailNotifier } from "./reporters/EmailNotifier";
+import { AllureReporter } from "./reporters/AllureReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
 import { HealerAnalytics } from "./healer/HealerAnalytics";
+import { cleanArtifacts, warnLargeFile } from "./utils/StorageManager";
 
 const program = new Command();
 
@@ -288,6 +293,7 @@ program
     scenarios.forEach(s => {
       const filePath = path.join(outDir, `${s.fileName}.yaml`);
       fs.writeFileSync(filePath, s.yaml);
+      warnLargeFile(filePath, Buffer.byteLength(s.yaml, "utf-8"));
       if (s.validated) {
         console.log(`   ✔ ${s.fileName}.yaml  [${s.flowType}]`);
         validCount++;
@@ -350,8 +356,14 @@ program
   .option("--workers <n>",          "Number of tests to run in parallel (default: from env config)")
   .option("--tags <tags>",          "Only run tests whose tags include at least one of these (comma-separated)")
   .option("--circuit-breaker <n>",  "Abort suite after N consecutive failures (default: from env config)")
+  .option("--allure [dir]",         "Generate Allure JSON results (default dir: allure-results/)")
+  .option("--slack",                "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
+  .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
+  .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
+  .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
+    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -431,6 +443,7 @@ program
     let consecutiveFails = 0;
     let circuitOpen      = false;
     let skippedByCircuit = 0;
+    let skippedByParse   = 0;
 
     const runSlot = async () => {
       while (cursor < files.length) {
@@ -448,6 +461,7 @@ program
           testDef = parseTestFile(file);
         } catch (err) {
           console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
+          skippedByParse++;
           continue;
         }
 
@@ -472,9 +486,12 @@ program
     const passed     = allResults.filter(r => r.passed).length;
     const retried    = allResults.filter(r => r.retryCount > 0).length;
     const failed     = allResults.length - passed;
+    // Capture once — reused for trend tracker, Slack, and email so all three share the same runId.
+    const runId = runTimestamp();
+    const rpt = new ReadinessScorer().score(allResults, new Map());
 
     console.log(`─────────────────────────────────────────`);
-    console.log(`   Ran    : ${allResults.length} test(s)${skippedByCircuit ? `  (${skippedByCircuit} skipped by circuit breaker)` : ""}`);
+    console.log(`   Ran    : ${allResults.length} test(s)${skippedByCircuit ? `  (${skippedByCircuit} skipped by circuit breaker)` : ""}${skippedByParse ? `  (${skippedByParse} skipped — parse error)` : ""}`);
     console.log(`   Passed : ${passed}   Failed: ${failed}${retried ? `   Retried: ${retried}` : ""}`);
     if (circuitOpen) console.log(`   ⚡ Suite aborted — circuit breaker triggered at ${cbThreshold} consecutive failures`);
 
@@ -495,13 +512,60 @@ program
         ? path.join(resultsDir, "report.html")
         : path.resolve(process.cwd(), "report/index.html");
 
+    const baseUrlLabel = opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? "");
     new HTMLReporter().generate(allResults, reportPath, {
-      baseUrl: opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? ""),
+      baseUrl: baseUrlLabel,
       circuitBreaker: circuitOpen
         ? { triggered: true, threshold: cbThreshold, skipped: skippedByCircuit }
         : undefined,
     });
     console.log(`   HTML  → ${reportPath}`);
+
+    // Allure results
+    if (opts.allure !== undefined) {
+      const allureDir = typeof opts.allure === "string"
+        ? path.resolve(process.cwd(), opts.allure)
+        : path.resolve(process.cwd(), "allure-results");
+      new AllureReporter().generate(allResults, allureDir);
+      console.log(`   Allure→ ${allureDir}`);
+    }
+
+    // Trend tracking (always when --out is set)
+    if (resultsDir) {
+      const tracker = new TrendTracker(resultsDir, config.storage.maxHistory);
+      tracker.append({
+        runId,
+        date:       new Date().toISOString(),
+        passed,
+        failed,
+        total:      allResults.length,
+        score:      rpt.score,
+        grade:      rpt.grade,
+        durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+        url:        baseUrlLabel || undefined,
+      });
+      const trendLine = tracker.formatTrend();
+      if (trendLine) console.log(trendLine);
+
+      // Artifact cleanup when --retain-runs is specified
+      const retainN = opts.retainRuns
+        ? Math.max(1, parseInt(opts.retainRuns, 10))
+        : undefined;
+      if (retainN !== undefined) {
+        const historyPath  = path.join(resultsDir, "history.json");
+        const screenshotDir = config.screenshots.dir
+          ? path.resolve(process.cwd(), config.screenshots.dir)
+          : undefined;
+        const allureDir    = typeof opts.allure === "string"
+          ? path.resolve(process.cwd(), opts.allure)
+          : opts.allure !== undefined
+            ? path.resolve(process.cwd(), "allure-results")
+            : undefined;
+        const dirs = [screenshotDir, allureDir].filter((d): d is string => !!d);
+        if (dirs.length > 0) cleanArtifacts({ historyPath, dirs, retainRuns: retainN });
+      }
+    }
+
     console.log(`─────────────────────────────────────────\n`);
     const suiteHealerReport = sharedHealer.getReport();
     if (suiteHealerReport) console.log(suiteHealerReport);
@@ -512,7 +576,181 @@ program
       if (memReport) console.log(memReport);
     }
 
+    // Slack notification
+    if (opts.slack) {
+      const slack = SlackNotifier.fromEnv();
+      if (slack) {
+        await slack.send({
+          runId, passed, failed, total: allResults.length,
+          score: rpt.score, grade: rpt.grade,
+          durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+          baseUrl: baseUrlLabel || undefined,
+          reportUrl: undefined,
+        }).catch(e => console.warn(`   ⚠️  Slack notification failed: ${e.message}`));
+        console.log(`   Slack → sent`);
+      } else {
+        console.warn(`   ⚠️  --slack set but SLACK_WEBHOOK_URL is not in env`);
+      }
+    }
+
+    // Email notification
+    if (opts.email) {
+      const recipients = opts.email.split(",").map(s => s.trim()).filter(Boolean);
+      const mailer = EmailNotifier.fromEnv(recipients);
+      if (mailer) {
+        await mailer.send({
+          runId, passed, failed, total: allResults.length,
+          score: rpt.score, grade: rpt.grade,
+          durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
+          baseUrl: baseUrlLabel || undefined,
+          reportPath,
+        }).catch(e => console.warn(`   ⚠️  Email notification failed: ${e.message}`));
+        console.log(`   Email → sent to ${recipients.join(", ")}`);
+      } else {
+        console.warn(`   ⚠️  --email set but SMTP_HOST is not in env`);
+      }
+    }
+
+    // Jira defect auto-creation
+    // Jira failure intentionally only warns — it must never affect the suite exit code.
+    // (jira-sync exits 1 on failure because that's its sole purpose; run-all's purpose is running tests.)
+    if (opts.jiraDefects) {
+      const jiraCfg  = config.jira;
+      const apiToken = process.env.JIRA_API_TOKEN;
+      if (!apiToken) {
+        console.warn(`   ⚠️  --jira-defects set but JIRA_API_TOKEN is not in env`);
+      } else if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
+        console.warn(`   ⚠️  --jira-defects set but jira.baseUrl / jira.email not configured`);
+      } else {
+        const adapter = new JiraAdapter({
+          baseUrl:    jiraCfg.baseUrl,
+          email:      jiraCfg.email,
+          apiToken,
+          projectKey: jiraCfg?.projectKey,
+        });
+        const failedResults = allResults
+          .filter(r => !r.passed)
+          .map(r => ({ testName: r.testName, passed: false, error: r.error }));
+        if (failedResults.length === 0) {
+          console.log(`   Jira  → no failures, nothing to create`);
+        } else {
+          const summary = await adapter.pushResults(failedResults, runId)
+            .catch(e => { console.warn(`   ⚠️  Jira defect creation failed: ${(e as Error).message}`); return null; });
+          if (summary) {
+            const { created, commented, failed } = summary;
+            console.log(`   Jira  → created=${created.length}, updated=${commented.length}, failed=${failed.length}`);
+            if (created.length)   console.log(`           created:  ${created.join(", ")}`);
+            if (commented.length) console.log(`           updated:  ${commented.join(", ")}`);
+            if (failed.length)    console.log(`           failed:   ${failed.map(f => f.testName).join(", ")}`);
+          }
+        }
+      }
+    }
+
     process.exit(failed > 0 ? 1 : 0);
+  });
+
+// ── jira-sync ─────────────────────────────────────────────────────────────────
+
+program
+  .command("jira-sync <results>")
+  .description("Push a run-results JSON file to Jira — create bugs for failures, sync Xray if configured")
+  .option("--project <key>",        "Override jira.projectKey from config")
+  .option("--dry-run",              "Print what would be created without calling Jira")
+  .option("--xray <executionKey>",  "Sync results to an Xray test execution (e.g. AIQA-99)")
+  .action(async (resultsFile: string, opts: { project?: string; dryRun?: boolean; xray?: string }) => {
+    const config   = cfg();
+    const jiraCfg  = config.jira;
+    const apiToken = process.env.JIRA_API_TOKEN;
+
+    const resultsPath = path.resolve(process.cwd(), resultsFile);
+    if (!fs.existsSync(resultsPath)) {
+      console.error(`❌ Results file not found: ${resultsPath}`);
+      process.exit(1);
+    }
+
+    let allResults: { testName: string; passed: boolean; error?: string }[];
+    try {
+      allResults = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
+    } catch (err) {
+      console.error(`❌ Failed to parse results JSON: ${(err as Error).message}`);
+      process.exit(1);
+    }
+
+    const projectKey = opts.project ?? jiraCfg?.projectKey;
+    if (!projectKey) {
+      console.error("❌ No project key — set jira.projectKey in config or pass --project <key>");
+      process.exit(1);
+    }
+
+    const failures = allResults.filter(r => !r.passed);
+    const passes   = allResults.length - failures.length;
+
+    console.log(`\n📋 AIQA Jira Sync  [env: ${config.environment}]`);
+    console.log(`   Results file : ${resultsPath}`);
+    console.log(`   Project key  : ${projectKey}`);
+    console.log(`   Total tests  : ${allResults.length}  (${passes} passed, ${failures.length} failed)`);
+    if (opts.dryRun) console.log(`   Mode         : DRY RUN — no Jira calls will be made`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    if (failures.length === 0) {
+      console.log(`✅ All tests passed — nothing to create in Jira.\n`);
+      process.exit(0);
+    }
+
+    if (opts.dryRun) {
+      console.log(`Would create ${failures.length} bug(s) in project "${projectKey}":`);
+      failures.forEach((r, i) => {
+        console.log(`  ${i + 1}. [AIQA] Test failed: ${r.testName}`);
+        if (r.error) console.log(`     Error: ${r.error.slice(0, 120)}`);
+      });
+      if (opts.xray) {
+        console.log(`\nWould sync ${allResults.length} result(s) to Xray execution: ${opts.xray}`);
+      }
+      console.log();
+      process.exit(0);
+    }
+
+    // Early credential check — fail fast before making any API calls.
+    // jira-sync exits 1 on credential failure; run-all --jira-defects only warns.
+    // The asymmetry is intentional: jira-sync's sole purpose is Jira I/O, so failure is fatal.
+    if (!apiToken) {
+      console.error("❌ JIRA_API_TOKEN not set — add it to your .env file");
+      process.exit(1);
+    }
+    if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
+      console.error("❌ jira.baseUrl and jira.email must be set in your environment config");
+      process.exit(1);
+    }
+
+    const adapter = new JiraAdapter({
+      baseUrl:    jiraCfg?.baseUrl,
+      email:      jiraCfg?.email,
+      apiToken,
+      projectKey,
+    });
+
+    // Derive run ID from the results filename so Jira issues link back to the same run.
+    const runIdFromFile = path.basename(resultsPath, ".json").replace(/^run-/, "");
+    const summary = await adapter.pushResults(failures, runIdFromFile)
+      .catch(e => { console.error(`❌ Jira push failed: ${(e as Error).message}`); process.exit(1); });
+
+    const { created, commented, failed: syncFailed } = summary;
+    console.log(`✅ Jira sync: created=${created.length}, updated=${commented.length}, failed=${syncFailed.length}`);
+    if (created.length)   console.log(`   Created:  ${created.join(", ")}`);
+    if (commented.length) console.log(`   Updated:  ${commented.join(", ")}`);
+    if (syncFailed.length) {
+      console.log(`   Failed (${syncFailed.length}):`);
+      syncFailed.forEach(f => console.log(`     - ${f.testName}: ${f.error.slice(0, 120)}`));
+    }
+
+    if (opts.xray) {
+      await adapter.syncXrayResults(opts.xray, allResults.map(r => ({ ...r })))
+        .catch(e => console.warn(`⚠️  Xray sync failed: ${(e as Error).message}`));
+    }
+
+    console.log();
+    process.exit(0);
   });
 
 // ── help ──────────────────────────────────────────────────────────────────────
@@ -569,12 +807,32 @@ COMMANDS — Analysis
   score <results.json>  Compute 0-100 readiness score
   help                  Show this guide
 
+COMMANDS — Jira Integration
+  jira-sync <results>   Push test results JSON to Jira
+    --project <key>       Override jira.projectKey from config
+    --dry-run             Preview without creating issues
+    --xray <execKey>      Also sync to Xray test execution
+
+  run-all also accepts:
+    --jira-defects        Auto-create Jira bug for each failed test
+
+  Required env vars:
+    JIRA_API_TOKEN        Your Atlassian API token (never commit!)
+
+  Required config (config/environments/<env>.yaml):
+    jira:
+      baseUrl:    https://yourorg.atlassian.net
+      projectKey: AIQA
+      email:      you@example.com
+
 EXAMPLES
   aiqa orchestrate --url https://example.com --out my-app --headless
   aiqa explore https://example.com --out my-app --max-pages 20 --depth 4
   aiqa generate --out my-app --per-page
   aiqa run-all --out my-app --headless --workers 4
-  aiqa run-all --out my-app --tags smoke
+  aiqa run-all --out my-app --tags smoke --jira-defects
+  aiqa jira-sync my-app/results/run-2024-01-01.json --dry-run
+  aiqa jira-sync my-app/results/run-2024-01-01.json
   aiqa score my-app/results/run-2024-01-01.json
 `);
   });
@@ -731,16 +989,19 @@ program
       const workers       = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
       const headless      = opts.headless ?? config.execution.headless;
       const runnerOpts    = { headless, timeout: config.timeouts.action };
-      const allResults: Awaited<ReturnType<TestRunner["run"]>>[] = [];
 
-      const slots = Array.from({ length: workers }, async () => {
-        for (const file of validFiles) {
+      const orderedImport: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(validFiles.length).fill(null);
+      let importCursor = 0;
+      const runSlot = async () => {
+        while (importCursor < validFiles.length) {
+          const idx  = importCursor++;
+          const file = validFiles[idx];
           const testDef = parseTestFile(file);
-          const result  = await new TestRunner(runnerOpts).run(testDef);
-          allResults.push(result);
+          orderedImport[idx] = await new TestRunner(runnerOpts).run(testDef);
         }
-      });
-      await Promise.all(slots);
+      };
+      await Promise.all(Array.from({ length: workers }, runSlot));
+      const allResults = orderedImport.filter((r): r is NonNullable<typeof r> => r !== null);
 
       const passed = allResults.filter(r => r.passed).length;
       const failed = allResults.length - passed;
@@ -768,6 +1029,9 @@ program
   .option("--dry-run",             "Explore, map flows and generate scenarios without running tests")
   .option("--out <dir>",           "Write exploration.json, flows.json, YAMLs and report here")
   .option("--report <path>",       "Path for HTML report (default: <out>/report.html)")
+  .option("--allure [dir]",        "Generate Allure JSON results (default dir: allure-results/)")
+  .option("--slack",               "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
+  .option("--email <recipients>",  "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .action(async (opts: {
     url:       string;
     maxPages?: string;
@@ -775,6 +1039,9 @@ program
     dryRun?:   boolean;
     out?:      string;
     report?:   string;
+    allure?:   string | boolean;
+    slack?:    boolean;
+    email?:    string;
   }) => {
     const { OrchestratorAgent } = await import("./agents/OrchestratorAgent");
     const config = cfg();
@@ -819,7 +1086,11 @@ program
       const yamlDir = path.join(outRoot, "tests");
       fs.mkdirSync(yamlDir, { recursive: true });
       for (const s of result.scenarios) {
-        if (s.validated) fs.writeFileSync(path.join(yamlDir, `${s.fileName}.yaml`), s.yaml);
+        if (s.validated) {
+          const yPath = path.join(yamlDir, `${s.fileName}.yaml`);
+          fs.writeFileSync(yPath, s.yaml);
+          warnLargeFile(yPath, Buffer.byteLength(s.yaml, "utf-8"));
+        }
       }
       console.log(`   Tests       → ${yamlDir}/ (${result.scenarios.filter(s => s.validated).length} files)`);
     }
@@ -831,6 +1102,76 @@ program
     if (reportPath && !opts.dryRun && result.results.length > 0) {
       new HTMLReporter().generate(result.results, reportPath, { baseUrl: url });
       console.log(`   Report      → ${reportPath}`);
+    }
+
+    // Allure results
+    if (opts.allure !== undefined && result.results.length > 0) {
+      const allureDir = typeof opts.allure === "string"
+        ? path.resolve(process.cwd(), opts.allure)
+        : outRoot ? path.join(outRoot, "allure-results") : path.resolve(process.cwd(), "allure-results");
+      new AllureReporter().generate(result.results, allureDir);
+      console.log(`   Allure      → ${allureDir}`);
+    }
+
+    // Trend tracking
+    if (outRoot && result.results.length > 0 && result.report) {
+      const tracker = new TrendTracker(path.join(outRoot, "results"), config.storage.maxHistory);
+      tracker.append({
+        runId:      result.runId,
+        date:       new Date().toISOString(),
+        passed:     result.summary.passed,
+        failed:     result.summary.failed,
+        total:      result.summary.scenarios,
+        score:      result.summary.score,
+        grade:      result.summary.grade,
+        durationMs: result.summary.timings.test_runner ?? 0,
+        url,
+      });
+      const trendLine = tracker.formatTrend();
+      if (trendLine) console.log(trendLine);
+    }
+
+    // Slack notification
+    if (opts.slack && result.results.length > 0) {
+      const slack = SlackNotifier.fromEnv();
+      if (slack) {
+        await slack.send({
+          runId:      result.runId,
+          passed:     result.summary.passed,
+          failed:     result.summary.failed,
+          total:      result.summary.scenarios,
+          score:      result.summary.score,
+          grade:      result.summary.grade,
+          durationMs: result.summary.timings.test_runner ?? 0,
+          baseUrl:    url,
+          reportUrl:  undefined,
+        }).catch(e => console.warn(`   ⚠️  Slack notification failed: ${e.message}`));
+        console.log(`   Slack       → sent`);
+      } else {
+        console.warn(`   ⚠️  --slack set but SLACK_WEBHOOK_URL is not in env`);
+      }
+    }
+
+    // Email notification
+    if (opts.email && result.results.length > 0) {
+      const recipients = opts.email.split(",").map(s => s.trim()).filter(Boolean);
+      const mailer = EmailNotifier.fromEnv(recipients);
+      if (mailer) {
+        await mailer.send({
+          runId:      result.runId,
+          passed:     result.summary.passed,
+          failed:     result.summary.failed,
+          total:      result.summary.scenarios,
+          score:      result.summary.score,
+          grade:      result.summary.grade,
+          durationMs: result.summary.timings.test_runner ?? 0,
+          baseUrl:    url,
+          reportPath: reportPath ?? undefined,
+        }).catch(e => console.warn(`   ⚠️  Email notification failed: ${e.message}`));
+        console.log(`   Email       → sent to ${recipients.join(", ")}`);
+      } else {
+        console.warn(`   ⚠️  --email set but SMTP_HOST is not in env`);
+      }
     }
 
     // Warnings

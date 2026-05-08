@@ -56,6 +56,7 @@ export class HealerAnalytics {
   constructor(
     private readonly cache: HealerCache,
     logFile = ".aiqa/healer-runs.json",
+    private readonly maxHistory = 200,
   ) {
     this.logFile = logFile;
   }
@@ -267,8 +268,12 @@ export class HealerAnalytics {
   }
 
   private saveRuns(runs: RunRecord[]): void {
+    const sorted = [...runs].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+    );
+    const trimmed = sorted.length > this.maxHistory ? sorted.slice(-this.maxHistory) : sorted;
     try {
-      atomicWrite(this.logFile, JSON.stringify(runs, null, 2));
+      atomicWrite(this.logFile, JSON.stringify(trimmed, null, 2));
     } catch { /* best-effort */ }
   }
 }

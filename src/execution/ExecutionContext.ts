@@ -66,7 +66,10 @@ export class ExecutionContext {
   resolve(template: string): string {
     return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
       const value = this.getPath(key);
-      if (value === undefined || value === null) return _match;
+      if (value === undefined || value === null) {
+        process.stderr.write(`[warn] Template variable "{{ ${key} }}" is not defined — check your test variables or store_as steps.\n`);
+        return _match;
+      }
       return typeof value === "object" ? JSON.stringify(value) : String(value);
     });
   }

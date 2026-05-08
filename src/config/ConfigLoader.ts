@@ -54,6 +54,27 @@ const EnvConfigSchema = z.object({
     readOnly: z.boolean().default(true),
   }).default({ readOnly: true }),
 
+  storage: z.object({
+    maxHistory:   z.number().int().positive().default(200), // entries kept in history.json + healer-runs.json
+    maxArtifacts: z.number().int().positive().default(10),  // run artifact sets retained by --retain-runs
+  }).default({ maxHistory: 200, maxArtifacts: 10 }),
+
+  // api security — empty allowlist means "allow all"; denylist is always evaluated first.
+  api: z.object({
+    allowlist: z.array(z.string()).default([]),  // URL prefixes that are permitted (empty = allow all)
+    denylist:  z.array(z.string()).default([]),  // URL prefixes that are always blocked
+  }).default({ allowlist: [], denylist: [] }),
+
+  // Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
+  jira: z.object({
+    baseUrl:                z.string().optional(),   // e.g. "https://aiqajira.atlassian.net"
+    projectKey:             z.string().optional(),   // e.g. "AIQA"
+    email:                  z.string().email().optional(),
+    createDefectsOnFailure: z.boolean().default(false),
+    xraySyncEnabled:        z.boolean().default(false),
+    testPlanKey:            z.string().optional(),   // Xray test plan issue key
+  }).optional(),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.
@@ -76,7 +97,14 @@ const CONFIG_DIR = path.resolve(process.cwd(), "config", "environments");
 let _loaded: EnvConfig | null = null;
 
 export function loadConfig(env: string = "dev"): EnvConfig {
-  if (_loaded) return _loaded;
+  if (_loaded) {
+    if (_loaded.environment !== env) {
+      throw new Error(
+        `Config already loaded for "${_loaded.environment}" — cannot reload for "${env}" in the same process. Call resetConfig() first.`
+      );
+    }
+    return _loaded;
+  }
 
   const filePath = path.join(CONFIG_DIR, `${env}.yaml`);
 
@@ -149,8 +177,18 @@ export function checkSecrets(): { missing: string[]; warnings: string[] } {
     }
   }
 
-  if (process.env["JIRA_API_TOKEN"] && !process.env["JIRA_EMAIL"]) {
-    warnings.push("JIRA_API_TOKEN set but JIRA_EMAIL missing — Jira integration will fail");
+  const hasJiraToken = !!process.env["JIRA_API_TOKEN"];
+  const jiraCfg = _loaded?.jira;
+
+  if (jiraCfg?.baseUrl || jiraCfg?.email || hasJiraToken) {
+    if (!jiraCfg?.baseUrl)   warnings.push("jira.baseUrl not set — Jira integration will use mock mode");
+    if (!jiraCfg?.email)     warnings.push("jira.email not set — Jira integration will use mock mode");
+    if (!jiraCfg?.projectKey)warnings.push("jira.projectKey not set — Jira commands require a project key");
+    if (!hasJiraToken)       warnings.push("JIRA_API_TOKEN not set — Jira integration will use mock mode");
+  }
+
+  if (hasJiraToken && !jiraCfg?.email) {
+    warnings.push("JIRA_API_TOKEN set but jira.email missing in config — Jira integration will fail");
   }
 
   return { missing, warnings };
