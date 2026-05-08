@@ -1,9 +1,11 @@
 import { AsyncLocalStorage } from "async_hooks";
+import { RunEvent } from "../runner/RunEvent";
 
 export interface WorkerStore {
   testId:   string;
   testName: string;
   logs:     string[];   // buffered output lines, flushed atomically at end of test
+  onEvent?: (e: RunEvent) => void;
 }
 
 export const workerStorage = new AsyncLocalStorage<WorkerStore>();
@@ -13,6 +15,7 @@ export function wlog(msg: string): void {
   const store = workerStorage.getStore();
   if (store) {
     store.logs.push(msg + "\n");
+    store.onEvent?.({ event: "log", message: msg });
   } else {
     console.log(msg);
   }
@@ -23,6 +26,7 @@ export function wwrite(msg: string): void {
   const store = workerStorage.getStore();
   if (store) {
     store.logs.push(msg);
+    store.onEvent?.({ event: "log", message: msg });
   } else {
     process.stdout.write(msg);
   }

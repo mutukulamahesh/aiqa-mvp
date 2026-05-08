@@ -1229,4 +1229,22 @@ program
     process.exit(0);
   });
 
+// ── serve ─────────────────────────────────────────────────────────────────────
+
+program
+  .command("serve")
+  .description("Start the AIQA REST + WebSocket API server")
+  .option("--port <n>",  "Port to listen on (default: 7432 or AIQA_PORT env var)")
+  .option("--env <env>", "Environment name (default: dev)")
+  .action(async (opts: { port?: string; env?: string }) => {
+    const { startServer } = await import("./server");
+    await startServer({
+      port: opts.port ? parseInt(opts.port, 10) : undefined,
+      env:  opts.env,
+    });
+    // Keep process alive
+    process.on("SIGINT",  () => { console.log("\nShutting down..."); process.exit(0); });
+    process.on("SIGTERM", () => { console.log("\nShutting down..."); process.exit(0); });
+  });
+
 program.parse(process.argv);
