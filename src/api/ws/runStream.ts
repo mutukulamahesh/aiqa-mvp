@@ -21,7 +21,9 @@ export function attachWsServer(server: http.Server): WebSocketServer {
       return;
     }
 
-    // Auth: check ?token= query param
+    // Auth uses ?token= instead of Authorization header because the browser
+    // WebSocket API does not support custom headers during the upgrade handshake.
+    // Callers should use TLS so the token is not sent in plaintext.
     if (apiKey && url.searchParams.get("token") !== apiKey) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();

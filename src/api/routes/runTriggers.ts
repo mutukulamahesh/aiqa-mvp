@@ -8,6 +8,7 @@ import { jobStore }     from "../jobs/RunJobStore";
 import { RunJob }       from "../jobs/RunJob";
 import * as persistence from "../persistence/runPersistence";
 import { validate }     from "../middleware/validate";
+import { safeResolvePath } from "../middleware/sandbox";
 import { RunEvent, RunSummary } from "../../runner/RunEvent";
 
 import { parseTestDefinition, parseTestFile } from "../../dsl/DslParser";
@@ -117,7 +118,7 @@ async function runTestsParallel(
       const item = queue.shift();
       if (!item) break;
       const { f, i } = item;
-      const localTestIndex = testIndex++;
+      testIndex++;
 
       try {
         const testDef = parseTestFile(f);
@@ -151,9 +152,13 @@ router.post("/run", validate(RunSchema), (req, res) => {
   accept(res, job);
 
   jobStore.enqueue(job, async () => {
-    const content = body.content
-      ? body.content
-      : await fs.promises.readFile(body.file!, "utf-8");
+    let content: string;
+    if (body.content) {
+      content = body.content;
+    } else {
+      const resolved = safeResolvePath(process.cwd(), body.file!);
+      content = await fs.promises.readFile(resolved, "utf-8");
+    }
 
     const testDef = parseTestDefinition(content);
     const screenshotsDir = path.join(persistence.runDir(job.meta.runId), "screenshots");
@@ -179,7 +184,7 @@ router.post("/run-all", validate(RunAllSchema), async (req, res) => {
   accept(res, job);
 
   jobStore.enqueue(job, async () => {
-    const testDir = path.resolve(process.cwd(), body.dir);
+    const testDir = safeResolvePath(process.cwd(), body.dir);
     let files: string[];
     try {
       const entries = await fs.promises.readdir(testDir, { withFileTypes: true });
@@ -219,9 +224,9 @@ router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
       outDir:   body.outDir,
     });
 
-    const passed  = result.stageResults.runner?.filter(r => r.passed).length ?? 0;
-    const total   = result.stageResults.runner?.length ?? 0;
-    const summary = { passed, failed: total - passed, total };
+    const passed  = result.summary.passed;
+    const failed  = result.summary.failed;
+    const summary = { passed, failed, total: passed + failed };
 
     const jobPassed = result.status === "success" || result.status === "success_with_warnings" || result.status === "dry_run";
     job.meta.status      = jobPassed ? "passed" : "failed";
@@ -284,7 +289,7 @@ router.post("/generate", validate(GenerateSchema), (req, res) => {
     const scenarios = await generator.generate(flows, explData.baseUrl ?? "");
 
     const outDir = body.outDir
-      ? path.resolve(process.cwd(), body.outDir)
+      ? safeResolvePath(process.cwd(), body.outDir)
       : path.join(persistence.runDir(job.meta.runId), "generated");
 
     await fs.promises.mkdir(outDir, { recursive: true });
@@ -315,7 +320,7 @@ router.post("/import", upload.single("file"), (req, res) => {
   accept(res, job);
 
   const buffer   = req.file.buffer;
-  const filename = req.file.originalname;
+  const filename = path.basename(req.file.originalname);
 
   jobStore.enqueue(job, async () => {
     const tmpDir  = path.join(persistence.runDir(job.meta.runId), "import");
@@ -352,11 +357,16 @@ router.post("/jira-sync", validate(JiraSyncSchema), (req, res) => {
     let config: ReturnType<typeof getConfig> | null = null;
     try { config = getConfig(); } catch { /* optional */ }
 
-    const jiraCfg = config?.jira;
+    const jiraCfg  = config?.jira;
+    const apiToken = process.env.JIRA_API_TOKEN;
+    const isMock   = !(jiraCfg?.baseUrl && jiraCfg?.email && apiToken);
+    if (isMock) {
+      job.emit({ event: "log", message: "[jira] no credentials configured — running in mock mode, results not pushed to Jira" });
+    }
     const adapter = new JiraAdapter({
       baseUrl:    jiraCfg?.baseUrl,
       email:      jiraCfg?.email,
-      apiToken:   process.env.JIRA_API_TOKEN,
+      apiToken,
       projectKey: body.projectKey,
     });
 

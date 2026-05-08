@@ -8,7 +8,8 @@ import screenshotsRouter from "./routes/screenshots";
 import { authMiddleware } from "./middleware/auth";
 
 export function mountRoutes(app: Application): void {
-  app.use("/api", authMiddleware, healthRouter);
+  // Health is intentionally unauthenticated — load balancers and probes need it
+  app.use("/api", healthRouter);
   app.use("/api", authMiddleware, runsRouter);
   app.use("/api", authMiddleware, runTriggersRouter);
   app.use("/api", authMiddleware, cancelRouter);

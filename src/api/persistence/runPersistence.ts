@@ -56,11 +56,8 @@ export async function loadRecentMetas(limit = 100): Promise<RunJobMeta[]> {
   try {
     await fs.promises.mkdir(RUNS_DIR, { recursive: true });
     const entries = await fs.promises.readdir(RUNS_DIR);
-    const metas: RunJobMeta[] = [];
-    for (const id of entries) {
-      const m = await readMeta(id);
-      if (m) metas.push(m);
-    }
+    const settled = await Promise.all(entries.map(id => readMeta(id)));
+    const metas   = settled.filter((m): m is RunJobMeta => m !== null);
     metas.sort((a, b) => {
       const ta = a.startedAt ?? "";
       const tb = b.startedAt ?? "";

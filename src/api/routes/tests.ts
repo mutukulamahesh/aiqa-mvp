@@ -48,12 +48,15 @@ router.get(/^\/tests\/(.+)$/, async (req: Request, res: Response) => {
 
 // PUT /api/tests/<path> — save a YAML file (Portal builder)
 router.put(/^\/tests\/(.+)$/, async (req: Request, res: Response) => {
+  if (typeof req.body !== "string") {
+    res.status(415).json({ error: "Content-Type must be text/yaml" });
+    return;
+  }
   const filePath = getTestFilePath(req);
   try {
     const resolved = safeResolvePath(TESTS_ROOT, filePath);
     await fs.promises.mkdir(path.dirname(resolved), { recursive: true });
-    const content  = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-    await fs.promises.writeFile(resolved, content, "utf-8");
+    await fs.promises.writeFile(resolved, req.body, "utf-8");
     res.json({ saved: true });
   } catch (err) {
     const msg = (err as Error).message;

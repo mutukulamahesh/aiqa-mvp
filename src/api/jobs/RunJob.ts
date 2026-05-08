@@ -36,7 +36,13 @@ export function createRunJob(runId: string, type: JobType, screenshotsDir?: stri
     eventBuffer: [],
     cancelled: false,
     emit(e: RunEvent) {
-      if (this.eventBuffer.length < 500) this.eventBuffer.push(e);
+      if (this.eventBuffer.length < 500) {
+        this.eventBuffer.push(e);
+      } else if (this.eventBuffer.length === 500) {
+        // Mark the overflow point so late WS subscribers know events were dropped
+        const warn: RunEvent = { event: "log", message: "[buffer full — subsequent events dropped from replay]" };
+        this.eventBuffer.push(warn);
+      }
       for (const cb of subscribers) cb(e);
     },
     subscribe(cb: (e: RunEvent) => void) {
