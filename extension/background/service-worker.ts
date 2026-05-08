@@ -219,13 +219,13 @@ function stepsToYaml(steps: Array<Record<string, unknown>>): string {
       action: string; target?: string; value?: string;
     };
     if (action === "navigate") {
-      lines.push(`    - navigate: ${target}`);
+      lines.push(`    - navigate: ${JSON.stringify(target)}`);
     } else if (action === "click") {
-      lines.push(`    - click: ${target}`);
+      lines.push(`    - click: ${JSON.stringify(target)}`);
     } else if (action === "fill") {
       lines.push(`    - fill:`);
-      lines.push(`        target: ${target}`);
-      lines.push(`        value: ${value ?? ""}`);
+      lines.push(`        target: ${JSON.stringify(target)}`);
+      lines.push(`        value: ${JSON.stringify(value ?? "")}`);
     }
   }
   return lines.join("\n");
