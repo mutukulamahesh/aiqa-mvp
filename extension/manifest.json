@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "AIQA",
+  "version": "0.1.0",
+  "description": "Test your web app from the browser — no CLI required",
+  "minimum_chrome_version": "116",
+  "permissions": ["debugger", "activeTab", "sidePanel", "storage", "alarms", "scripting"],
+  "host_permissions": ["https://api.anthropic.com/*"],
+  "background": {
+    "service_worker": "build/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["build/recorder.js", "build/highlighter.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "panel/index.html"
+  },
+  "action": {
+    "default_title": "Open AIQA"
+  },
+  "options_page": "panel/options.html"
+}
