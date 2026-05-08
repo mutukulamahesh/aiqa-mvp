@@ -7,9 +7,17 @@ import { UIActionHandler } from "../handlers/UIActionHandler";
 import { AssertionHandler } from "../handlers/AssertionHandler";
 import { APIActionHandler } from "../handlers/APIActionHandler";
 import { DBActionHandler } from "../handlers/DBActionHandler";
+import { WaitHandler } from "../handlers/WaitHandler";
+import { StoreHandler } from "../handlers/StoreHandler";
+import { ConditionHandler } from "../handlers/ConditionHandler";
+import { LoopHandler } from "../handlers/LoopHandler";
+import { JudgeHandler } from "../handlers/JudgeHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
+import { wrapWithDepthGuard } from "./DepthGuard";
+import { createLLMProvider } from "../llm/LLMProvider";
+import { getConfig } from "../config/ConfigLoader";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -17,11 +25,26 @@ export class StepInterpreter {
 
   constructor() {
     this.dbHandler = new DBActionHandler();
-    this.registry  = new HandlerRegistry()
+
+    // Sub-step executor passed to branching/looping handlers so they reuse
+    // the full interpreter pipeline (healer, memory, error classification).
+    const runSubStep = wrapWithDepthGuard(
+      (step: StepAction, adapter: AdapterActions, ctx: ExecutionContext) =>
+        this.execute(step, adapter, ctx)
+    );
+
+    const llmConfig = (() => { try { return getConfig().llm; } catch { return undefined; } })();
+
+    this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
       .register(new AssertionHandler())
       .register(new APIActionHandler())
-      .register(this.dbHandler);
+      .register(this.dbHandler)
+      .register(new WaitHandler())
+      .register(new StoreHandler())
+      .register(new ConditionHandler(runSubStep))
+      .register(new LoopHandler(runSubStep))
+      .register(new JudgeHandler(createLLMProvider(llmConfig)));
   }
 
   async execute(

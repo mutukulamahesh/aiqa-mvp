@@ -26,15 +26,38 @@ export class KnexDBAdapter implements DBAdapter {
     this.knex = knexFactory({
       client: "pg",
       connection: connectionString,
+      pool: {
+        min:                   2,
+        max:                   10,
+        // Surface pool exhaustion as a clear error rather than an opaque hang
+        acquireTimeoutMillis:  30_000,
+        idleTimeoutMillis:     600_000,
+      },
     });
-    process.stdout.write(`[DB] Using postgres (knex-pg, pool max=10)\n`);
+    // Diagnostic: log pool config once at init so operator can correlate with worker count.
+    // Set AIQA_WORKERS env var (or pass --workers to the CLI) for accurate worker visibility.
+    const workers = process.env.AIQA_WORKERS ?? "?";
+    process.stdout.write(`[DB] pool config: min=2, max=10, workers=${workers}\n`);
   }
 
   async query(sql: string, params?: unknown[]): Promise<QueryResult> {
     if (this.closed) {
       throw new Error("KnexDBAdapter: cannot query — connection pool has been closed.");
     }
-    const result = await this.knex.raw(sql, params ?? []);
+    let result: { rows: unknown };
+    try {
+      result = await this.knex.raw(sql, params ?? []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // tarn / generic-pool both surface exhaustion as a timeout message
+      if (/timeout/i.test(msg) && /pool/i.test(msg)) {
+        throw new Error(
+          `KnexDBAdapter: DB connection pool exhausted (acquireTimeout=30s). ` +
+          `Reduce parallel workers or increase pool.max (currently 10).`
+        );
+      }
+      throw err;
+    }
     // Knex wraps pg results; always normalise to a plain rows array.
     const rows: Record<string, unknown>[] = Array.isArray(result.rows) ? result.rows : [];
     return { rows, rowCount: rows.length };

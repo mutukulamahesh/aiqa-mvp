@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~62%**  *(updated 2026-05-06)*
-> Sprint 1 + Sprint 2 + Phase 2 Intelligence Layer: **DONE**.
-> Remaining: Phase 3 Coverage (DB, flow control, LLM judge) → Phase 4 Enterprise → Phase 5-7.
+> Current alignment with vision: **~72%**  *(updated 2026-05-07)*
+> Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening: **DONE**.
+> Remaining: Phase 4 Enterprise → Phase 5-7.
 
 ---
 
@@ -179,33 +179,54 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Phase 3 — Coverage Expansion `[FULL STACK]`
+## Phase 3 — Coverage Expansion `[✅ COMPLETE — 2026-05-07]`
 > One YAML to test the whole application
 
-### EPIC-07 · DB Testing Handler
+### EPIC-07 · DB Testing Handler `[✅ DONE]`
 | ID | Story | Status |
 |---|---|---|
-| 7.1 | `DBHandler` — execute SQL/NoSQL queries as a DSL step (`db: { query: "SELECT..." }`) | [ ] |
-| 7.2 | `DBAdapter` interface + PostgreSQL implementation via Knex.js — mirrors PlaywrightAdapter pattern | [ ] |
-| 7.3 | Assert on query result — row count, field values, schema shape | [ ] |
-| 7.4 | Chained API → DB verification — call API, then assert DB state changed in same test | [ ] |
+| 7.1 | `DBHandler` — execute SQL queries as a DSL step (`db: { query: "SELECT..." }`) | [x] |
+| 7.2 | `DBAdapter` interface + PostgreSQL implementation via Knex.js — mirrors PlaywrightAdapter pattern | [x] |
+| 7.3 | Assert on query result — row count, field values, schema shape | [x] |
+| 7.4 | Chained API → DB verification — call API, then assert DB state changed in same test | [x] |
 
-### EPIC-08 · Flow Control Handlers
+### EPIC-08 · Flow Control Handlers `[✅ DONE]`
 | ID | Story | Status |
 |---|---|---|
-| 8.1 | `WaitHandler` — `wait_for_element`, `wait_ms`, `wait_for_url` steps | [ ] |
-| 8.2 | `ConditionHandler` — `if: { variable: x, equals: y }` branching in test flows | [ ] |
-| 8.3 | `LoopHandler` — `for_each` over API response array for data-driven steps | [ ] |
-| 8.4 | `StoreHandler` — capture page text/attribute into variable (`store: { selector: ..., as: token }`) | [ ] |
+| 8.1 | `WaitHandler` — `wait_for_element`, `wait_ms`, `wait_for_url` steps | [x] |
+| 8.2 | `ConditionHandler` — `if: { variable: x, equals: y }` branching in test flows | [x] |
+| 8.3 | `LoopHandler` — `for_each` over API response array for data-driven steps (max 100 iterations, depth guard) | [x] |
+| 8.4 | `StoreHandler` — capture page text/attribute into variable (`store: { selector: ..., as: token }`) | [x] |
 
-### EPIC-09 · LLM Judge Agent
+### EPIC-09 · LLM Judge `[✅ DONE]`
 | ID | Story | Status |
 |---|---|---|
-| 9.1 | `JudgeAgent` — evaluate LLM API responses, score 0–1 per dimension | [ ] |
-| 9.2 | `LLMEvalHandler` — DSL step `llm_eval: { prompt: ..., response: ..., criteria: ... }` | [ ] |
-| 9.3 | Hallucination detection — flag responses contradicting known facts using RAG context | [ ] |
-| 9.4 | Score dimensions: semantic accuracy, tone, completeness, factual accuracy (weighted overall) | [ ] |
-| 9.5 | Configurable pass threshold per test — `pass_if_score_above: 0.8` | [ ] |
+| 9.1 | `JudgeHandler` — `judge:` DSL step: LLM scores a value 0.0–1.0 against natural-language criteria | [x] |
+| 9.2 | `pass_if` expression — deterministic pass/fail from score (operators: `>=` `<=` `>` `<`); verdict never delegated to LLM | [x] |
+| 9.3 | Per-execution determinism cache — sha256(value+prompt) key; retry reuses cached score without re-calling LLM | [x] |
+| 9.4 | `store_as` support — stores `{ score, verdict, reason }` as template variables for downstream steps | [x] |
+| 9.5 | Input guards — truncates input at 5 000 chars (LLM notified); throws immediately on empty input | [x] |
+
+---
+
+## Pre-Phase 4 Hardening `[✅ DONE — 2026-05-07]`
+> Scalability and concurrency hardening applied before Phase 4 enterprise work begins. No architecture changes — defensive fixes only.
+
+### Pass 1 — Scalability & Concurrency
+| ID | Fix | Status |
+|---|---|---|
+| H4.1 | `ExecutionContext` memory safety — deep-clone stored objects; soft array cap at 1 000 items | [x] |
+| H4.2 | `JudgeHandler` determinism cache — sha256-keyed in-memory cache; retry reuses score, no LLM re-call | [x] |
+| H4.3 | Atomic writes for `HealerCache`, `MemoryStore`, `HealerAnalytics` — write to `.pid.tmp` then `renameSync` | [x] |
+| H4.4 | Knex pool config — `min=2 max=10 acquireTimeout=30s`; pool exhaustion surfaces as clear error message | [x] |
+
+### Pass 2 — Last-Edge Fixes
+| ID | Fix | Status |
+|---|---|---|
+| H4.5 | Lost-update protection — mtime capture at load + re-read + merge-on-conflict for all three file stores | [x] |
+| H4.6 | Judge score normalisation before caching — `toFixed(3)` runs once; all consumers read one canonical value | [x] |
+| H4.7 | `ExecutionContext` non-serializable guard — throws `"non-serializable value stored via store_as"` instead of silent data loss | [x] |
+| H4.8 | DB pool visibility — logs `[DB] pool config: min=2, max=10, workers=<N>` at init via `AIQA_WORKERS` env | [x] |
 
 ---
 
@@ -299,16 +320,17 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ## Totals
 
-| Phase | Epics | Stories | Target outcome |
-|---|---|---|---|
-| Sprint 1 — Foundation | 6 | 20 | Bulletproof platform + test case import |
-| Sprint 2 — Orchestrator | 1 | 5 | One-command full pipeline |
-| Phase 2 — Intelligence | 2 | 9 | Self-healing, memory |
-| Phase 3 — Coverage | 3 | 14 | Full-stack testing in one YAML |
-| Phase 4 — Enterprise | 3 | 11 | Jira, Allure, CI impact filter |
-| Phase 5 — GenAI | 1 | 5 | Test AI systems natively |
-| Phase 6 — Vision | 2 | 8 | Selector-free, desktop automation |
-| Phase 7 — Scale | 3 | 7 | SaaS product |
-| **Total** | **21** | **79** | |
+| Phase | Epics | Stories | Status | Target outcome |
+|---|---|---|---|---|
+| Sprint 1 — Foundation | 6 | 20 | ✅ DONE | Bulletproof platform + test case import |
+| Sprint 2 — Orchestrator | 1 | 5 | ✅ DONE | One-command full pipeline |
+| Phase 2 — Intelligence | 2 | 9 | ✅ DONE | Self-healing, memory |
+| Phase 3 — Coverage | 3 | 13 | ✅ DONE | Full-stack testing in one YAML |
+| Pre-Phase 4 Hardening | — | 8 | ✅ DONE | Concurrency safety + production hardening |
+| Phase 4 — Enterprise | 3 | 11 | ⬜ Next | Jira, Allure, CI impact filter |
+| Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
+| Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
+| Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
+| **Total** | **21** | **79** | | |
 
-> **Sprint 1 + 2 + Phase 2–4 = production-ready enterprise platform (~49 stories)**
+> **Sprint 1 + 2 + Phase 2–3 + hardening complete (~55 stories). Phase 4 Enterprise is next.**

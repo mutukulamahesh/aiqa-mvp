@@ -41,7 +41,24 @@ export interface LLMConfig {
  */
 export function createLLMProvider(config?: LLMConfig): LLMProvider {
   const resolved = config ?? resolveFromEnv();
-  const primary  = buildSingle(resolved.provider, resolved.model);
+
+  let primary: LLMProvider;
+  try {
+    primary = buildSingle(resolved.provider, resolved.model);
+  } catch (err) {
+    // Primary key missing — if fallbacks are configured, degrade gracefully rather than crash.
+    // This lets staging configs (provider: anthropic, fallback: [mock]) work in CI without a key.
+    if (resolved.fallback?.length) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[LLM] Primary provider "${resolved.provider}" unavailable (${msg}); using fallback.\n`);
+      const fallbacks = resolved.fallback.map(name => buildSingle(name));
+      if (fallbacks.length === 1) return fallbacks[0];
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { FallbackLLMProvider } = require("./FallbackLLMProvider");
+      return new FallbackLLMProvider(fallbacks);
+    }
+    throw err;
+  }
 
   if (!resolved.fallback?.length) return primary;
 

@@ -1,7 +1,7 @@
 # AIQA — Sprint 1 Progress Report
 
-> Branch: `phase2` · Started: 2026-05-01 · Last updated: 2026-05-06
-> Platform alignment at sprint start: **~35%** of vision
+> Branch: `phase3` · Started: 2026-05-01 · Last updated: 2026-05-07
+> Platform alignment: **~72%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening: **DONE**
 
 ---
 
@@ -681,6 +681,137 @@ Output is suppressed entirely on the first cold run (no data yet).
 | Flaky selector visibility | ❌ None | ✅ Per-page, per-descriptor, per-entry |
 | Run history | ❌ None | ✅ `.aiqa/healer-runs.json` |
 | CLI analytics output | ❌ None | ✅ After every `orchestrate` run |
+
+---
+
+---
+
+## Phase 3 — Coverage Expansion ✅ DONE
+
+### EPIC-07 — DB Testing Handler ✅ DONE
+
+| File | Purpose |
+|---|---|
+| `src/db/DBAdapter.ts` | Generic `DBAdapter` interface — `query(sql, params)`, `close()` |
+| `src/db/KnexDBAdapter.ts` | PostgreSQL via Knex — configurable pool, exhaustion guard |
+| `src/db/MockDBAdapter.ts` | In-memory mock — deterministic fixtures for unit tests |
+| `src/db/DBAdapterFactory.ts` | Selects real vs mock based on `DB_URL` env var |
+| `src/handlers/DBActionHandler.ts` | `db:` step — execute SQL, assert row count, assert field values, `store_as` |
+
+### Key behaviour
+
+- `db: { query: "...", assert_rows: N }` — asserts exact row count
+- `db: { query: "...", assert_field: { status: "completed" } }` — asserts a field in the first row
+- `db: { query: "...", store_as: result }` — stores result rows for downstream `{{ result[0].field }}` access
+- Parameterised queries via `params: [...]` — safe from SQL injection
+- Knex pool: `min=2, max=10, acquireTimeout=30s`; pool exhaustion surfaces as a clear error
+- `KnexDBAdapter.close()` is idempotent — safe to call multiple times
+
+### Tests — `tests/db/db.test.ts` (32 tests)
+
+- `DBActionHandler — assert_rows` (4)
+- `DBActionHandler — assert_field` (5)
+- `DBActionHandler — store_as` (4)
+- `DBActionHandler — params` (3)
+- `DBActionHandler — error handling` (4)
+- `KnexDBAdapter — pool` (4)
+- `DBAdapterFactory` (4)
+- `MockDBAdapter` (4)
+
+---
+
+### EPIC-08 — Flow Control Handlers ✅ DONE
+
+| File | Purpose |
+|---|---|
+| `src/handlers/WaitHandler.ts` | `wait_for_element` · `wait_ms` · `wait_for_url` |
+| `src/handlers/ConditionHandler.ts` | `if: { variable, equals, steps }` branching |
+| `src/handlers/LoopHandler.ts` | `for_each: { over, as, steps }` — max 100 iterations, depth guard |
+| `src/handlers/StoreHandler.ts` | `store: { selector, as }` — capture text/attribute into variable |
+| `src/execution/DepthGuard.ts` | Recursion depth limiter shared by `if` and `for_each` |
+
+### Key behaviour
+
+- `wait_for_element` accepts a bare selector string or `{ selector, timeout }` object
+- `if` branches run the full sub-step list only when the variable equals the expected value
+- `for_each` exposes the current item as `{{ item_var }}` with dot-notation access
+- Loop hard-cap: `MAX_ITERATIONS = 100` — throws `"exceeded maxIterations"` rather than hanging
+- Depth guard prevents `if` inside `if` inside `for_each` from stack-overflowing
+
+### Tests — `tests/flow-control/` (120 tests across 4 suites)
+
+---
+
+### EPIC-09 — LLM Judge ✅ DONE
+
+| File | Purpose |
+|---|---|
+| `src/handlers/JudgeHandler.ts` | `judge:` step — LLM scoring, determinism cache, `pass_if` evaluation |
+
+### Key behaviour
+
+- `judge: { value, prompt, pass_if, store_as }` — evaluates `value` against natural-language `prompt`
+- LLM returns `{ score: 0.0–1.0, reason: "..." }`; `pass_if` expression (`score >= 0.7` etc.) is evaluated locally
+- Per-execution determinism cache: `sha256(value + "\x00" + prompt)` → `{ score, reason }` — retries never re-call the LLM
+- Score normalised to 3 decimal places before caching — all consumers read one canonical value
+- `store_as` stores `{ score, verdict, reason }` — accessible as `{{ result.score }}` etc.
+- Input > 5 000 chars is truncated (LLM notified); empty input throws immediately
+
+### Tests — `tests/judge/` (61 tests)
+
+- `JudgeHandler — basic scoring` (8)
+- `JudgeHandler — pass_if operators` (12)
+- `JudgeHandler — determinism cache` (8)
+- `JudgeHandler — store_as` (6)
+- `JudgeHandler — input guards` (7)
+- `JudgeHandler — LLM error handling` (6)
+- `parsePassIf` (8)
+- `applyOp` (6)
+
+---
+
+## Platform Metrics — After Phase 3
+
+| Metric | After Healer Analytics | After Phase 3 |
+|---|---|---|
+| Test suites | 12 | **16** |
+| Tests passing | 283 | **444** |
+| DB testing | ❌ None | ✅ PostgreSQL via Knex, `assert_rows`, `assert_field` |
+| Flow control | Partial | ✅ wait · if · for_each · store (depth guarded) |
+| LLM judge | ❌ None | ✅ 0.0–1.0 scoring, deterministic `pass_if`, `store_as` |
+| Step types total | 8 | **13** |
+
+---
+
+## Pre-Phase 4 Hardening ✅ DONE
+
+### Pass 1 — Scalability & Concurrency (2026-05-07)
+
+Four defensive fixes to harden parallel execution before Phase 4 enterprise work begins.
+
+| Fix | File | What changed |
+|---|---|---|
+| `ExecutionContext` memory safety | `src/execution/ExecutionContext.ts` | `storeClamp()` deep-clones via JSON round-trip; trims arrays > 1 000 items; rejects non-serializable values |
+| `JudgeHandler` determinism cache | `src/handlers/JudgeHandler.ts` | `sha256(value + prompt)` → `{ score, reason }` map; retry hits cache instead of re-calling LLM |
+| Atomic writes | `HealerCache`, `MemoryStore`, `HealerAnalytics` | Write to `<file>.<pid>.tmp` then `fs.renameSync()` — POSIX-atomic, prevents partial reads by concurrent workers |
+| Knex pool config + exhaustion guard | `src/db/KnexDBAdapter.ts` | `min=2, max=10, acquireTimeoutMillis=30_000`; timeout + pool regex → clear "pool exhausted" error |
+
+### Pass 2 — Last-Edge Fixes (2026-05-07)
+
+| Fix | File | What changed |
+|---|---|---|
+| Lost-update (write-skew) protection | `HealerCache`, `MemoryStore`, `HealerAnalytics` | Capture `mtimeMs` at load; re-check before write; if changed, re-read + merge with our changes before saving |
+| Judge score normalised before caching | `src/handlers/JudgeHandler.ts` | `Number(parsed.score.toFixed(3))` runs once; cache stores the normalised value; every consumer reads the same number |
+| Non-serializable guard | `src/execution/ExecutionContext.ts` | `JSON.stringify` wrapped in try/catch; throws `"non-serializable value stored via store_as"` instead of silent truncation |
+| DB pool visibility log | `src/db/KnexDBAdapter.ts` | Logs `[DB] pool config: min=2, max=10, workers=<N>` at init; `N` from `AIQA_WORKERS` env (default `?`) |
+
+### Merge strategies per file store
+
+| Store | Conflict resolution |
+|---|---|
+| `HealerCache` | Union URLs→descriptors→entries by selector; keep entry with higher `successCount + failureCount` |
+| `MemoryStore` | Union step keys; keep step with higher `runCount`; `llmCallsSaved = Math.max(base, overlay)` |
+| `HealerAnalytics` | Re-read fresh list, append our `RunRecord` only if `runId` not already present |
 
 ---
 

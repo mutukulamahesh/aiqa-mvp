@@ -109,6 +109,29 @@ export class PlaywrightAdapter implements AdapterActions {
     return page.url();
   }
 
+  async waitForSelector(selector: string, timeout?: number): Promise<void> {
+    const page = await this.ensureLaunched();
+    const ms = timeout ?? this.timeout;
+    await page.locator(selector).first().waitFor({ state: "visible", timeout: ms })
+      .catch(() => { throw new TransientError(`waitForSelector: "${selector}" not visible within ${ms}ms`); });
+  }
+
+  async waitForUrl(substring: string): Promise<void> {
+    const page = await this.ensureLaunched();
+    await page.waitForURL(url => url.toString().includes(substring), { timeout: this.timeout })
+      .catch(() => { throw new TransientError(`waitForUrl: URL did not contain "${substring}" within ${this.timeout}ms`); });
+  }
+
+  async getElementText(selector: string): Promise<string> {
+    const page = await this.ensureLaunched();
+    return await page.locator(selector).first().innerText({ timeout: this.timeout });
+  }
+
+  async getElementAttribute(selector: string, attribute: string): Promise<string> {
+    const page = await this.ensureLaunched();
+    return (await page.locator(selector).first().getAttribute(attribute, { timeout: this.timeout })) ?? "";
+  }
+
   async screenshot(filePath: string): Promise<void> {
     if (!this.page) return;
     fs.mkdirSync(path.dirname(filePath), { recursive: true });

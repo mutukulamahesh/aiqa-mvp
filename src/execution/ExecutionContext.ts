@@ -1,5 +1,36 @@
 import { EnvConfig } from "../config/ConfigLoader";
 
+// Arrays larger than this are trimmed to prevent unbounded memory growth.
+// Deliberately above LoopHandler.MAX_ITERATIONS (100) so the loop handler's own
+// guard fires first on the stored list (keeps existing test behavior correct).
+const MAX_STORED_ARRAY_ITEMS = 1_000;
+
+/**
+ * Deep-clones objects/arrays to prevent callers from mutating stored state.
+ * Trims oversized arrays so the context map cannot grow unboundedly under large API responses.
+ * Non-array objects are cloned as-is — truncating fields would break {{ var.field }} DSL access.
+ *
+ * Only JSON-serializable values are supported. Non-serializable types (circular
+ * references, functions, Symbols) would silently lose data during template resolution,
+ * so they are rejected with a clear error.
+ */
+function storeClamp(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== "object") return value; // primitives are immutable
+
+  let cloned: unknown;
+  try {
+    cloned = JSON.parse(JSON.stringify(value));
+  } catch {
+    throw new Error("ExecutionContext: non-serializable value stored via store_as");
+  }
+
+  if (Array.isArray(cloned) && (cloned as unknown[]).length > MAX_STORED_ARRAY_ITEMS) {
+    return (cloned as unknown[]).slice(0, MAX_STORED_ARRAY_ITEMS);
+  }
+  return cloned;
+}
+
 export class ExecutionContext {
   private variables: Map<string, unknown> = new Map();
   readonly config: EnvConfig | null;
@@ -17,9 +48,9 @@ export class ExecutionContext {
     }
   }
 
-  /** Store a value by name */
+  /** Store a value by name — deep-clones objects to prevent mutation leakage. */
   set(key: string, value: unknown): void {
-    this.variables.set(key, value);
+    this.variables.set(key, storeClamp(value));
   }
 
   /** Retrieve a value by name */

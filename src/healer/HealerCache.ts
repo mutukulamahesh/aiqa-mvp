@@ -27,6 +27,8 @@ const MAX_SELECTORS_PER_DESCRIPTOR = 5;
 export class HealerCache {
   private data: CacheData = {};
   readonly filePath: string;
+  // Mtime captured at last load; used to detect concurrent writes before saving.
+  private loadMtime: number | null = null;
 
   constructor(cacheFile = ".aiqa/healer-cache.json") {
     this.filePath = cacheFile;
@@ -223,8 +225,10 @@ export class HealerCache {
 
   private load(): void {
     try {
+      this.loadMtime = fileMtime(this.filePath);
       this.data = this.migrate(JSON.parse(fs.readFileSync(this.filePath, "utf8")));
     } catch {
+      this.loadMtime = null;
       this.data = {};
     }
   }
@@ -257,8 +261,65 @@ export class HealerCache {
 
   private save(): void {
     try {
-      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, JSON.stringify(this.data, null, 2));
+      const currentMtime = fileMtime(this.filePath);
+      if (this.loadMtime !== null && currentMtime !== null && currentMtime !== this.loadMtime) {
+        // Another worker wrote the file between our load and now — merge external changes.
+        try {
+          const external = this.migrate(JSON.parse(fs.readFileSync(this.filePath, "utf8")));
+          this.data = mergeCacheData(external, this.data);
+        } catch { /* merge failed — proceed with our state */ }
+      }
+      atomicWrite(this.filePath, JSON.stringify(this.data, null, 2));
+      this.loadMtime = fileMtime(this.filePath); // update baseline for next save
     } catch { /* best-effort */ }
   }
+}
+
+function atomicWrite(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tmp = `${filePath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tmp, content, "utf-8");
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* ignore cleanup failure */ }
+    throw err;
+  }
+}
+
+function fileMtime(filePath: string): number | null {
+  try { return fs.statSync(filePath).mtimeMs; } catch { return null; }
+}
+
+/**
+ * Merges two CacheData snapshots.  `overlay` wins for selectors present in
+ * both (takes the entry with the higher total-use count, which has more signal).
+ * Entries only in `base` (added by another worker) are preserved.
+ */
+function mergeCacheData(base: CacheData, overlay: CacheData): CacheData {
+  const merged: CacheData = {};
+  const allUrls = new Set([...Object.keys(base), ...Object.keys(overlay)]);
+
+  for (const url of allUrls) {
+    merged[url] = {};
+    const baseDescs    = base[url]    ?? {};
+    const overlayDescs = overlay[url] ?? {};
+    const allDescs     = new Set([...Object.keys(baseDescs), ...Object.keys(overlayDescs)]);
+
+    for (const desc of allDescs) {
+      const baseEntries    = baseDescs[desc]    ?? [];
+      const overlayEntries = overlayDescs[desc] ?? [];
+
+      // Union entries by selector; for duplicates keep the one with more total uses.
+      const bySelector = new Map<string, CacheEntry>();
+      for (const e of [...baseEntries, ...overlayEntries]) {
+        const existing = bySelector.get(e.selector);
+        const uses     = e.successCount + e.failureCount;
+        const existUses = existing ? existing.successCount + existing.failureCount : -1;
+        if (!existing || uses > existUses) bySelector.set(e.selector, e);
+      }
+      merged[url][desc] = [...bySelector.values()];
+    }
+  }
+  return merged;
 }
