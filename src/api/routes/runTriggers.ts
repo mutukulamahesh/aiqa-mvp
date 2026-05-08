@@ -111,14 +111,12 @@ async function runTestsParallel(
 
   const results: TestResult[] = new Array(files.length).fill(null);
   const queue = files.map((f, i) => ({ f, i }));
-  let testIndex = 0;
 
   const runSlot = async () => {
     while (queue.length > 0 && !job.cancelled) {
       const item = queue.shift();
       if (!item) break;
       const { f, i } = item;
-      testIndex++;
 
       try {
         const testDef = parseTestFile(f);
@@ -148,17 +146,20 @@ async function runTestsParallel(
 
 router.post("/run", validate(RunSchema), (req, res) => {
   const body = req.body as z.infer<typeof RunSchema>;
-  const job  = jobStore.create("run");
+
+  let resolvedFile: string | undefined;
+  if (!body.content) {
+    try { resolvedFile = safeResolvePath(process.cwd(), body.file!); }
+    catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
+  }
+
+  const job = jobStore.create("run");
   accept(res, job);
 
   jobStore.enqueue(job, async () => {
-    let content: string;
-    if (body.content) {
-      content = body.content;
-    } else {
-      const resolved = safeResolvePath(process.cwd(), body.file!);
-      content = await fs.promises.readFile(resolved, "utf-8");
-    }
+    const content = body.content
+      ? body.content
+      : await fs.promises.readFile(resolvedFile!, "utf-8");
 
     const testDef = parseTestDefinition(content);
     const screenshotsDir = path.join(persistence.runDir(job.meta.runId), "screenshots");
@@ -178,13 +179,17 @@ router.post("/run", validate(RunSchema), (req, res) => {
 
 // ── POST /api/run-all — full test suite ──────────────────────────────────────
 
-router.post("/run-all", validate(RunAllSchema), async (req, res) => {
+router.post("/run-all", validate(RunAllSchema), (req, res) => {
   const body = req.body as z.infer<typeof RunAllSchema>;
-  const job  = jobStore.create("run-all");
+
+  let testDir: string;
+  try { testDir = safeResolvePath(process.cwd(), body.dir); }
+  catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
+
+  const job = jobStore.create("run-all");
   accept(res, job);
 
   jobStore.enqueue(job, async () => {
-    const testDir = safeResolvePath(process.cwd(), body.dir);
     let files: string[];
     try {
       const entries = await fs.promises.readdir(testDir, { withFileTypes: true });
@@ -271,7 +276,14 @@ router.post("/explore", validate(ExploreSchema), (req, res) => {
 
 router.post("/generate", validate(GenerateSchema), (req, res) => {
   const body = req.body as z.infer<typeof GenerateSchema>;
-  const job  = jobStore.create("generate");
+
+  let resolvedOutDir: string | undefined;
+  if (body.outDir) {
+    try { resolvedOutDir = safeResolvePath(process.cwd(), body.outDir); }
+    catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
+  }
+
+  const job = jobStore.create("generate");
   accept(res, job);
 
   jobStore.enqueue(job, async () => {
@@ -288,9 +300,8 @@ router.post("/generate", validate(GenerateSchema), (req, res) => {
 
     const scenarios = await generator.generate(flows, explData.baseUrl ?? "");
 
-    const outDir = body.outDir
-      ? safeResolvePath(process.cwd(), body.outDir)
-      : path.join(persistence.runDir(job.meta.runId), "generated");
+    const outDir = resolvedOutDir
+      ?? path.join(persistence.runDir(job.meta.runId), "generated");
 
     await fs.promises.mkdir(outDir, { recursive: true });
 
