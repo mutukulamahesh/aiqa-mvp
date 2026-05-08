@@ -3,7 +3,10 @@ import { PlaywrightAdapter } from "../adapter/PlaywrightAdapter";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { StepInterpreter } from "../execution/StepInterpreter";
 import { workerStorage, wlog, wwrite, WorkerStore } from "../execution/WorkerContext";
-import { TestDefinition } from "../dsl/types";
+import { TestDefinition, StepAction } from "../dsl/types";
+import { RunEvent } from "./RunEvent";
+export type { RunEvent } from "./RunEvent";
+export type { RunSummary } from "./RunEvent";
 import { DebuggerAgent, DebugResult } from "../agents/DebuggerAgent";
 import { getConfig } from "../config/ConfigLoader";
 import { AssertionError, TransientError } from "../errors";
@@ -66,6 +69,16 @@ export function isRetryable(err: Error): boolean {
   );
 }
 
+// ── Step target extractor (for RunEvent "target" field) ──────────────────────
+
+function stepTarget(step: StepAction): string | undefined {
+  if ("target"   in step) return step.target;
+  if ("selector" in step) return (step as { selector: string }).selector;
+  if ("url"      in step) return (step as { url: string }).url;
+  if ("ms"       in step) return `${(step as { ms: number }).ms}ms`;
+  return undefined;
+}
+
 // ── TestRunner ───────────────────────────────────────────────────────────────
 
 export class TestRunner {
@@ -88,16 +101,18 @@ export class TestRunner {
    * Public entry point.
    * Wraps execution in AsyncLocalStorage so all output is buffered per-test
    * and flushed atomically — no interleaving under parallel runs.
+   * When onEvent is provided (API mode) logs are streamed in real time and
+   * NOT flushed to stdout — the caller owns the output channel.
    */
-  async run(test: TestDefinition): Promise<TestResult> {
+  async run(test: TestDefinition, onEvent?: (e: RunEvent) => void): Promise<TestResult> {
     const testId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const store: WorkerStore = { testId, testName: test.name, logs: [] };
+    const store: WorkerStore = { testId, testName: test.name, logs: [], onEvent };
 
     try {
       const result = await workerStorage.run(store, () => this._runWithRetry(test, testId));
       return result;
     } finally {
-      if (store.logs.length) {
+      if (!onEvent && store.logs.length) {
         process.stdout.write(store.logs.join(""));
         store.logs = [];
       }
@@ -172,18 +187,23 @@ export class TestRunner {
     const totalStart = Date.now();
 
     try {
+      const onEvent = workerStorage.getStore()?.onEvent;
+
       for (let i = 0; i < test.steps.length; i++) {
         const step      = test.steps[i];
         const stepStart = Date.now();
         const label     = `[${i + 1}/${test.steps.length}]`;
 
+        onEvent?.({ event: "step", index: i, action: step.action, target: stepTarget(step) });
         wwrite(`${label} `);
 
         try {
           await this.interpreter.execute(step, adapter, ctx);
           wlog("");
           this.memory?.recordOutcome(makeStepKey(test.name, i, step.action), true);
-          stepResults.push({ index: i, action: step.action, passed: true, durationMs: Date.now() - stepStart });
+          const durationMs = Date.now() - stepStart;
+          onEvent?.({ event: "step_result", index: i, passed: true, durationMs });
+          stepResults.push({ index: i, action: step.action, passed: true, durationMs });
 
         } catch (err) {
           const error     = err as Error;
@@ -202,23 +222,29 @@ export class TestRunner {
           wlog(`  🔍 [${debugResult.failure_class}]${memBadge} ${debugResult.suggested_fix}`);
 
           let screenshotPath: string | undefined;
+          let screenshotUrl: string | undefined;
           if (this.opts.screenshotsDir) {
             const safeName = test.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
             const attemptSuffix = attempt > 0 ? `-attempt${attempt + 1}` : "";
-            screenshotPath = path.join(
-              this.opts.screenshotsDir,
-              `${safeName}-${testId}${attemptSuffix}-step-${i + 1}-fail.png`
-            );
+            const fileName = `${safeName}-${testId}${attemptSuffix}-step-${i + 1}-fail.png`;
+            screenshotPath = path.join(this.opts.screenshotsDir, fileName);
             await adapter.screenshot(screenshotPath).catch(() => { screenshotPath = undefined; });
-            if (screenshotPath) wlog(`  📸 Screenshot → ${screenshotPath}`);
+            if (screenshotPath) {
+              wlog(`  📸 Screenshot → ${screenshotPath}`);
+              // Derive a URL-style path relative to the run's screenshots dir
+              screenshotUrl = fileName;
+            }
           }
+
+          const durationMs = Date.now() - stepStart;
+          onEvent?.({ event: "step_result", index: i, passed: false, durationMs, error: msg, screenshotUrl });
 
           stepResults.push({
             index: i, action: step.action, passed: false,
-            durationMs: Date.now() - stepStart, error: msg, errorClass: error.name, retryable, screenshotPath,
+            durationMs, error: msg, errorClass: error.name, retryable, screenshotPath,
           });
 
-          return {
+          const result: TestResult = {
             testId,
             testName:   test.name,
             tags:       test.tags ?? [],
@@ -229,15 +255,19 @@ export class TestRunner {
             stepResults,
             debugResult,
           };
+          onEvent?.({ event: "test_done", testName: test.name, passed: false, durationMs: result.durationMs });
+          return result;
         }
       }
 
+      const totalDurationMs = Date.now() - totalStart;
+      onEvent?.({ event: "test_done", testName: test.name, passed: true, durationMs: totalDurationMs });
       return {
         testId,
         testName:   test.name,
         tags:       test.tags ?? [],
         passed:     true,
-        durationMs: Date.now() - totalStart,
+        durationMs: totalDurationMs,
         retryCount: attempt,
         stepResults,
       };

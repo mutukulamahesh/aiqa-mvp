@@ -230,6 +230,66 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
+## Phase 4 — Product Surface `[ACCESSIBILITY]`
+> Make AIQA usable beyond the CLI — API layer unlocks Portal, Chrome Extension, and all future integrations
+
+### EPIC-API · REST API Layer
+> **Design doc:** `API_LAYER_DESIGN.md` — approved for build 2026-05-08
+
+| ID | Story | Status |
+|---|---|---|
+| A.1 | `src/server.ts` — Express + WS server, `aiqa serve` CLI command, port 7432 | [ ] |
+| A.2 | `RunJobStore` — in-memory Map + FIFO concurrency queue (default `os.cpus().length`) | [ ] |
+| A.3 | Disk persistence — `.aiqa/runs/<runId>/{meta,results,exploration}.json` | [ ] |
+| A.4 | `POST /api/run` + `POST /api/run-all` + `POST /api/orchestrate` — trigger endpoints | [ ] |
+| A.5 | `POST /api/explore` + `POST /api/generate` (reads persisted exploration) | [ ] |
+| A.6 | `POST /api/import` (multipart via multer) + `POST /api/jira-sync` | [ ] |
+| A.7 | `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/results`, `GET /api/runs/:id/report` | [ ] |
+| A.8 | `WS /api/runs/:runId/stream` — replay buffer (500 events, 1hr TTL), fan-out to multiple clients | [ ] |
+| A.9 | `POST /api/runs/:runId/cancel` — graceful cancellation via onEvent flag | [ ] |
+| A.10 | `GET/PUT /api/tests/*path` — YAML file read/write with path traversal guard | [ ] |
+| A.11 | Auth middleware (Bearer HTTP + `?token=` WS), CORS for HTTP + WS verifyClient | [ ] |
+| A.12 | Zod request validation on all endpoints, clear 400 errors | [ ] |
+| A.13 | `TestRunner.run(test, onEvent?)` — optional callback (only engine touch), WorkerContext wire-up | [ ] |
+| A.14 | Screenshot serving `GET /api/runs/:id/screenshots/:file` | [ ] |
+
+### EPIC-EXT-A · Chrome Extension (API-backed)
+> Depends on EPIC-API. Design doc: `CHROME_EXTENSION_DESIGN.md` Track A.
+
+| ID | Story | Status |
+|---|---|---|
+| EA.1 | Extension scaffold — Manifest V3, side panel, service worker | [ ] |
+| EA.2 | Flow recorder — content script captures click/fill/navigate as YAML | [ ] |
+| EA.3 | `POST /api/run` integration — sends recorded YAML, gets runId | [ ] |
+| EA.4 | WS live view — step-by-step results in side panel | [ ] |
+| EA.5 | Settings page — server URL + API key configuration | [ ] |
+| EA.6 | Test library — save/load named tests via `GET/PUT /api/tests` | [ ] |
+
+### EPIC-EXT-B · Chrome Extension (Pure / Zero-setup)
+> Independent of EPIC-API. Design doc: `CHROME_EXTENSION_DESIGN.md` Track B.
+
+| ID | Story | Status |
+|---|---|---|
+| EB.1 | `ChromeDebuggerAdapter` — navigate, click, fill, assert via CDP | [ ] |
+| EB.2 | AI test generation — page HTML → Claude API → YAML steps | [ ] |
+| EB.3 | Record mode — captures user flow, replays with visual highlights | [ ] |
+| EB.4 | Pass/fail result display + chrome.storage persistence | [ ] |
+| EB.5 | Export as YAML + import from file | [ ] |
+
+### EPIC-PORTAL · AIQA Portal (Web UI)
+> Depends on EPIC-API. React frontend calling the API.
+
+| ID | Story | Status |
+|---|---|---|
+| P.1 | Portal scaffold — React + Vite, `portal/` folder | [ ] |
+| P.2 | Run history dashboard — `GET /api/runs` table view | [ ] |
+| P.3 | Live run view — trigger + WS progress stream | [ ] |
+| P.4 | HTML report embed — iframe from `GET /api/runs/:id/report` | [ ] |
+| P.5 | YAML test editor — `GET/PUT /api/tests` with CodeMirror | [ ] |
+| P.6 | Orchestrate UI — URL input → one-click full pipeline | [ ] |
+
+---
+
 ## Phase 4 — Enterprise Integration `[BUSINESS VALUE]`
 > Connect QA to the rest of the organisation
 
@@ -327,10 +387,17 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | Phase 2 — Intelligence | 2 | 9 | ✅ DONE | Self-healing, memory |
 | Phase 3 — Coverage | 3 | 13 | ✅ DONE | Full-stack testing in one YAML |
 | Pre-Phase 4 Hardening | — | 8 | ✅ DONE | Concurrency safety + production hardening |
-| Phase 4 — Enterprise | 3 | 11 | ⬜ Next | Jira, Allure, CI impact filter |
-| Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
-| Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
-| Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **21** | **79** | | |
+| **Phase 4 — Product Surface** | **4** | **30** | **▶ NOW** | **API layer + Chrome Extension + Portal** |
+| Phase 5 — Enterprise | 3 | 11 | ⬜ | Jira full, Allure, CI impact filter |
+| Phase 6 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
+| Phase 7 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
+| Phase 8 — Scale | 3 | 7 | ⬜ | SaaS product |
+| **Total** | **25** | **109** | | |
 
-> **Sprint 1 + 2 + Phase 2–3 + hardening complete (~55 stories). Phase 4 Enterprise is next.**
+**Build order for Phase 4:**
+1. EPIC-API (REST + WS server) — everything else depends on this
+2. EPIC-EXT-B (pure extension) — parallel, independent track
+3. EPIC-EXT-A (API-backed extension) — after EPIC-API is stable
+4. EPIC-PORTAL (web UI) — after EPIC-API is stable
+
+> **Phase 4 Product Surface is next. Start with EPIC-API.**

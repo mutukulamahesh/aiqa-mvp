@@ -1,7 +1,9 @@
 # AIQA Chrome Extension — Design Brief
 
-> Status: Pre-design (2026-05-08)
+> Status: Pre-design — pending API layer completion (2026-05-08)
 > Goal: Let non-technical users test AI-built web apps instantly from the browser — no CLI, no YAML, no setup.
+>
+> **Build order:** API layer first → Chrome extension after. Two parallel tracks exist (see below).
 
 ---
 
@@ -23,15 +25,40 @@ Everyone is building apps with AI. Most of those builders are non-technical — 
 
 ---
 
-## Architecture Decision: Pure Extension (no local server)
+## Architecture: Two Parallel Tracks
 
-| Approach | Pros | Cons |
-|---|---|---|
-| **Pure extension** | Install and go, no setup | No headless, no Node.js modules |
-| Extension + local server | Full Playwright power | User must install two things |
-| SaaS/cloud backend | No local install | Requires infrastructure, latency |
+The original design discussion (2026-05-06) confirmed that the extension needs an API backend to run Playwright. Both tracks are now planned and will be built after the API layer.
 
-**Decision: Pure extension (Option B)** — lowest friction for non-technical users.
+| Track | Architecture | User | Status |
+|---|---|---|---|
+| **Track A — API-backed** | Extension (UI/recorder) → AIQA API server → Playwright engine | Power users, developers, teams with local server | Build after API layer |
+| **Track B — Pure extension** | Extension only, `chrome.debugger` CDP replaces Playwright | Non-technical users, zero setup | Build in parallel, independent |
+
+### Track A — API-backed (primary)
+```
+Chrome Extension (side panel UI + flow recorder)
+        ↓  POST /api/run { content: "<yaml>" }
+AIQA API server (localhost:7432)
+        ↓  onEvent callback
+Playwright engine (full power: healer, memory, judge)
+        ↓  WS /api/runs/:runId/stream
+Extension shows live step results
+```
+- Records user flow → sends YAML to local AIQA server
+- Full Playwright power: healer, memory, parallel, headless
+- Shares the same API used by the Portal
+- Requires AIQA server running locally
+
+### Track B — Pure extension (zero-setup)
+```
+Chrome Extension only
+  chrome.debugger CDP → drives the active tab directly
+  Service worker → calls Anthropic API for AI test generation
+  Content script → records interactions, injects highlights
+```
+- No local server, no install beyond the extension
+- `chrome.debugger` replaces Playwright for the active tab
+- Best for the "random builder" use case
 
 ---
 
