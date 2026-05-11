@@ -63,30 +63,40 @@ export class ScenarioGenerator {
     return lines.join("\n") + "\n";
   }
 
+  // Produce a YAML-safe quoted string. CSS attribute selectors like [name="x"]
+  // contain double quotes, which break double-quoted YAML scalars. Use single
+  // quotes when the value contains double quotes (CSS selectors rarely use single
+  // quotes). Fall back to escaped double quotes if both quote types are present.
+  private qs(s: string): string {
+    if (!s.includes('"')) return `"${s}"`;
+    if (!s.includes("'")) return `'${s}'`;
+    return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+
   private stepToYaml(step: FlowStep, baseUrl: string): string[] {
     switch (step.action) {
       case "navigate": {
         const url = step.target?.startsWith("http") ? step.target : `${baseUrl}${step.target ?? ""}`;
-        return [`    - navigate: "${url}"`];
+        return [`    - navigate: ${this.qs(url)}`];
       }
       case "click":
-        return [`    - click: "${step.target ?? "Submit"}"`];
+        return [`    - click: ${this.qs(step.target ?? "Submit")}`];
       case "fill":
         return [
           `    - fill:`,
-          `        target: "${step.target ?? "field"}"`,
-          `        value: "${step.value ?? "test value"}"`,
+          `        target: ${this.qs(step.target ?? "field")}`,
+          `        value: ${this.qs(step.value ?? "test value")}`,
         ];
       case "assert":
         if (step.target === "url") {
-          return [`    - assert:`, `        url: "${step.value ?? "/"}"`];
+          return [`    - assert:`, `        url: ${this.qs(step.value ?? "/")}`];
         }
-        return [`    - assert:`, `        text: "${step.value ?? "success"}"`];
+        return [`    - assert:`, `        text: ${this.qs(step.value ?? "success")}`];
       case "api":
         return [
           `    - api:`,
-          `        method: "${step.value ?? "GET"}"`,
-          `        url: "${step.target ?? baseUrl}"`,
+          `        method: ${this.qs(step.value ?? "GET")}`,
+          `        url: ${this.qs(step.target ?? baseUrl)}`,
           `        assert_status: 200`,
         ];
       default:
