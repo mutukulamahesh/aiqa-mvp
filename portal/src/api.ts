@@ -8,12 +8,22 @@ export interface RunMeta {
   error?:      string;
 }
 
+export interface StepResult {
+  index:           number;
+  action:          string;
+  passed:          boolean;
+  durationMs:      number;
+  error?:          string;
+  screenshotPath?: string;
+}
+
 export interface RunResult {
-  testName:   string;
-  passed:     boolean;
-  durationMs: number;
-  error?:     string;
-  tags?:      string[];
+  testName:     string;
+  passed:       boolean;
+  durationMs:   number;
+  error?:       string;
+  tags?:        string[];
+  stepResults?: StepResult[];
 }
 
 const KEY_STORAGE = "aiqa:apiKey";

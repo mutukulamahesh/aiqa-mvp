@@ -77,7 +77,7 @@ export default function Runs() {
                       onMouseLeave={e => (e.currentTarget.style.background = "")}>
                       <td style={tdStyle}><code style={{ fontSize: 11, color: "#6366f1" }}>{r.runId.slice(0, 24)}…</code></td>
                       <td style={tdStyle}>{r.type}</td>
-                      <td style={tdStyle}><StatusBadge status={r.status} /></td>
+                      <td style={tdStyle}><StatusBadge status={(r.summary?.failed ?? 0) > 0 ? "failed" : r.status} /></td>
                       <td style={tdStyle}>
                         {r.summary ? (
                           <span>
