@@ -228,6 +228,8 @@ export class TestRunner {
             const attemptSuffix = attempt > 0 ? `-attempt${attempt + 1}` : "";
             const fileName = `${safeName}-${testId}${attemptSuffix}-step-${i + 1}-fail.png`;
             screenshotPath = path.join(this.opts.screenshotsDir, fileName);
+            // Brief pause so the page can render any error state before capture
+            await new Promise(r => setTimeout(r, 300));
             await adapter.screenshot(screenshotPath).catch(() => { screenshotPath = undefined; });
             if (screenshotPath) {
               wlog(`  📸 Screenshot → ${screenshotPath}`);
