@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, TestFile } from "../api";
 
@@ -188,5 +188,3 @@ const primaryBtn: React.CSSProperties = {
   padding: "6px 14px", borderRadius: 8, border: "none",
   background: "#6366f1", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer",
 };
-
-import React from "react";

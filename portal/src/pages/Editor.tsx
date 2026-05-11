@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { EnvVarPanel, EnvVar, envVarsToRecord } from "../components/EnvVarPanel";
@@ -114,5 +114,3 @@ const secondaryBtn: React.CSSProperties = {
   padding: "8px 16px", borderRadius: 8, border: "1px solid #e2e8f0",
   background: "#fff", color: "#475569", fontSize: 13, cursor: "pointer",
 };
-
-import React from "react";

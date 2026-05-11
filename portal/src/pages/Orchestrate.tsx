@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { EnvVarPanel, EnvVar, envVarsToRecord } from "../components/EnvVarPanel";
@@ -103,5 +103,3 @@ const primaryBtn = (disabled: boolean): React.CSSProperties => ({
   background: disabled ? "#c7d2fe" : "#6366f1", color: "#fff",
   fontSize: 14, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
 });
-
-import React from "react";
