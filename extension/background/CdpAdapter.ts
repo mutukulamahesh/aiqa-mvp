@@ -36,6 +36,14 @@ export class CdpAdapter {
         for (const cb of this.detachCallbacks) cb(reason);
       }
     });
+
+    // Auto-dismiss JS dialogs (alert, confirm, beforeunload) so they don't block runs.
+    chrome.debugger.onEvent.addListener((source, method) => {
+      if (!this.attached || source.tabId !== this.target?.tabId) return;
+      if (method === "Page.javascriptDialogOpening") {
+        this.send("Page.handleJavaScriptDialog", { accept: true }).catch(() => {});
+      }
+    });
   }
 
   /** Register a callback invoked if the CDP session is stolen mid-run. */
@@ -225,10 +233,10 @@ export class CdpAdapter {
       return `document.querySelector('[data-testid="' + CSS.escape(${v}) + '"]')`;
     }
     if (selector.startsWith("text=")) {
-      const v = JSON.stringify(selector.slice(5));
+      const v = JSON.stringify(selector.slice(5).toLowerCase());
       return (
         `Array.from(document.querySelectorAll("*")).find(` +
-        `e => e.children.length === 0 && (e.textContent ?? "").trim() === ${v}) ?? null`
+        `e => e.children.length === 0 && (e.textContent ?? "").trim().toLowerCase() === ${v}) ?? null`
       );
     }
     return `document.querySelector(${JSON.stringify(selector)})`;
@@ -240,6 +248,7 @@ export class CdpAdapter {
       (function() {
         const el = ${find};
         if (!el) return null;
+        el.scrollIntoView({ block: "center", inline: "nearest" });
         const r = el.getBoundingClientRect();
         return { x: r.x, y: r.y, width: r.width, height: r.height };
       })()
