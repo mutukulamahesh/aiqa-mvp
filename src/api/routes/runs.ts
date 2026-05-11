@@ -34,8 +34,9 @@ router.get("/runs/:runId/results", async (req, res) => {
 router.get("/runs/:runId/report", async (req, res) => {
   const reportPath = path.join(persistence.runDir(req.params.runId), "report.html");
   try {
-    await fs.promises.access(reportPath);
-    res.sendFile(reportPath);
+    const html = await fs.promises.readFile(reportPath, "utf-8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
   } catch {
     res.status(404).json({ error: "Report not found" });
   }

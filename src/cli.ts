@@ -361,9 +361,10 @@ program
   .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
+  .option("--dry-run",              "List tests that would run without executing them")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
-    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean;
+    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -410,6 +411,26 @@ program
     if (files.length === 0) {
       console.error(`❌ No YAML files found in ${testsDir}${filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : ""}`);
       process.exit(1);
+    }
+
+    if (opts.dryRun) {
+      console.log(`\n🔍 AIQA Dry Run — ${files.length} test(s) would run:\n`);
+      for (const f of files) {
+        try {
+          const def = parseTestFile(f);
+          const tags = def.tags?.length ? `  [${def.tags.join(", ")}]` : "";
+          console.log(`   • ${def.name}${tags}`);
+          console.log(`     ${f}`);
+        } catch {
+          console.log(`   ⚠️  ${path.basename(f)} — parse error`);
+        }
+      }
+      console.log(`\n─────────────────────────────────────────`);
+      console.log(`   Would run : ${files.length} test(s)`);
+      if (filterTags.length) console.log(`   Tag filter: [${filterTags.join(", ")}]`);
+      if (outRoot)           console.log(`   Out       : ${outRoot}`);
+      console.log(`─────────────────────────────────────────\n`);
+      process.exit(0);
     }
 
     const screenshotsDir = outRoot ? path.join(outRoot, "screenshots") : undefined;

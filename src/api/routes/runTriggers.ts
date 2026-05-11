@@ -16,6 +16,7 @@ import { TestRunner }           from "../../runner/TestRunner";
 import { TestResult }           from "../../runner/TestRunner";
 import { AppExplorer }          from "../../agents/AppExplorer";
 import { OrchestratorAgent }    from "../../agents/OrchestratorAgent";
+import { HTMLReporter }         from "../../reporters/HTMLReporter";
 import { FlowMapper }           from "../../agents/FlowMapper";
 import { ScenarioGenerator }    from "../../agents/ScenarioGenerator";
 import { ImportOrchestrator }   from "../../importers/ImportOrchestrator";
@@ -227,11 +228,17 @@ router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
       maxPages: body.maxPages,
       timeout:  body.timeout,
       outDir:   body.outDir,
+      onProgress: (_stage, _total, message) => {
+        job.emit({ event: "log", message });
+      },
     });
 
     const passed  = result.summary.passed;
     const failed  = result.summary.failed;
-    const summary = { passed, failed, total: passed + failed };
+    const total   = passed + failed;
+    const score   = result.report?.score;
+    const grade   = result.report?.grade;
+    const summary = { passed, failed, total, ...(score !== undefined ? { score, grade } : {}) };
 
     const jobPassed = result.status === "success" || result.status === "success_with_warnings" || result.status === "dry_run";
     job.meta.status      = jobPassed ? "passed" : "failed";
@@ -243,6 +250,11 @@ router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
     await persistence.writeResults(job.meta.runId, result);
     if (result.stageResults.explorer) {
       await persistence.writeExploration(job.meta.runId, result.stageResults.explorer);
+    }
+
+    if (result.results.length > 0) {
+      const reportPath = path.join(persistence.runDir(job.meta.runId), "report.html");
+      new HTMLReporter().generate(result.results, reportPath, { baseUrl: body.url });
     }
   });
 });
