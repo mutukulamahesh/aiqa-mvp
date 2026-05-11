@@ -102,7 +102,11 @@ export const api = {
   },
 };
 
-export function openRunStream(runId: string, onEvent: (e: Record<string, unknown>) => void): () => void {
+export function openRunStream(
+  runId: string,
+  onEvent: (e: Record<string, unknown>) => void,
+  onDisconnect?: () => void,
+): () => void {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const key   = getApiKey();
   const url   = `${proto}//${location.host}/api/runs/${runId}/stream${key ? `?token=${encodeURIComponent(key)}` : ""}`;
@@ -110,5 +114,7 @@ export function openRunStream(runId: string, onEvent: (e: Record<string, unknown
   ws.onmessage = (msg) => {
     try { onEvent(JSON.parse(msg.data) as Record<string, unknown>); } catch { /* ignore */ }
   };
+  ws.onerror = () => { onDisconnect?.(); };
+  ws.onclose = (ev) => { if (!ev.wasClean) onDisconnect?.(); };
   return () => ws.close();
 }

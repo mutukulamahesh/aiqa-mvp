@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { getApiKey, setApiKey } from "../api";
+import ErrorBoundary from "./ErrorBoundary";
 
 const NAV: { path: string; label: string; icon: string }[] = [
   { path: "/",            label: "Dashboard",  icon: "◈" },
@@ -13,7 +14,6 @@ const NAV: { path: string; label: string; icon: string }[] = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [showKey, setShowKey]   = useState(false);
   const [keyInput, setKeyInput] = useState(getApiKey());
-  const navigate = useNavigate();
 
   const saveKey = () => { setApiKey(keyInput); setShowKey(false); };
 
@@ -84,7 +84,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main */}
       <main style={{ flex: 1, overflow: "auto", padding: 28 }}>
-        {children}
+        <ErrorBoundary>{children}</ErrorBoundary>
       </main>
 
     </div>

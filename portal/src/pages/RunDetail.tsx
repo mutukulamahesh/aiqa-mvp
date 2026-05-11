@@ -6,7 +6,7 @@ import StatusBadge from "../components/StatusBadge";
 interface LogLine { text: string; kind: "log" | "pass" | "fail" | "info" }
 
 function humanizeError(raw: string): string {
-  if (/could not resolve locator/i.test(raw) || /locator_failure/i.test(raw)) {
+  if (/could not resolve locator/i.test(raw)) {
     const m = raw.match(/for[:\s]+"?([^"]+)"?/i);
     return `Could not find "${m?.[1] ?? "element"}" on the page`;
   }
@@ -37,6 +37,7 @@ export default function RunDetail() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [logPaused, setLogPaused]   = useState(false);
   const [logFilter, setLogFilter]   = useState("");
+  const [wsDisconnected, setWsDisconnected] = useState(false);
   const logRef                  = useRef<HTMLDivElement>(null);
   const closeWs                 = useRef<(() => void) | null>(null);
 
@@ -47,7 +48,9 @@ export default function RunDetail() {
       .then(m => {
         setMeta(m);
         if (m.status === "passed" || m.status === "failed") {
-          return api.runs.results(id).then(r => setResults(r as RunResult[]));
+          return api.runs.results(id).then(r => {
+            if (Array.isArray(r)) setResults(r as RunResult[]);
+          });
         }
       })
       .catch(e => setError(e.message))
@@ -55,6 +58,8 @@ export default function RunDetail() {
 
     closeWs.current = openRunStream(id, (e) => {
       const event = e.event as string;
+      const addLog = (text: string, kind: LogLine["kind"]) =>
+        setLogs(prev => [...prev, { text, kind }]);
 
       if (event === "done") {
         const s = e.summary as { passed?: number; failed?: number; total?: number; score?: number; grade?: string } | undefined;
@@ -65,23 +70,50 @@ export default function RunDetail() {
           text += ` — ${s.passed ?? 0} passed, ${s.failed ?? 0} failed`;
           if (s.score !== undefined) text += ` · Score: ${s.score}/100 (${s.grade})`;
         }
-        setLogs(prev => [...prev, { text, kind: passed ? "pass" : "fail" }]);
+        addLog(text, passed ? "pass" : "fail");
         api.runs.get(id).then(setMeta).catch(() => {});
-        api.runs.results(id).then(r => setResults(r as RunResult[])).catch(() => {});
+        api.runs.results(id).then(r => {
+          if (Array.isArray(r)) setResults(r as RunResult[]);
+        }).catch(() => {});
         setTab("results");
         return;
       }
 
-      const msg = (e.message ?? e.label ?? e.error ?? "") as string;
+      if (event === "step") {
+        const target = e.target as string | undefined;
+        addLog(`[${(e.index as number) + 1}] ${e.action as string}${target ? ` → ${target}` : ""}`, "log");
+        return;
+      }
+
+      if (event === "step_result") {
+        const passed = e.passed as boolean;
+        const dur    = e.durationMs as number;
+        const err    = e.error as string | undefined;
+        const ssUrl  = e.screenshotUrl as string | undefined;
+        if (passed) {
+          addLog(`  ✓ done (${dur}ms)`, "pass");
+        } else {
+          addLog(`  ✗ ${err ?? "failed"} (${dur}ms)`, "fail");
+          if (ssUrl) addLog(`  📸 ${ssUrl}`, "info");
+        }
+        return;
+      }
+
+      if (event === "test_done") {
+        const passed = e.passed as boolean;
+        addLog(`── ${passed ? "✓ PASSED" : "✗ FAILED"}: ${e.testName as string} (${e.durationMs as number}ms)`, passed ? "pass" : "fail");
+        return;
+      }
+
+      if (event === "error") {
+        addLog(`ERROR: ${e.message as string ?? "unknown error"}`, "fail");
+        return;
+      }
+
+      const msg = (e.message ?? e.label ?? "") as string;
       if (!msg) return;
-
-      const kind: LogLine["kind"] =
-        event === "step:pass" ? "pass" :
-        event === "step:fail" ? "fail" :
-        event === "info"      ? "info" : "log";
-
-      setLogs(prev => [...prev, { text: msg, kind }]);
-    });
+      addLog(msg, event === "info" ? "info" : "log");
+    }, () => setWsDisconnected(true));
 
     return () => { closeWs.current?.(); };
   }, [id]);
@@ -257,6 +289,11 @@ export default function RunDetail() {
       {/* ── Live Log tab ── */}
       {tab === "log" && (
         <div style={{ background: "#fff", borderRadius: "0 8px 8px 8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+          {wsDisconnected && (
+            <div style={{ background: "#fef9c3", color: "#854d0e", padding: "6px 12px", fontSize: 12, borderBottom: "1px solid #fde047" }}>
+              ⚠ Live stream disconnected — refresh the page to reconnect
+            </div>
+          )}
           {/* Log toolbar */}
           <div style={{ display: "flex", gap: 8, padding: "8px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
             <input
