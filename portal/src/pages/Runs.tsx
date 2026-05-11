@@ -28,8 +28,11 @@ export default function Runs() {
 
   useEffect(() => { load(); }, []);
 
+  const effectiveStatus = (r: RunMeta) =>
+    (r.summary?.failed ?? 0) > 0 ? "failed" : r.status;
+
   const statuses = ["all", "passed", "failed", "running", "queued", "error", "cancelled"];
-  const visible  = filter === "all" ? runs : runs.filter(r => r.status === filter);
+  const visible  = filter === "all" ? runs : runs.filter(r => effectiveStatus(r) === filter);
 
   return (
     <div>
@@ -52,7 +55,7 @@ export default function Runs() {
             color: filter === s ? "#fff" : "#64748b",
             fontSize: 12, fontWeight: 500, cursor: "pointer",
           }}>
-            {s === "all" ? `All (${runs.length})` : `${s} (${runs.filter(r => r.status === s).length})`}
+            {s === "all" ? `All (${runs.length})` : `${s} (${runs.filter(r => effectiveStatus(r) === s).length})`}
           </button>
         ))}
       </div>
