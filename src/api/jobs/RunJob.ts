@@ -12,6 +12,11 @@ export interface RunJobMeta {
   screenshotsDir?: string;
   summary?:        RunSummary;
   error?:          string;
+  config?: {
+    url?:     string;
+    dir?:     string;
+    envKeys?: string[];
+  };
 }
 
 export interface RunJob {

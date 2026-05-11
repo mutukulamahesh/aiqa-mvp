@@ -5,6 +5,7 @@ import { getApiKey, setApiKey } from "../api";
 const NAV: { path: string; label: string; icon: string }[] = [
   { path: "/",            label: "Dashboard",  icon: "◈" },
   { path: "/runs",        label: "Runs",       icon: "▶" },
+  { path: "/tests",       label: "Tests",      icon: "📄" },
   { path: "/editor",      label: "Editor",     icon: "✎" },
   { path: "/orchestrate", label: "Orchestrate",icon: "⚡" },
 ];

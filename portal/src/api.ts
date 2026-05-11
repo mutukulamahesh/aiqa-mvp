@@ -6,6 +6,7 @@ export interface RunMeta {
   completedAt: string | null;
   summary?:    { passed: number; failed: number; total: number; score: number; grade: string };
   error?:      string;
+  config?:     { url?: string; dir?: string; envKeys?: string[] };
 }
 
 export interface StepResult {
@@ -24,6 +25,11 @@ export interface RunResult {
   error?:       string;
   tags?:        string[];
   stepResults?: StepResult[];
+}
+
+export interface TestFile {
+  name: string;
+  path: string;
 }
 
 const KEY_STORAGE = "aiqa:apiKey";
@@ -50,24 +56,49 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function apiFetchText(path: string): Promise<string> {
+  const key = getApiKey();
+  const h: Record<string, string> = key ? { Authorization: `Bearer ${key}` } : {};
+  const res = await fetch(path, { headers: h });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${res.statusText}${text ? `: ${text}` : ""}`);
+  }
+  return res.text();
+}
+
+async function apiFetchVoid(path: string, opts: RequestInit): Promise<void> {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${res.statusText}${text ? `: ${text}` : ""}`);
+  }
+}
+
 export const api = {
   runs: {
-    list: ()                        => apiFetch<RunMeta[]>("/api/runs"),
+    list: (limit = 20)              => apiFetch<RunMeta[]>(`/api/runs?limit=${limit}`),
     get:  (id: string)              => apiFetch<RunMeta>(`/api/runs/${id}`),
-    results: (id: string)           => apiFetch<RunResult[]>(`/api/runs/${id}/results`),
+    results: (id: string)           => apiFetch<unknown>(`/api/runs/${id}/results`),
     reportUrl: (id: string)         => `/api/runs/${id}/report`,
     cancel: (id: string)            => apiFetch<void>(`/api/runs/${id}/cancel`, { method: "POST" }),
   },
   trigger: {
-    run: (yaml: string, opts?: { headless?: boolean }) =>
+    run: (yaml: string, opts?: { headless?: boolean; vars?: Record<string, string> }) =>
       apiFetch<{ runId: string }>("/api/run", { method: "POST", body: JSON.stringify({ content: yaml, ...opts }) }),
-    orchestrate: (url: string, opts?: { maxPages?: number; headless?: boolean; dryRun?: boolean }) =>
+    runAll: (dir: string, opts?: { headless?: boolean; workers?: number; vars?: Record<string, string> }) =>
+      apiFetch<{ runId: string }>("/api/run-all", { method: "POST", body: JSON.stringify({ dir, ...opts }) }),
+    orchestrate: (url: string, opts?: { maxPages?: number; headless?: boolean; vars?: Record<string, string> }) =>
       apiFetch<{ runId: string }>("/api/orchestrate", { method: "POST", body: JSON.stringify({ url, ...opts }) }),
   },
   tests: {
-    read:  (filePath: string)               => apiFetch<{ content: string }>(`/api/tests/${filePath}`),
-    write: (filePath: string, content: string) =>
-      apiFetch<void>(`/api/tests/${filePath}`, { method: "PUT", body: JSON.stringify({ content }) }),
+    list:  (dir?: string) => apiFetch<TestFile[]>(`/api/tests${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`),
+    read:  (filePath: string) => apiFetchText(`/api/tests/${filePath}`),
+    write: (filePath: string, content: string) => {
+      const key = getApiKey();
+      const h: Record<string, string> = { "Content-Type": "text/yaml", ...(key ? { Authorization: `Bearer ${key}` } : {}) };
+      return apiFetchVoid(`/api/tests/${filePath}`, { method: "PUT", headers: h, body: content });
+    },
   },
 };
 

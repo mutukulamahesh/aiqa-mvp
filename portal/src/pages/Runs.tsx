@@ -5,17 +5,25 @@ import StatusBadge from "../components/StatusBadge";
 
 export default function Runs() {
   const [runs, setRuns]       = useState<RunMeta[]>([]);
+  const [limit, setLimit]     = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
   const [filter, setFilter]   = useState<string>("all");
   const navigate = useNavigate();
 
-  const load = () => {
+  const load = (lim?: number) => {
+    const effective = lim ?? limit;
     setLoading(true);
-    api.runs.list()
+    api.runs.list(effective)
       .then(setRuns)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
+  };
+
+  const loadMore = () => {
+    const next = limit + 20;
+    setLimit(next);
+    load(next);
   };
 
   useEffect(() => { load(); }, []);
@@ -30,7 +38,7 @@ export default function Runs() {
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Runs</h1>
           <p style={{ color: "#64748b", marginTop: 2 }}>{runs.length} total runs</p>
         </div>
-        <button onClick={load} style={refreshBtn}>↻ Refresh</button>
+        <button onClick={() => load()} style={refreshBtn}>↻ Refresh</button>
       </div>
 
       {error && <div style={errStyle}>{error}</div>}
@@ -98,6 +106,13 @@ export default function Runs() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* Load more */}
+      {!loading && runs.length >= limit && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={loadMore} style={refreshBtn}>Load 20 more</button>
         </div>
       )}
     </div>

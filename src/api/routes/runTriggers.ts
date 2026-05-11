@@ -37,6 +37,7 @@ const RunSchema = z.object({
   env:      z.string().default("dev"),
   headless: z.boolean().default(true),
   tags:     z.array(z.string()).optional(),
+  vars:     z.record(z.string(), z.string()).optional(),
 }).refine(d => d.content || d.file, { message: "Either 'content' or 'file' is required" });
 
 const RunAllSchema = z.object({
@@ -45,6 +46,7 @@ const RunAllSchema = z.object({
   headless:  z.boolean().default(true),
   workers:   z.number().int().min(1).default(4),
   tags:      z.array(z.string()).optional(),
+  vars:      z.record(z.string(), z.string()).optional(),
 });
 
 const OrchestrateSchema = z.object({
@@ -54,6 +56,7 @@ const OrchestrateSchema = z.object({
   maxPages: z.number().int().min(1).optional(),
   timeout:  z.number().int().min(1000).optional(),
   outDir:   z.string().optional(),
+  vars:     z.record(z.string(), z.string()).optional(),
 });
 
 const ExploreSchema = z.object({
@@ -78,6 +81,23 @@ const JiraSyncSchema = z.object({
 
 function accept(res: import("express").Response, job: RunJob): void {
   res.status(202).json({ runId: job.meta.runId });
+}
+
+async function withEnv<T>(vars: Record<string, string> | undefined, fn: () => Promise<T>): Promise<T> {
+  if (!vars || Object.keys(vars).length === 0) return fn();
+  const saved: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    saved[k] = process.env[k];
+    process.env[k] = v;
+  }
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 }
 
 function finishJob(job: RunJob, results: TestResult[]): RunSummary {
@@ -155,9 +175,10 @@ router.post("/run", validate(RunSchema), (req, res) => {
   }
 
   const job = jobStore.create("run");
+  job.meta.config = { envKeys: Object.keys(body.vars ?? {}) };
   accept(res, job);
 
-  jobStore.enqueue(job, async () => {
+  jobStore.enqueue(job, () => withEnv(body.vars, async () => {
     const content = body.content
       ? body.content
       : await fs.promises.readFile(resolvedFile!, "utf-8");
@@ -175,7 +196,7 @@ router.post("/run", validate(RunSchema), (req, res) => {
 
     await persistence.writeMeta(job.meta);
     await persistence.writeResults(job.meta.runId, [result]);
-  });
+  }));
 });
 
 // ── POST /api/run-all — full test suite ──────────────────────────────────────
@@ -188,9 +209,10 @@ router.post("/run-all", validate(RunAllSchema), (req, res) => {
   catch (err) { res.status(400).json({ error: (err as Error).message }); return; }
 
   const job = jobStore.create("run-all");
+  job.meta.config = { dir: body.dir, envKeys: Object.keys(body.vars ?? {}) };
   accept(res, job);
 
-  jobStore.enqueue(job, async () => {
+  jobStore.enqueue(job, () => withEnv(body.vars, async () => {
     let files: string[];
     try {
       const entries = await fs.promises.readdir(testDir, { withFileTypes: true });
@@ -209,7 +231,7 @@ router.post("/run-all", validate(RunAllSchema), (req, res) => {
 
     await persistence.writeMeta(job.meta);
     await persistence.writeResults(job.meta.runId, results);
-  });
+  }));
 });
 
 // ── POST /api/orchestrate — full pipeline ────────────────────────────────────
@@ -217,9 +239,10 @@ router.post("/run-all", validate(RunAllSchema), (req, res) => {
 router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
   const body = req.body as z.infer<typeof OrchestrateSchema>;
   const job  = jobStore.create("orchestrate");
+  job.meta.config = { url: body.url, envKeys: Object.keys(body.vars ?? {}) };
   accept(res, job);
 
-  jobStore.enqueue(job, async () => {
+  jobStore.enqueue(job, () => withEnv(body.vars, async () => {
     const orchestrator = new OrchestratorAgent();
     const result = await orchestrator.run({
       url:      body.url,
@@ -256,7 +279,7 @@ router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
       const reportPath = path.join(persistence.runDir(job.meta.runId), "report.html");
       new HTMLReporter().generate(result.results, reportPath, { baseUrl: body.url });
     }
-  });
+  }));
 });
 
 // ── POST /api/explore — exploration only ─────────────────────────────────────
