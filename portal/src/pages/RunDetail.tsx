@@ -66,6 +66,11 @@ export default function RunDetail() {
       const addLog = (text: string, kind: LogLine["kind"]) =>
         setLogs(prev => [...prev, { text, kind }]);
 
+      if (event === "_reconnect") {
+        setLogs([]);
+        return;
+      }
+
       if (event === "done") {
         doneReceived.current = true;
         const s = e.summary as { passed?: number; failed?: number; total?: number; score?: number; grade?: string } | undefined;

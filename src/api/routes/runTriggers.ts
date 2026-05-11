@@ -240,17 +240,20 @@ router.post("/orchestrate", validate(OrchestrateSchema), (req, res) => {
   const body = req.body as z.infer<typeof OrchestrateSchema>;
   const job  = jobStore.create("orchestrate");
   job.meta.config = { url: body.url, envKeys: Object.keys(body.vars ?? {}) };
+  const orchScreenshotsDir = path.join(persistence.runDir(job.meta.runId), "screenshots");
+  job.meta.screenshotsDir = orchScreenshotsDir;
   accept(res, job);
 
   jobStore.enqueue(job, () => withEnv(body.vars, async () => {
     const orchestrator = new OrchestratorAgent();
     const result = await orchestrator.run({
-      url:      body.url,
-      env:      body.env,
-      headless: body.headless,
-      maxPages: body.maxPages,
-      timeout:  body.timeout,
-      outDir:   body.outDir,
+      url:            body.url,
+      env:            body.env,
+      headless:       body.headless,
+      maxPages:       body.maxPages,
+      timeout:        body.timeout,
+      outDir:         body.outDir,
+      screenshotsDir: orchScreenshotsDir,
       onProgress: (_stage, _total, message) => {
         job.emit({ event: "log", message });
       },

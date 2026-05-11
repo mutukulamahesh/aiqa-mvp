@@ -107,14 +107,36 @@ export function openRunStream(
   onEvent: (e: Record<string, unknown>) => void,
   onDisconnect?: () => void,
 ): () => void {
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const key   = getApiKey();
-  const url   = `${proto}//${location.host}/api/runs/${runId}/stream${key ? `?token=${encodeURIComponent(key)}` : ""}`;
-  const ws    = new WebSocket(url);
-  ws.onmessage = (msg) => {
-    try { onEvent(JSON.parse(msg.data) as Record<string, unknown>); } catch { /* ignore */ }
+  let ws: WebSocket;
+  let stopped = false;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const connect = () => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const key   = getApiKey();
+    const url   = `${proto}//${location.host}/api/runs/${runId}/stream${key ? `?token=${encodeURIComponent(key)}` : ""}`;
+    ws = new WebSocket(url);
+    ws.onmessage = (msg) => {
+      try { onEvent(JSON.parse(msg.data) as Record<string, unknown>); } catch { /* ignore */ }
+    };
+    ws.onerror = () => { /* handled by onclose */ };
+    ws.onclose = (ev) => {
+      if (stopped) return;
+      if (!ev.wasClean) {
+        // Unexpected drop (proxy timeout etc.) — clear buffered log and reconnect
+        onEvent({ event: "_reconnect" });
+        retryTimer = setTimeout(connect, 2500);
+      } else {
+        onDisconnect?.();
+      }
+    };
   };
-  ws.onerror = () => { onDisconnect?.(); };
-  ws.onclose = (ev) => { if (!ev.wasClean) onDisconnect?.(); };
-  return () => ws.close();
+
+  connect();
+
+  return () => {
+    stopped = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    ws?.close();
+  };
 }

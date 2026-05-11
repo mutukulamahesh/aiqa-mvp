@@ -145,7 +145,7 @@ export class OrchestratorAgent {
     progress(4, TOTAL_STAGES, `[Runner] Running ${validated.length} valid scenario(s)`);
     const results: TestResult[] = [];
     const t4 = Date.now();
-    const runner = new TestRunner({ headless: input.headless ?? true, timeout: input.timeout });
+    const runner = new TestRunner({ headless: input.headless ?? true, timeout: input.timeout, screenshotsDir: input.screenshotsDir });
     try {
       for (const scenario of validated) {
         const def    = parseTestDefinition(scenario.yaml);
