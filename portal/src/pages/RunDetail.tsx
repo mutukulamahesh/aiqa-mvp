@@ -40,6 +40,7 @@ export default function RunDetail() {
   const [wsDisconnected, setWsDisconnected] = useState(false);
   const logRef                  = useRef<HTMLDivElement>(null);
   const closeWs                 = useRef<(() => void) | null>(null);
+  const doneReceived            = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -49,7 +50,11 @@ export default function RunDetail() {
         setMeta(m);
         if (m.status === "passed" || m.status === "failed") {
           return api.runs.results(id).then(r => {
-            if (Array.isArray(r)) setResults(r as RunResult[]);
+            if (Array.isArray(r)) {
+              setResults(r as RunResult[]);
+            } else if (r && Array.isArray((r as Record<string, unknown>).results)) {
+              setResults((r as Record<string, unknown>).results as RunResult[]);
+            }
           });
         }
       })
@@ -62,6 +67,7 @@ export default function RunDetail() {
         setLogs(prev => [...prev, { text, kind }]);
 
       if (event === "done") {
+        doneReceived.current = true;
         const s = e.summary as { passed?: number; failed?: number; total?: number; score?: number; grade?: string } | undefined;
         const status = (e.status as string) ?? "unknown";
         const passed = status === "passed";
@@ -73,7 +79,11 @@ export default function RunDetail() {
         addLog(text, passed ? "pass" : "fail");
         api.runs.get(id).then(setMeta).catch(() => {});
         api.runs.results(id).then(r => {
-          if (Array.isArray(r)) setResults(r as RunResult[]);
+          if (Array.isArray(r)) {
+            setResults(r as RunResult[]);
+          } else if (r && Array.isArray((r as Record<string, unknown>).results)) {
+            setResults((r as Record<string, unknown>).results as RunResult[]);
+          }
         }).catch(() => {});
         setTab("results");
         return;
@@ -113,7 +123,7 @@ export default function RunDetail() {
       const msg = (e.message ?? e.label ?? "") as string;
       if (!msg) return;
       addLog(msg, event === "info" ? "info" : "log");
-    }, () => setWsDisconnected(true));
+    }, () => { if (!doneReceived.current) setWsDisconnected(true); });
 
     return () => { closeWs.current?.(); };
   }, [id]);
