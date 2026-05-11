@@ -38,6 +38,7 @@ export default function RunDetail() {
   const [logPaused, setLogPaused]   = useState(false);
   const [logFilter, setLogFilter]   = useState("");
   const [wsDisconnected, setWsDisconnected] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const logRef                  = useRef<HTMLDivElement>(null);
   const closeWs                 = useRef<(() => void) | null>(null);
   const doneReceived            = useRef(false);
@@ -160,7 +161,8 @@ export default function RunDetail() {
 
   const cancelRun = () => {
     if (!window.confirm("Cancel this run? This cannot be undone.")) return;
-    api.runs.cancel(id).catch(() => {});
+    setCancelling(true);
+    api.runs.cancel(id).catch(() => {}).finally(() => setCancelling(false));
   };
 
   const rerun = async () => {
@@ -223,7 +225,10 @@ export default function RunDetail() {
           <button onClick={rerun} style={secondaryActionBtn}>↺ Re-run</button>
         )}
         {meta?.status === "running" && (
-          <button onClick={cancelRun} style={dangerBtn}>Cancel</button>
+          <button onClick={cancelRun} disabled={cancelling}
+            style={{ ...dangerBtn, opacity: cancelling ? 0.6 : 1, cursor: cancelling ? "not-allowed" : "pointer" }}>
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </button>
         )}
       </div>
 

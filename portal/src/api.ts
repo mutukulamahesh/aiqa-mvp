@@ -4,7 +4,7 @@ export interface RunMeta {
   status:      "queued" | "running" | "passed" | "failed" | "error" | "cancelled";
   startedAt:   string | null;
   completedAt: string | null;
-  summary?:    { passed: number; failed: number; total: number; score: number; grade: string };
+  summary?:    { passed: number; failed: number; total: number; score?: number; grade?: string };
   error?:      string;
   config?:     { url?: string; dir?: string; envKeys?: string[] };
 }

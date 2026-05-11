@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useBlocker } from "react-router-dom";
 import { api, TestFile } from "../api";
 
 export default function Tests() {
@@ -14,6 +14,13 @@ export default function Tests() {
   const [edited, setEdited]       = useState(false);
   const navigate = useNavigate();
 
+  // Block React Router navigation when there are unsaved changes
+  useBlocker(({ currentLocation, nextLocation }) =>
+    edited && currentLocation.pathname !== nextLocation.pathname
+      ? !window.confirm("You have unsaved changes. Leave anyway?")
+      : false
+  );
+
   useEffect(() => {
     api.tests.list()
       .then(setFiles)
@@ -22,6 +29,7 @@ export default function Tests() {
   }, []);
 
   const openFile = async (filePath: string) => {
+    if (edited && !window.confirm("You have unsaved changes. Discard them?")) return;
     setSelected(filePath);
     setEdited(false);
     setSaveMsg("");

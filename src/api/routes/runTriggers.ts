@@ -83,6 +83,9 @@ function accept(res: import("express").Response, job: RunJob): void {
   res.status(202).json({ runId: job.meta.runId });
 }
 
+// NOTE: mutates process.env (a global singleton). Safe only because jobStore runs one job
+// at a time per the concurrency limit. If parallelism is ever raised, replace with a
+// per-process env isolation mechanism (e.g. worker_threads with their own env copy).
 async function withEnv<T>(vars: Record<string, string> | undefined, fn: () => Promise<T>): Promise<T> {
   if (!vars || Object.keys(vars).length === 0) return fn();
   const saved: Record<string, string | undefined> = {};
