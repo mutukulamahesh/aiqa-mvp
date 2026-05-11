@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:portal": "cd portal && npm run build",
+    "serve": "ts-node src/cli.ts serve",
     "test": "jest",
     "test:watch": "jest --watch",
     "dev": "ts-node src/cli.ts",
