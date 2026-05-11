@@ -66,11 +66,17 @@ export class ExecutionContext {
   resolve(template: string): string {
     return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
       const value = this.getPath(key);
-      if (value === undefined || value === null) {
-        process.stderr.write(`[warn] Template variable "{{ ${key} }}" is not defined — check your test variables or store_as steps.\n`);
-        return _match;
+      if (value !== undefined && value !== null) {
+        return typeof value === "object" ? JSON.stringify(value) : String(value);
       }
-      return typeof value === "object" ? JSON.stringify(value) : String(value);
+      // Fall back to process.env so vars passed via --vars / API body.vars
+      // (injected by withEnv) are visible inside generated tests that use
+      // {{ USERNAME }}, {{ PASSWORD }}, etc.
+      const envVal = process.env[key];
+      if (envVal !== undefined) return envVal;
+
+      process.stderr.write(`[warn] Template variable "{{ ${key} }}" is not defined — check your test variables or store_as steps.\n`);
+      return _match;
     });
   }
 

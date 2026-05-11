@@ -67,6 +67,10 @@ export default function Orchestrate() {
           </label>
         </div>
 
+        <div style={{ marginBottom: 6, padding: "10px 14px", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd", fontSize: 12, color: "#0369a1" }}>
+          <strong>Authentication tests</strong> — set <code>USERNAME</code> and <code>PASSWORD</code> below so generated login steps use real credentials.
+        </div>
+
         <EnvVarPanel vars={vars} onChange={setVars} />
 
         <button onClick={start} disabled={running || !url.trim()} style={primaryBtn(running)}>

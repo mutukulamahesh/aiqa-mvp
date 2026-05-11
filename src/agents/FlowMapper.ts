@@ -168,13 +168,13 @@ export class FlowMapper {
     const steps: FlowStep[] = [{ action: "navigate", target: page.url }];
 
     if (page.inputs.some(i => i.type === "email" || i.name?.includes("email"))) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "email", page), value: "testuser@example.com" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "email", page), value: "{{ USERNAME }}" });
     } else if (page.inputs.some(i => i.name?.includes("user") || i.placeholder?.toLowerCase().includes("user"))) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "username", page), value: "testuser" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "username", page), value: "{{ USERNAME }}" });
     }
 
     if (page.inputs.some(i => i.type === "password")) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "password", page), value: "TestPassword123" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "password", page), value: "{{ PASSWORD }}" });
     }
 
     // Prefer visible button text → submit input CSS selector → generic fallback

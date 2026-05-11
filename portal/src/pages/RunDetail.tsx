@@ -30,6 +30,21 @@ export default function RunDetail() {
   const navigate      = useNavigate();
   const [meta, setMeta]         = useState<RunMeta | null>(null);
   const [results, setResults]   = useState<RunResult[]>([]);
+  const [generatedYamls, setGeneratedYamls] = useState<Map<string, string>>(new Map());
+
+  const applyResults = (r: unknown) => {
+    const list = Array.isArray(r)
+      ? r as RunResult[]
+      : Array.isArray((r as Record<string, unknown>)?.results)
+        ? (r as Record<string, unknown>).results as RunResult[]
+        : null;
+    if (list) setResults(list);
+    const gen = (r as Record<string, unknown>)?.stageResults as Record<string, unknown> | undefined;
+    const scenarios = gen?.generator as Array<{ testName: string; yaml: string }> | undefined;
+    if (scenarios?.length) {
+      setGeneratedYamls(new Map(scenarios.map(s => [s.testName, s.yaml])));
+    }
+  };
   const [logs, setLogs]         = useState<LogLine[]>([]);
   const [tab, setTab]           = useState<"log" | "results" | "report">("log");
   const [loading, setLoading]   = useState(true);
@@ -50,13 +65,7 @@ export default function RunDetail() {
       .then(m => {
         setMeta(m);
         if (m.status === "passed" || m.status === "failed") {
-          return api.runs.results(id).then(r => {
-            if (Array.isArray(r)) {
-              setResults(r as RunResult[]);
-            } else if (r && Array.isArray((r as Record<string, unknown>).results)) {
-              setResults((r as Record<string, unknown>).results as RunResult[]);
-            }
-          });
+          return api.runs.results(id).then(applyResults);
         }
       })
       .catch(e => setError(e.message))
@@ -84,13 +93,7 @@ export default function RunDetail() {
         }
         addLog(text, passed ? "pass" : "fail");
         api.runs.get(id).then(setMeta).catch(() => {});
-        api.runs.results(id).then(r => {
-          if (Array.isArray(r)) {
-            setResults(r as RunResult[]);
-          } else if (r && Array.isArray((r as Record<string, unknown>).results)) {
-            setResults((r as Record<string, unknown>).results as RunResult[]);
-          }
-        }).catch(() => {});
+        api.runs.results(id).then(applyResults).catch(() => {});
         setTab("results");
         return;
       }
@@ -441,6 +444,21 @@ export default function RunDetail() {
                                 <div style={{ padding: "8px 12px", fontSize: 11, color: "#94a3b8" }}>
                                   No step details available
                                 </div>
+                              )}
+                              {/* Generated YAML — shown for orchestrate runs */}
+                              {generatedYamls.has(r.testName) && (
+                                <details style={{ margin: "8px 12px 10px" }}>
+                                  <summary style={{ fontSize: 11, color: "#6366f1", cursor: "pointer", fontWeight: 600, userSelect: "none" }}>
+                                    Generated YAML
+                                  </summary>
+                                  <pre style={{
+                                    marginTop: 6, padding: "10px 14px", background: "#0f172a", color: "#e2e8f0",
+                                    borderRadius: 8, fontSize: 11, lineHeight: 1.6, overflowX: "auto",
+                                    whiteSpace: "pre", fontFamily: "ui-monospace, 'Cascadia Code', monospace",
+                                  }}>
+                                    {generatedYamls.get(r.testName)}
+                                  </pre>
+                                </details>
                               )}
                             </div>
                           </td>
