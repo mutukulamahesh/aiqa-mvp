@@ -181,7 +181,8 @@ export class FlowMapper {
     const submitBtn = page.buttons.find(b => /sign\s?in|log\s?in|login|submit/i.test(b));
     const clickTarget = submitBtn ?? this.submitInputSelector(page) ?? "[type='submit']";
     steps.push({ action: "click", target: this.seedTarget(page.url, clickTarget, page) });
-    steps.push({ action: "assert", target: "url", value: "dashboard" });
+    // After login the form disappears regardless of what URL the app uses — universal success signal
+    steps.push({ action: "assert", target: "element_not_visible", value: clickTarget });
 
     return steps;
   }

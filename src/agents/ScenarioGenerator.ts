@@ -91,6 +91,9 @@ export class ScenarioGenerator {
         if (step.target === "url") {
           return [`    - assert:`, `        url: ${this.qs(step.value ?? "/")}`];
         }
+        if (step.target === "element_not_visible") {
+          return [`    - assert:`, `        element_not_visible: ${this.qs(step.value ?? "")}`];
+        }
         return [`    - assert:`, `        text: ${this.qs(step.value ?? "success")}`];
       case "api":
         return [

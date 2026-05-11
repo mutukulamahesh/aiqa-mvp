@@ -129,7 +129,7 @@ describe("FlowMapper — cache seeding (map/buildAuthSteps)", () => {
     const fm    = new FlowMapper(mockLLM, cache);
     const flows = await fm.map(makeExploration({ url: LOGIN_URL }));
     const authFlow = flows.find(f => f.type === "authentication");
-    const emailStep = authFlow?.steps.find(s => s.action === "fill" && (s.value ?? "").includes("@"));
+    const emailStep = authFlow?.steps.find(s => s.action === "fill" && s.target !== "password");
     expect(emailStep?.target).toBe("#email-input");
   });
 
@@ -140,7 +140,7 @@ describe("FlowMapper — cache seeding (map/buildAuthSteps)", () => {
     const fm    = new FlowMapper(mockLLM, cache);
     const flows = await fm.map(makeExploration({ url: LOGIN_URL }));
     const authFlow  = flows.find(f => f.type === "authentication");
-    const pwdStep = authFlow?.steps.find(s => s.action === "fill" && (s.value ?? "").includes("Password"));
+    const pwdStep = authFlow?.steps.find(s => s.action === "fill" && (s.value ?? "").includes("PASSWORD"));
     expect(pwdStep?.target).toBe("#pwd");
   });
 

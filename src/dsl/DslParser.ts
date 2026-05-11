@@ -133,11 +133,14 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     if ("visible" in assert && typeof assert.visible === "string") {
       return { action: "assert", kind: "visible", value: assert.visible };
     }
+    if ("element_not_visible" in assert && typeof assert.element_not_visible === "string") {
+      return { action: "assert", kind: "element_not_visible", value: assert.element_not_visible };
+    }
     if ("value" in assert && typeof assert.value === "string") {
       if (!assert.equals) throw new Error(`Step[${idx}] assert.value: missing "equals"`);
       return { action: "assert", kind: "equals", value: assert.value, equals: assert.equals };
     }
-    throw new Error(`Step[${idx}] assert: must have "text", "url", "visible", or "value+equals" key`);
+    throw new Error(`Step[${idx}] assert: must have "text", "url", "visible", "element_not_visible", or "value+equals" key`);
   }
 
   // db

@@ -104,6 +104,15 @@ export class PlaywrightAdapter implements AdapterActions {
     });
   }
 
+  async assertElementNotVisible(locator: string): Promise<void> {
+    const page = await this.ensureLaunched();
+    const el = page.locator(locator);
+    const count = await el.count();
+    if (count > 0 && await el.first().isVisible()) {
+      throw new AssertionError(`assertElementNotVisible: element "${locator}" is still visible — login may have failed`);
+    }
+  }
+
   async currentUrl(): Promise<string> {
     const page = await this.ensureLaunched();
     return page.url();

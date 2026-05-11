@@ -2,8 +2,9 @@
  * AssertionHandler — handles assert steps.
  *
  * Supported assert kinds:
- *   text  → checks that the text is visible somewhere on the page
- *   url   → checks that the current URL contains the substring
+ *   text              → checks that the text is visible somewhere on the page
+ *   url               → checks that the current URL contains the substring
+ *   element_not_visible → checks that an element is absent or hidden (e.g. login form gone after auth)
  */
 import { StepHandler } from "../execution/HandlerRegistry";
 import { StepAction } from "../dsl/types";
@@ -40,6 +41,12 @@ export class AssertionHandler implements StepHandler {
       case "visible": {
         wwrite(`  ▶ assert    → element visible: "${value}"`);
         await adapter.assertElementVisible(value);
+        break;
+      }
+
+      case "element_not_visible": {
+        wwrite(`  ▶ assert    → element not visible: "${value}"`);
+        await adapter.assertElementNotVisible(value);
         break;
       }
 
