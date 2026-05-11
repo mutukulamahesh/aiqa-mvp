@@ -5,9 +5,9 @@ import { UserFlow, FlowStep, GeneratedScenario } from "./types";
 export type { GeneratedScenario };
 
 const SYSTEM_PROMPT =
-  "You are a QA engineer generating YAML test scenarios. " +
-  "Return ONLY a JSON object with a 'steps' array of step hint strings " +
-  "that describe what the test should do.";
+  "You are a QA engineer refining test steps. Given existing steps derived from real DOM attributes, " +
+  "you may add useful assertion or wait steps. NEVER change 'target' or 'value' fields in existing steps — " +
+  "they are real CSS selectors or DOM attributes. Return ONLY a JSON object with a 'steps' array.";
 
 export class ScenarioGenerator {
   private llm: LLMProvider;
@@ -100,7 +100,7 @@ export class ScenarioGenerator {
     try {
       const res = await this.llm.complete({
         system:      SYSTEM_PROMPT,
-        userMessage: `Flow: ${flow.name}\nType: ${flow.type}\nPages: ${flow.pages.join(", ")}`,
+        userMessage: `Flow: ${flow.name}\nType: ${flow.type}\nExisting steps (preserve selectors): ${JSON.stringify(flow.steps)}`,
         maxTokens:   512,
       });
       const parsed = JSON.parse(res.content) as { steps?: FlowStep[] };
