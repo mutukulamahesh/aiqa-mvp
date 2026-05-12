@@ -86,6 +86,37 @@ export class OrchestratorAgent {
     }
     timings.explorer = Date.now() - t1;
 
+    // ── Stage 1b: Authenticated re-exploration ────────────────────────────────
+    // If the anonymous crawl found a login page and credentials are provided,
+    // log in then BFS the post-login pages (inventory, cart, checkout, etc.)
+    // and merge them into the exploration before FlowMapper sees it.
+    const authPage = exploration.pages.find(p => p.inputs.some(i => i.type === "password"));
+    if (authPage) {
+      const creds = this.extractCredentials(input.env);
+      if (creds) {
+        progress(1, TOTAL_STAGES, `[Explorer] Authenticated re-exploration (${authPage.url})`);
+        try {
+          const authResult = await new AppExplorer().exploreAuthenticated(
+            authPage.url, authPage, creds, { headless: input.headless ?? true, maxPages: input.maxPages },
+          );
+          if (authResult.pages.length > 0) {
+            const knownUrls = new Set(exploration.pages.map(p => p.url));
+            const newPages  = authResult.pages.filter(p => !knownUrls.has(p.url));
+            exploration = {
+              ...exploration,
+              pages:      [...exploration.pages, ...newPages],
+              totalPages: exploration.pages.length + newPages.length,
+              totalLinks: exploration.totalLinks + authResult.totalLinks,
+            };
+            progress(1, TOTAL_STAGES, `[Explorer] Merged ${newPages.length} post-login page(s) — total ${exploration.totalPages}`);
+          }
+        } catch (err) {
+          // Non-fatal: continue with anonymous pages if auth crawl fails
+          console.warn(`  [Orchestrator] Auth re-exploration failed: ${(err as Error).message}`);
+        }
+      }
+    }
+
     // ── Stage 2: Map flows ────────────────────────────────────────────────────
     progress(2, TOTAL_STAGES, `[FlowMapper] Mapping flows (${exploration.totalPages} pages found)`);
     let flows: UserFlow[];
@@ -217,6 +248,22 @@ export class OrchestratorAgent {
       analytics: analytics.getReport(),
       summary,
     };
+  }
+
+  // ── Credential extraction ──────────────────────────────────────────────────
+
+  private extractCredentials(env?: string): { username: string; password: string } | null {
+    if (!env) return null;
+    const vars: Record<string, string> = {};
+    for (const line of env.split(/\r?\n/)) {
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      vars[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+    }
+    const username = vars.USERNAME ?? vars.USER ?? vars.EMAIL ?? vars.LOGIN;
+    const password = vars.PASSWORD ?? vars.PASS ?? vars.SECRET;
+    if (!username || !password) return null;
+    return { username, password };
   }
 
   // ── Partial failure ────────────────────────────────────────────────────────
