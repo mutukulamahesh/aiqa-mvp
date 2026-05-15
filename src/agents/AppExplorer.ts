@@ -92,7 +92,7 @@ export class AppExplorer {
   ): Promise<ExplorationResult> {
     const {
       headless         = true,
-      maxPages         = 15,
+      maxPages         = 25,  // higher default than unauthenticated — internal apps have more pages
       maxDepth         = 3,
       timeout          = 15_000,
       exploreTimeoutMs = DEFAULT_EXPLORE_TIMEOUT_MS,
@@ -107,24 +107,9 @@ export class AppExplorer {
       const context: BrowserContext = await browser.newContext();
 
       // ── Login ──────────────────────────────────────────────────────────────
-      let postLoginUrl: string;
-      const loginPage = await context.newPage();
-      try {
-        await loginPage.goto(authPageUrl, { waitUntil: "load", timeout });
-
-        const usernameSelector = this.resolveUsernameSelector(authPage);
-        const submitSelector   = this.resolveSubmitSelector(authPage);
-
-        await loginPage.fill(usernameSelector, creds.username);
-        await loginPage.fill('input[type="password"]', creds.password);
-        await loginPage.click(submitSelector);
-        // wait for load (not just DOMContentLoaded) so SPA frameworks have time to mount
-        await loginPage.waitForLoadState("load", { timeout });
-
-        postLoginUrl = this.normalise(loginPage.url());
-      } finally {
-        await loginPage.close();
-      }
+      const postLoginUrl = await this.performLogin(
+        context, authPageUrl, authPage, creds, timeout,
+      );
 
       if (postLoginUrl === this.normalise(authPageUrl)) {
         logger.warn("[Explorer] Auth crawl: login did not redirect — credentials may be wrong");
@@ -165,9 +150,9 @@ export class AppExplorer {
                 queue.push({ url: link, depth: depth + 1 });
               }
             }
-            // For SPAs that use history.pushState (href="#") discover routes via simulated clicks
-            const spaRoutes = await this.discoverSpaRoutes(page, baseUrl, ignorePatterns);
-            for (const route of spaRoutes) {
+            // Discover SPA routes from both anchor clicks and nav button clicks
+            const navRoutes = await this.discoverNavigationRoutes(page, baseUrl, ignorePatterns);
+            for (const route of navRoutes) {
               const norm = this.normalise(route);
               if (!visited.has(norm) && !queue.some(q => q.url === norm)) {
                 queue.push({ url: norm, depth: depth + 1 });
@@ -193,6 +178,57 @@ export class AppExplorer {
     }
   }
 
+  /**
+   * Handles both single-step and multi-step (email → password on next page) login flows.
+   * After filling the username, checks whether the password field is already visible.
+   * If not (e.g. Google-style or Azure AD two-step), submits the first step and waits
+   * for the password field to appear before continuing.
+   */
+  private async performLogin(
+    context:     BrowserContext,
+    authPageUrl: string,
+    authPage:    ExploredPage,
+    creds:       { username: string; password: string },
+    timeout:     number,
+  ): Promise<string> {
+    const page = await context.newPage();
+    try {
+      await page.goto(authPageUrl, { waitUntil: "load", timeout });
+
+      const usernameSelector = this.resolveUsernameSelector(authPage);
+      const submitSelector   = this.resolveSubmitSelector(authPage);
+
+      await page.fill(usernameSelector, creds.username);
+
+      // Detect multi-step login: password field may not be on the first screen.
+      // isVisible() returns false (not throws) when the element is absent.
+      const passwordVisible = await page.isVisible('input[type="password"]').catch(() => false);
+
+      if (!passwordVisible) {
+        // Multi-step flow: submit email/username step, then wait for password field.
+        logger.info("[Explorer] Multi-step login detected — submitting email step");
+        await page.click(submitSelector);
+        try {
+          await page.waitForSelector('input[type="password"]', { timeout: 8_000 });
+        } catch {
+          logger.warn("[Explorer] Password field did not appear after email step — may be SSO/MFA, skipping auth crawl");
+          return this.normalise(page.url());
+        }
+      }
+
+      await page.fill('input[type="password"]', creds.password);
+
+      // Re-resolve submit after DOM may have changed between steps
+      const step2Submit = 'input[type="submit"], button[type="submit"], button[type="button"], button:not([type])';
+      await page.click(step2Submit);
+      await page.waitForLoadState("load", { timeout });
+
+      return this.normalise(page.url());
+    } finally {
+      await page.close();
+    }
+  }
+
   private resolveUsernameSelector(authPage: ExploredPage): string {
     const emailInput = authPage.inputs.find(i =>
       i.type === "email" || i.name?.toLowerCase().includes("email")
@@ -215,9 +251,19 @@ export class AppExplorer {
     return 'input[type="submit"], button[type="submit"], button';
   }
 
-  // Discovers SPA routes by intercepting history.pushState during simulated anchor clicks.
-  // This handles apps (React Router, Vue Router, etc.) that use href="#" + JS navigation.
-  private async discoverSpaRoutes(
+  /**
+   * Discovers SPA routes by intercepting history.pushState/replaceState while
+   * simulating clicks on two categories of navigation elements:
+   *
+   * 1. Anchor tags with href="#" or href="" — the classic SPA nav pattern
+   * 2. Buttons and links inside nav/aside/sidebar/menu containers — covers React
+   *    dashboards where sidebar items are <button> or <li> elements calling
+   *    router.push() directly rather than rendering <a href> links.
+   *
+   * Only pushState/replaceState calls are captured — full-page navigations are
+   * handled by the BFS loop via <a href> link extraction.
+   */
+  private async discoverNavigationRoutes(
     page: Page,
     baseUrl: string,
     ignorePatterns: RegExp[],
@@ -225,9 +271,12 @@ export class AppExplorer {
     try {
       const urls: string[] = await page.evaluate((base) => {
         const found: string[] = [];
-        const orig = { push: history.pushState.bind(history), replace: history.replaceState.bind(history) };
+        const orig = {
+          push:    history.pushState.bind(history),
+          replace: history.replaceState.bind(history),
+        };
 
-        // Intercept without actually navigating so we capture the target URL only
+        // Intercept without actually navigating — capture target URL only
         (history as unknown as Record<string, unknown>).pushState =
           (_s: unknown, _t: string, url?: string) => {
             if (url) found.push(new URL(url, window.location.href).href);
@@ -238,7 +287,11 @@ export class AppExplorer {
           };
 
         const SKIP = /logout|signout|log.out|sign.out|reset|delete|remove|clear/i;
-        const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href="#"], a[href=""]'));
+
+        // 1. SPA anchor clicks (original behaviour)
+        const anchors = Array.from(
+          document.querySelectorAll<HTMLAnchorElement>('a[href="#"], a[href=""]')
+        );
         for (const a of anchors.slice(0, 20)) {
           const txt = (a.textContent ?? "").trim();
           const cls = a.className ?? "";
@@ -246,9 +299,34 @@ export class AppExplorer {
           a.click();
         }
 
+        // 2. Navigation container buttons — covers sidebar/nav items rendered as
+        //    <button> or plain <a> elements that fire router.push() on click.
+        const NAV_SELECTORS = [
+          "nav button", "nav a",
+          "aside button", "aside a",
+          '[role="navigation"] button', '[role="navigation"] a',
+          '[class*="sidebar"] button', '[class*="sidebar"] a',
+          '[class*="Sidebar"] button', '[class*="Sidebar"] a',
+          '[class*="nav-"] button',    '[class*="Nav"] button',
+          '[class*="menu"] a',         '[class*="Menu"] a',
+        ].join(", ");
+
+        const navEls = Array.from(document.querySelectorAll<HTMLElement>(NAV_SELECTORS));
+        // Deduplicate — multiple selectors can match the same element
+        const seen = new Set<Element>();
+        for (const el of navEls.slice(0, 40)) {
+          if (seen.has(el)) continue;
+          seen.add(el);
+          const txt = (el.textContent ?? "").trim();
+          const cls = el.className ?? "";
+          if (SKIP.test(txt) || SKIP.test(cls)) continue;
+          el.click();
+        }
+
         (history as unknown as Record<string, unknown>).pushState   = orig.push;
         (history as unknown as Record<string, unknown>).replaceState = orig.replace;
-        return found.filter(u => u.startsWith(base));
+
+        return [...new Set(found)].filter(u => u.startsWith(base));
       }, baseUrl);
 
       return urls.filter(u => !ignorePatterns.some(p => p.test(u)));

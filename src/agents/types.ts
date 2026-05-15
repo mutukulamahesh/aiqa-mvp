@@ -168,13 +168,15 @@ export interface OrchestratorSummary {
 }
 
 export interface OrchestratorInput {
-  url:            string;
-  env?:           string;
-  maxPages?:      number;
-  headless?:      boolean;
-  timeout?:       number;
-  outDir?:        string;
+  url:             string;
+  env?:            string;
+  maxPages?:       number;  // page cap for unauthenticated crawl (default: 10)
+  authMaxPages?:   number;  // page cap for authenticated crawl (default: 25)
+  maxDepth?:       number;  // BFS depth for both crawls (default: 3)
+  headless?:       boolean;
+  timeout?:        number;
+  outDir?:         string;
   screenshotsDir?: string;
-  dryRun?:        boolean;
-  onProgress?:    (stage: number, total: number, message: string) => void;
+  dryRun?:         boolean;
+  onProgress?:     (stage: number, total: number, message: string) => void;
 }

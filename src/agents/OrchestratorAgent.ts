@@ -80,6 +80,7 @@ export class OrchestratorAgent {
       const explorerOpts: ExplorerOptions = {
         headless: input.headless ?? true,
         maxPages: input.maxPages,
+        maxDepth: input.maxDepth,
       };
       exploration = await new AppExplorer().explore(input.url, explorerOpts);
     } catch (err) {
@@ -98,7 +99,11 @@ export class OrchestratorAgent {
         progress(1, TOTAL_STAGES, `[Explorer] Authenticated re-exploration (${authPage.url})`);
         try {
           const authResult = await new AppExplorer().exploreAuthenticated(
-            authPage.url, authPage, creds, { headless: input.headless ?? true, maxPages: input.maxPages },
+            authPage.url, authPage, creds, {
+              headless:  input.headless ?? true,
+              maxPages:  input.authMaxPages ?? input.maxPages,  // authMaxPages overrides, else matches public crawl
+              maxDepth:  input.maxDepth,
+            },
           );
           if (authResult.pages.length > 0) {
             const knownUrls = new Set(exploration.pages.map(p => p.url));
