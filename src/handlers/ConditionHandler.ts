@@ -19,10 +19,11 @@ function evalCondition(actual: string, operator: IfOperator, operand: string): b
     case "lt":
     case "gte":
     case "lte": {
-      const a = parseFloat(actual);
-      const b = parseFloat(operand);
-      if (isNaN(a)) throw new Error(`if: operator "${operator}" requires a numeric value, got "${actual}"`);
-      if (isNaN(b)) throw new Error(`if: operator "${operator}" requires a numeric operand, got "${operand}"`);
+      // Use Number.isFinite() after trimming to correctly reject "", " ", "NaN", "Infinity"
+      const a = parseFloat(actual.trim());
+      const b = parseFloat(operand.trim());
+      if (!Number.isFinite(a)) throw new Error(`if: operator "${operator}" requires a numeric value, got "${actual}"`);
+      if (!Number.isFinite(b)) throw new Error(`if: operator "${operator}" requires a numeric operand, got "${operand}"`);
       if (operator === "gt")  return a > b;
       if (operator === "lt")  return a < b;
       if (operator === "gte") return a >= b;
