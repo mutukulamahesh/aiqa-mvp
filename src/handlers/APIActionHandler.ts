@@ -5,6 +5,36 @@ import { AdapterActions } from "../adapter/AdapterActions";
 import { APIExecutor } from "../execution/APIExecutor";
 import { wwrite } from "../execution/WorkerContext";
 
+/**
+ * Checks whether a resolved URL is covered by an allowlist/denylist entry.
+ *
+ * Uses URL parsing instead of string prefix matching to prevent bypass via
+ * crafted hostnames (e.g. "https://internal.api.evil.com" would match a naive
+ * startsWith("https://internal.api") check, but not this function).
+ *
+ * Match rules:
+ *   - Protocol must match exactly
+ *   - Hostname must match exactly (no subdomain wildcard unless entry uses ".")
+ *   - Port must match (empty = scheme default)
+ *   - Target path must start with the entry's path (/ matches any path)
+ */
+function matchesUrlEntry(targetHref: string, entry: string): boolean {
+  let target: URL;
+  let pattern: URL;
+  try { target  = new URL(targetHref); } catch { return false; }
+  try { pattern = new URL(entry); }      catch { return false; }
+
+  if (target.protocol !== pattern.protocol) return false;
+  if (target.hostname  !== pattern.hostname)  return false;
+  if (target.port      !== pattern.port)      return false;
+
+  // "/" matches any path; otherwise target path must start with pattern path segment
+  const patPath = pattern.pathname.replace(/\/$/, "") || "/";
+  return patPath === "/" ||
+    target.pathname === patPath ||
+    target.pathname.startsWith(patPath + "/");
+}
+
 /** Recursively resolve {{ }} templates in string leaves of an object/array tree. */
 function resolveBody(val: unknown, ctx: ExecutionContext): unknown {
   if (typeof val === "string")  return ctx.resolve(val);
@@ -34,14 +64,15 @@ export class APIActionHandler implements StepHandler {
 
     // SSRF guard — denylist checked first, then allowlist.
     // SECURITY: an empty allowlist means NO external hosts are permitted.
-    //           An explicit allowlist entry is required for every external URL.
-    //           (Previously: empty allowlist = allow all — inverted here.)
+    //           Uses URL-based hostname comparison (not string prefix) so that
+    //           "https://internal.api.evil.com" cannot bypass a denylist entry
+    //           for "https://internal.api" via shared prefix.
     const apiCfg = ctx.config?.api;
     if (apiCfg) {
-      if (apiCfg.denylist.some(prefix => url.startsWith(prefix))) {
+      if (apiCfg.denylist.some(entry => matchesUrlEntry(url, entry))) {
         throw new Error(`api step blocked — URL matches denylist: ${url}`);
       }
-      if (!apiCfg.allowlist.some(prefix => url.startsWith(prefix))) {
+      if (!apiCfg.allowlist.some(entry => matchesUrlEntry(url, entry))) {
         throw new Error(`api step blocked — URL not in allowlist: ${url}`);
       }
     }

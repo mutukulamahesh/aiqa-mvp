@@ -8,11 +8,25 @@ import { consumeToken } from "./wsTokenStore";
 
 const RUN_STREAM_PATH = /^\/api\/runs\/([^/]+)\/stream$/;
 
+/**
+ * Resolves the actual request scheme, accounting for TLS-terminating reverse proxies.
+ * Without this, all WS upgrade URLs would be constructed as http:// even when the
+ * client connected via wss://, breaking origin validation and producing misleading logs.
+ */
+function requestScheme(req: http.IncomingMessage): string {
+  const forwarded = req.headers["x-forwarded-proto"];
+  if (forwarded) {
+    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+    return first.split(",")[0].trim();
+  }
+  return (req.socket as { encrypted?: boolean }).encrypted ? "https" : "http";
+}
+
 export function attachWsServer(server: http.Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req, socket, head) => {
-    const url    = new URL(req.url ?? "/", `http://${req.headers.host}`);
+    const url    = new URL(req.url ?? "/", `${requestScheme(req)}://${req.headers.host}`);
     const apiKey = process.env.AIQA_API_KEY;
 
     if (!RUN_STREAM_PATH.test(url.pathname)) {
@@ -47,7 +61,7 @@ export function attachWsServer(server: http.Server): WebSocketServer {
   });
 
   wss.on("connection", async (ws: WebSocket, req: http.IncomingMessage) => {
-    const url   = new URL(req.url ?? "/", `http://${req.headers.host}`);
+    const url   = new URL(req.url ?? "/", `${requestScheme(req)}://${req.headers.host}`);
     const match = url.pathname.match(RUN_STREAM_PATH);
     if (!match) { ws.close(1008, "Invalid path"); return; }
 
