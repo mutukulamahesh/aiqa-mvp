@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~72%**  *(updated 2026-05-07)*
-> Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening: **DONE**.
-> Remaining: Phase 4 Enterprise → Phase 5-7.
+> Current alignment with vision: **~90%**  *(updated 2026-05-15)*
+> Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface: **DONE**.
+> Remaining: Phase 4 Enterprise (Jira/Slack/Email full integration), Phase 5-7 (GenAI, desktop, agentic).
 
 ---
 
@@ -230,31 +230,31 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Phase 4 — Product Surface `[ACCESSIBILITY]`
+## Phase 4 — Product Surface `[✅ COMPLETE — 2026-05-11]`
 > Make AIQA usable beyond the CLI — API layer unlocks Portal, Chrome Extension, and all future integrations
 
-### EPIC-API · REST API Layer
-> **Design doc:** `API_LAYER_DESIGN.md` — approved for build 2026-05-08
+### EPIC-API · REST API Layer `[✅ DONE — 2026-05-11]`
+> **Design doc:** `API_LAYER_DESIGN.md`
 
 | ID | Story | Status |
 |---|---|---|
-| A.1 | `src/server.ts` — Express + WS server, `aiqa serve` CLI command, port 7432 | [ ] |
-| A.2 | `RunJobStore` — in-memory Map + FIFO concurrency queue (default `os.cpus().length`) | [ ] |
-| A.3 | Disk persistence — `.aiqa/runs/<runId>/{meta,results,exploration}.json` | [ ] |
-| A.4 | `POST /api/run` + `POST /api/run-all` + `POST /api/orchestrate` — trigger endpoints | [ ] |
-| A.5 | `POST /api/explore` + `POST /api/generate` (reads persisted exploration) | [ ] |
-| A.6 | `POST /api/import` (multipart via multer) + `POST /api/jira-sync` | [ ] |
-| A.7 | `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/results`, `GET /api/runs/:id/report` | [ ] |
-| A.8 | `WS /api/runs/:runId/stream` — replay buffer (500 events, 1hr TTL), fan-out to multiple clients | [ ] |
-| A.9 | `POST /api/runs/:runId/cancel` — graceful cancellation via onEvent flag | [ ] |
-| A.10 | `GET/PUT /api/tests/*path` — YAML file read/write with path traversal guard | [ ] |
-| A.11 | Auth middleware (Bearer HTTP + `?token=` WS), CORS for HTTP + WS verifyClient | [ ] |
-| A.12 | Zod request validation on all endpoints, clear 400 errors | [ ] |
-| A.13 | `TestRunner.run(test, onEvent?)` — optional callback (only engine touch), WorkerContext wire-up | [ ] |
-| A.14 | Screenshot serving `GET /api/runs/:id/screenshots/:file` | [ ] |
+| A.1 | `src/server.ts` — Express + WS server, `aiqa serve` CLI command, port 7432 | [x] |
+| A.2 | `RunJobStore` — in-memory Map + FIFO concurrency queue (default `os.cpus().length`) | [x] |
+| A.3 | Disk persistence — `.aiqa/runs/<runId>/{meta,results,exploration}.json` | [x] |
+| A.4 | `POST /api/run` + `POST /api/run-all` + `POST /api/orchestrate` — trigger endpoints | [x] |
+| A.5 | `POST /api/explore` + `POST /api/generate` (reads persisted exploration) | [x] |
+| A.6 | `POST /api/import` (multipart via multer) + `POST /api/jira-sync` | [x] |
+| A.7 | `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/results`, `GET /api/runs/:id/report` | [x] |
+| A.8 | `WS /api/runs/:runId/stream` — replay buffer (500 events, 1hr TTL), fan-out to multiple clients | [x] |
+| A.9 | `POST /api/runs/:runId/cancel` — graceful cancellation via onEvent flag | [x] |
+| A.10 | `GET/PUT /api/tests/*path` — YAML file read/write with path traversal guard | [x] |
+| A.11 | Auth middleware (Bearer HTTP + `?token=` WS), CORS for HTTP + WS verifyClient | [x] |
+| A.12 | Zod request validation on all endpoints, clear 400 errors | [x] |
+| A.13 | `TestRunner.run(test, onEvent?)` — optional callback (only engine touch), WorkerContext wire-up | [x] |
+| A.14 | Screenshot serving `GET /api/runs/:id/screenshots/:file` | [x] |
 
 ### EPIC-EXT-A · Chrome Extension (API-backed)
-> Depends on EPIC-API. Design doc: `CHROME_EXTENSION_DESIGN.md` Track A.
+> Depends on EPIC-API. Design doc: `CHROME_EXTENSION_DESIGN.md` Track A. Planned for future release.
 
 | ID | Story | Status |
 |---|---|---|
@@ -265,28 +265,38 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | EA.5 | Settings page — server URL + API key configuration | [ ] |
 | EA.6 | Test library — save/load named tests via `GET/PUT /api/tests` | [ ] |
 
-### EPIC-EXT-B · Chrome Extension (Pure / Zero-setup)
+### EPIC-EXT-B · Chrome Extension (Pure / Zero-setup) `[✅ DONE — 2026-05-11]`
 > Independent of EPIC-API. Design doc: `CHROME_EXTENSION_DESIGN.md` Track B.
 
 | ID | Story | Status |
 |---|---|---|
-| EB.1 | `ChromeDebuggerAdapter` — navigate, click, fill, assert via CDP | [ ] |
-| EB.2 | AI test generation — page HTML → Claude API → YAML steps | [ ] |
-| EB.3 | Record mode — captures user flow, replays with visual highlights | [ ] |
-| EB.4 | Pass/fail result display + chrome.storage persistence | [ ] |
-| EB.5 | Export as YAML + import from file | [ ] |
+| EB.1 | `ChromeDebuggerAdapter` — navigate, click, fill, assert via CDP | [x] |
+| EB.2 | AI test generation — page HTML → Claude API → YAML steps | [x] |
+| EB.3 | Record mode — captures user flow, replays with visual highlights | [x] |
+| EB.4 | Pass/fail result display + chrome.storage persistence | [x] |
+| EB.5 | Export as YAML + import from file | [x] |
 
-### EPIC-PORTAL · AIQA Portal (Web UI)
-> Depends on EPIC-API. React frontend calling the API.
+### EPIC-PORTAL · AIQA Portal (Web UI) `[✅ DONE — 2026-05-11]`
+> React + Vite frontend calling the API. Served at port 7432.
 
 | ID | Story | Status |
 |---|---|---|
-| P.1 | Portal scaffold — React + Vite, `portal/` folder | [ ] |
-| P.2 | Run history dashboard — `GET /api/runs` table view | [ ] |
-| P.3 | Live run view — trigger + WS progress stream | [ ] |
-| P.4 | HTML report embed — iframe from `GET /api/runs/:id/report` | [ ] |
-| P.5 | YAML test editor — `GET/PUT /api/tests` with CodeMirror | [ ] |
-| P.6 | Orchestrate UI — URL input → one-click full pipeline | [ ] |
+| P.1 | Portal scaffold — React + Vite, `portal/` folder | [x] |
+| P.2 | Run history dashboard — `GET /api/runs` table view with status filters | [x] |
+| P.3 | Live run view — trigger + WS progress stream, step details, screenshots | [x] |
+| P.4 | HTML report embed — iframe from `GET /api/runs/:id/report` | [x] |
+| P.5 | YAML test editor — `GET/PUT /api/tests` with syntax highlighting | [x] |
+| P.6 | Orchestrate UI — URL input + env vars panel → one-click full pipeline | [x] |
+
+### Stage 1b — Authenticated Re-exploration `[✅ DONE — 2026-05-12]`
+> Automatic login + post-login BFS crawl merged into the main exploration before FlowMapper runs.
+
+| ID | Story | Status |
+|---|---|---|
+| S1b.1 | `AppExplorer.exploreAuthenticated()` — login via Playwright + BFS crawl in shared auth context | [x] |
+| S1b.2 | `OrchestratorAgent` Stage 1b — detects login page, extracts credentials, merges post-login pages | [x] |
+| S1b.3 | `discoverSpaRoutes()` — intercepts `history.pushState` to find React Router routes from `href="#"` anchors | [x] |
+| S1b.4 | Credential resolution — reads from raw env string OR `process.env` (set by API vars panel) | [x] |
 
 ---
 

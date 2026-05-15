@@ -253,15 +253,24 @@ export class OrchestratorAgent {
   // ── Credential extraction ──────────────────────────────────────────────────
 
   private extractCredentials(env?: string): { username: string; password: string } | null {
-    if (!env) return null;
     const vars: Record<string, string> = {};
-    for (const line of env.split(/\r?\n/)) {
-      const eq = line.indexOf("=");
-      if (eq <= 0) continue;
-      vars[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+
+    // Parse raw "KEY=VALUE\nKEY=VALUE" string (direct API callers or future --creds flag)
+    if (env) {
+      for (const line of env.split(/\r?\n/)) {
+        const eq = line.indexOf("=");
+        if (eq <= 0) continue;
+        vars[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+      }
     }
-    const username = vars.USERNAME ?? vars.USER ?? vars.EMAIL ?? vars.LOGIN;
-    const password = vars.PASSWORD ?? vars.PASS ?? vars.SECRET;
+
+    // Fall back to process.env — set by the API route via withEnv(body.vars, ...) when the
+    // Portal sends vars: { USERNAME: "...", PASSWORD: "..." }
+    const username = vars.USERNAME ?? vars.EMAIL ?? vars.LOGIN
+                  ?? process.env["USERNAME"] ?? process.env["EMAIL"] ?? process.env["LOGIN"];
+    const password = vars.PASSWORD ?? vars.PASS ?? vars.SECRET
+                  ?? process.env["PASSWORD"] ?? process.env["PASS"] ?? process.env["SECRET"];
+
     if (!username || !password) return null;
     return { username, password };
   }

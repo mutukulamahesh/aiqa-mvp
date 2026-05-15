@@ -2,14 +2,14 @@
 
 A plug-and-play, AI-powered QA platform that unifies web automation, API testing, database validation, and autonomous test generation into a single config-driven system.
 
-> Full platform vision: see [VISION.md](VISION.md) · Full backlog: see [BACKLOG.md](BACKLOG.md)
+> Full platform vision: see [VISION.md](VISION.md) · Full backlog: see [BACKLOG.md](BACKLOG.md) · Progress: see [PROGRESS.md](PROGRESS.md)
 
 ---
 
 ## What it does
 
 - **Init a project** in one command — folder structure, sample test, ready to run
-- **Explore any app** autonomously and map its pages and flows
+- **Explore any app** autonomously and map its pages and flows; **authenticated re-exploration** logs in and crawls post-login pages automatically
 - **Generate test files** per page or per flow — no manual test writing
 - **Run tests** defined in YAML — web UI, API, database, or mixed
 - **Orchestrate the full pipeline** — one command: explore → map → generate → run → score
@@ -22,6 +22,9 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
 - **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
 - **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA) — no code changes needed
+- **Web Portal** — browser-based UI to trigger runs, view live progress, edit tests, and browse history
+- **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
+- **Chrome Extension** — test any app from the browser, no CLI or YAML needed
 
 ---
 
@@ -78,6 +81,127 @@ myproject/
   screenshots/
     step-3-fail.png         ← captured automatically on any step failure
 ```
+
+---
+
+## Web Portal
+
+AIQA includes a React web portal that gives you a full browser-based interface — no CLI needed.
+
+### Start the portal
+
+```bash
+# Build the portal (first time only)
+cd portal && npm install && npm run build && cd ..
+
+# Start the API server (serves the portal + REST + WebSocket)
+npx aiqa serve
+```
+
+The portal opens at **http://localhost:7432** (default port; override with `--port` or `AIQA_PORT` env var).
+
+### Portal pages
+
+| Page | What it does |
+|---|---|
+| **Dashboard** | Summary of recent runs — pass rate, scores, durations |
+| **Tests** | Browse, view, and edit YAML test files with syntax highlighting |
+| **Runs** | Run history with status filters; click any run for live step details and screenshots |
+| **Orchestrate** | One-click full pipeline — enter a URL, set env vars (including credentials), watch it explore, generate, and run |
+
+### Authentication credentials (portal)
+
+The Orchestrate page has an **Env Vars panel** for setting runtime variables. To enable authenticated re-exploration and credential-based test generation:
+
+1. Open the Orchestrate page
+2. Click **Env Vars** and add:
+   - `USERNAME` → your app's login username/email
+   - `PASSWORD` → your app's login password
+3. Click **Run** — AIQA will log in, crawl post-login pages, and generate authenticated test scenarios
+
+---
+
+## REST + WebSocket API
+
+The API server exposes a complete REST + WebSocket interface. All endpoints (except `/api/health`) require a `Bearer` token (set via `AIQA_TOKEN` env var; defaults to no auth in dev).
+
+### Trigger endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/run` | Run a single YAML test |
+| `POST` | `/api/run-all` | Run all tests in a directory |
+| `POST` | `/api/orchestrate` | Full pipeline: explore → map → generate → run → score |
+| `POST` | `/api/explore` | Exploration only |
+| `POST` | `/api/generate` | Generate scenarios from a prior exploration |
+| `POST` | `/api/import` | Import CSV/Excel/Gherkin files (multipart) |
+| `POST` | `/api/jira-sync` | Generate tests from Jira stories |
+
+### Status + results endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/runs` | List all runs |
+| `GET` | `/api/runs/:id` | Run metadata and status |
+| `GET` | `/api/runs/:id/results` | Full test results JSON |
+| `GET` | `/api/runs/:id/report` | HTML report |
+| `GET` | `/api/runs/:id/screenshots/:file` | Screenshot file |
+| `POST` | `/api/runs/:id/cancel` | Cancel an in-progress run |
+| `GET` | `/api/health` | Health check (no auth required) |
+
+### Test file endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/tests/*path` | Read a YAML test file |
+| `PUT` | `/api/tests/*path` | Write a YAML test file |
+
+### Live streaming (WebSocket)
+
+```
+WS ws://localhost:7432/api/runs/:runId/stream
+```
+
+Streams `RunEvent` objects in real time: `step`, `step_result`, `log`, `test_done`, `done`. Up to 500 events are buffered for late subscribers (e.g. browser tab opened after a run starts).
+
+### Example — trigger an orchestrate run via API
+
+```bash
+curl -X POST http://localhost:7432/api/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://yourapp.com",
+    "headless": true,
+    "vars": { "USERNAME": "admin", "PASSWORD": "secret" }
+  }'
+# → { "runId": "abc123", "status": "queued" }
+
+# Stream live progress
+wscat -c "ws://localhost:7432/api/runs/abc123/stream"
+```
+
+---
+
+## Chrome Extension (EPIC-EXT-B)
+
+The pure Chrome Extension lets non-technical users test any web app without installing anything locally.
+
+**How it works:**
+1. Install the extension in Chrome (load unpacked from `chrome-ext/` folder)
+2. Open any web app
+3. Click the AIQA extension icon — a side panel opens
+4. Type a natural-language test goal or record a flow by clicking through the app
+5. The extension generates and replays steps using Chrome's CDP (no Playwright, no server needed)
+6. Pass / fail results shown inline with visual step highlighting
+
+**Key features:**
+- AI test generation — page HTML → Claude API → YAML steps
+- Record mode — captures click/fill/navigate actions, replays with highlights
+- Export as YAML, import from file
+- Persists saved tests via `chrome.storage`
+- Zero setup — no local server required
+
+> Track A (API-backed extension, full Playwright power) is planned for a future release.
 
 ---
 
@@ -193,10 +317,15 @@ Options:
 
 Runs the complete pipeline: Explore → Map flows → Generate scenarios → Run tests → Score readiness.
 
+**Authenticated re-exploration:** If the crawl finds a login page and `USERNAME`/`PASSWORD` are set in the environment, AIQA automatically logs in and crawls post-login pages (dashboard, inventory, checkout, etc.), merging them into the exploration before scenario generation.
+
 ```bash
 npx aiqa orchestrate --url https://yourapp.com --headless
 npx aiqa orchestrate --url https://yourapp.com --dry-run
 npx aiqa orchestrate --url https://yourapp.com --out myproject
+
+# With credentials for authenticated re-exploration (set as shell env vars)
+USERNAME=admin PASSWORD=secret npx aiqa orchestrate --url https://yourapp.com --headless
 ```
 
 Options:
@@ -205,10 +334,14 @@ Options:
 - `--dry-run` — generate scenarios but do not execute them
 - `--out <folder>` — save `orchestrator-summary.json` to this folder
 - `--max-pages <n>` — page crawl limit (default: 10)
+- `--slack` — post run summary to Slack (reads `SLACK_WEBHOOK_URL` from env)
+- `--email <recipients>` — email HTML report on completion (reads `SMTP_*` from env)
 
 Output:
 ```
 [1/5] [Explorer] Exploring https://yourapp.com
+[1/5] [Explorer] Authenticated re-exploration (https://yourapp.com/login)
+[1/5] [Explorer] Merged 3 post-login page(s) — total 4
 [2/5] [FlowMapper] Mapping flows (4 pages found)
 [3/5] [Generator] Generating scenarios (3 flows)
 [4/5] [Runner] Running 3 valid scenario(s)
@@ -241,6 +374,22 @@ Output:
    Coverage: UI, Assertions
    Issues  : 1 test failed
 ```
+
+---
+
+### `aiqa serve` — Start the API + Portal server
+
+```bash
+npx aiqa serve
+npx aiqa serve --port 8080
+npx aiqa serve --env staging
+```
+
+Options:
+- `--port <n>` — port to listen on (default: 7432 or `AIQA_PORT` env var)
+- `--env <env>` — environment profile to load (default: dev)
+
+Starts the REST + WebSocket API server and serves the compiled portal at the same port. Keep this running while using the portal or making API calls.
 
 ---
 
@@ -330,8 +479,16 @@ npm install knex pg   # only required for real DB connections
 | `assert: { text }` | Assert text is visible on the page |
 | `assert: { url }` | Assert current URL contains substring |
 | `assert: { value, equals }` | Assert a stored variable equals expected |
+| `assert: { element_not_visible }` | Assert an element (e.g. login form) is no longer visible — used to confirm successful login |
 | `api: { method, url, ... }` | Make an HTTP request, optionally store response |
 | `db: { query, ... }` | Execute SQL, assert rows/fields, store results |
+| `judge: { value, prompt, pass_if }` | LLM scores a value against a natural-language criterion (0.0–1.0); `pass_if: "score >= 0.7"` |
+| `wait_for_element: <selector>` | Wait for an element to appear |
+| `wait_ms: <n>` | Wait N milliseconds |
+| `wait_for_url: <pattern>` | Wait until URL matches |
+| `if: { variable, equals, steps }` | Conditional branching |
+| `for_each: { over, as, steps }` | Loop over an array (max 100 iterations) |
+| `store: { selector, as }` | Capture page text/attribute into a variable |
 
 ### Template variables
 
@@ -444,8 +601,23 @@ config/
     staging.yaml          ← staging profile
     prod.yaml             ← production profile
 
+portal/                   ← React + Vite web portal
+  src/
+    pages/
+      Dashboard.tsx       ← run history summary
+      Tests.tsx           ← YAML editor + file browser
+      Runs.tsx            ← run list with status filters
+      RunDetail.tsx       ← live step-by-step progress + screenshots
+      Orchestrate.tsx     ← one-click full pipeline UI
+    components/
+      EnvVarPanel.tsx     ← credential / env var input panel
+      ErrorBoundary.tsx   ← React error boundary
+      Layout.tsx          ← navigation shell
+    api.ts                ← REST + WebSocket client
+
 src/
   cli.ts                  ← CLI entry point (all commands)
+  server.ts               ← Express + WS server (aiqa serve)
   errors.ts               ← AssertionError, TransientError
   dsl/
     types.ts              ← DSL type definitions
@@ -458,9 +630,14 @@ src/
     WorkerContext.ts      ← AsyncLocalStorage log buffering (parallel safety)
   handlers/
     UIActionHandler.ts   ← navigate, click, fill
-    AssertionHandler.ts  ← assert (text, url, equals)
+    AssertionHandler.ts  ← assert (text, url, equals, element_not_visible)
     APIActionHandler.ts  ← api step execution
     DBActionHandler.ts   ← db step — query, assert_rows, assert_field, store_as
+    JudgeHandler.ts      ← judge: LLM scoring with determinism cache
+    WaitHandler.ts       ← wait_for_element, wait_ms, wait_for_url
+    ConditionHandler.ts  ← if: branching
+    LoopHandler.ts       ← for_each: iteration with depth guard
+    StoreHandler.ts      ← store: capture page text/attribute
   adapter/
     AdapterActions.ts    ← Browser adapter interface
     PlaywrightAdapter.ts ← Playwright + transparent selector healing
@@ -471,8 +648,13 @@ src/
     KnexDBAdapter.ts      ← PostgreSQL via Knex (optional, requires knex pg)
   runner/
     TestRunner.ts         ← End-to-end orchestration, retry, circuit breaker
+    RunEvent.ts           ← Event types for WS streaming
   reporters/
     HTMLReporter.ts       ← Self-contained HTML report generator
+    AllureReporter.ts     ← Allure JSON output
+    TrendTracker.ts       ← Pass-rate trend history
+    SlackNotifier.ts      ← Slack webhook post-run summary
+    EmailNotifier.ts      ← Email HTML report via SMTP
   config/
     ConfigLoader.ts       ← Zod-validated YAML config loader + secret checks
   llm/
@@ -483,9 +665,9 @@ src/
     GeminiLLMProvider.ts
     FallbackLLMProvider.ts ← Provider chain with retryable-error classification
   agents/
-    OrchestratorAgent.ts  ← Full pipeline: Explorer → FlowMapper → Generator → Runner → Scorer
+    OrchestratorAgent.ts  ← Full pipeline coordinator: Explorer → FlowMapper → Generator → Runner → Scorer
     DebuggerAgent.ts      ← Failure classification + fix suggestions (memory-backed)
-    AppExplorer.ts        ← Playwright-based app crawler
+    AppExplorer.ts        ← Playwright-based app crawler + authenticated re-exploration
     FlowMapper.ts         ← Flow identification + healer-seeded step generation
     ScenarioGenerator.ts  ← Flow → YAML test file generator
     ReadinessScorer.ts    ← 0–100 readiness score
@@ -505,10 +687,28 @@ src/
     ImportOrchestrator.ts ← Selects importer by file type, runs translation
   integrations/
     JiraAdapter.ts        ← Jira story → flow converter
+  api/
+    router.ts             ← Route registration
+    middleware/
+      auth.ts             ← Bearer token + query-param auth
+      cors.ts             ← CORS policy
+    routes/
+      runTriggers.ts      ← POST /api/run|run-all|orchestrate|explore|generate|import|jira-sync
+      runs.ts             ← GET /api/runs, /api/runs/:id, /runs/:id/results|report
+      tests.ts            ← GET/PUT /api/tests/*path
+      screenshots.ts      ← GET /api/runs/:id/screenshots/:file
+      cancel.ts           ← POST /api/runs/:id/cancel
+      health.ts           ← GET /api/health
+    ws/
+      runStream.ts        ← WebSocket fan-out, 500-event replay buffer
+    jobs/
+      RunJob.ts           ← Job lifecycle + event buffer
+      RunJobStore.ts      ← In-memory job store + concurrency queue
 
 .aiqa/
   healer-cache.json       ← Persisted healer selector store (auto-created)
   healer-runs.json        ← Run history for analytics (auto-created)
+  runs/                   ← Persisted run results, exploration, screenshots
 
 tests/
   saucedemo/              ← End-to-end YAML examples (Sauce Demo app)
@@ -519,6 +719,8 @@ tests/
   importer/               ← CSV/Excel/Gherkin importer unit tests
   llm/                    ← LLM provider unit tests
   memory/                 ← Memory store unit tests
+  flow-control/           ← wait/if/for_each/store handler tests
+  judge/                  ← LLM judge handler tests
 ```
 
 ---
@@ -527,8 +729,11 @@ tests/
 
 - [TypeScript](https://www.typescriptlang.org/)
 - [Playwright](https://playwright.dev/) — web automation, app crawling, screenshots
+- [React](https://react.dev/) + [Vite](https://vitejs.dev/) — web portal frontend
+- [Express](https://expressjs.com/) — REST API server
+- [ws](https://github.com/websockets/ws) — WebSocket streaming
 - [js-yaml](https://github.com/nodeca/js-yaml) — YAML test file parsing
-- [Zod](https://zod.dev/) — config schema validation
+- [Zod](https://zod.dev/) — config and request schema validation
 - [Commander.js](https://github.com/tj/commander.js) — CLI interface
 - [ExcelJS](https://github.com/exceljs/exceljs) — Excel test case import
 - [Knex](https://knexjs.org/) *(optional)* — PostgreSQL adapter; install with `npm install knex pg`

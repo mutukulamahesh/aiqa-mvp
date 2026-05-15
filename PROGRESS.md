@@ -1,7 +1,7 @@
-# AIQA — Sprint 1 Progress Report
+# AIQA — Progress Report
 
-> Branch: `phase3` · Started: 2026-05-01 · Last updated: 2026-05-07
-> Platform alignment: **~72%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening: **DONE**
+> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-15
+> Platform alignment: **~90%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface: **DONE**
 
 ---
 
@@ -822,3 +822,129 @@ Four defensive fixes to harden parallel execution before Phase 4 enterprise work
 - 8-worker parallelism with zero resource leaks means the runner is already more reliable than most open-source parallel test runners
 - Every test has a unique `testId` — this becomes the hook for future features: healer history, memory store, flakiness scoring all reference by testId
 - Healer Analytics gives the demo moment: run twice, watch LLM calls drop, see which pages are flakiest
+
+---
+
+## Phase 4 — Product Surface ✅ DONE (2026-05-11)
+
+### EPIC-API — REST + WebSocket API Layer ✅ DONE
+
+Built a full API server (`src/server.ts`) that powers both the portal and external integrations.
+
+| File | Purpose |
+|---|---|
+| `src/server.ts` | Express + WS server — `aiqa serve` CLI command, port 7432, serves portal static files |
+| `src/api/router.ts` | Route registration — health unauthenticated, all others behind auth middleware |
+| `src/api/middleware/auth.ts` | Bearer token (HTTP header) + `?token=` (WS query param) |
+| `src/api/middleware/cors.ts` | CORS policy for local + remote portal access |
+| `src/api/routes/runTriggers.ts` | `POST /api/run|run-all|orchestrate|explore|generate|import|jira-sync` with Zod validation |
+| `src/api/routes/runs.ts` | `GET /api/runs`, `/runs/:id`, `/runs/:id/results|report` |
+| `src/api/routes/tests.ts` | `GET/PUT /api/tests/*path` — YAML read/write with path traversal guard |
+| `src/api/routes/screenshots.ts` | `GET /api/runs/:id/screenshots/:file` — static file serving |
+| `src/api/routes/cancel.ts` | `POST /api/runs/:id/cancel` — graceful job cancellation |
+| `src/api/routes/health.ts` | `GET /api/health` — unauthenticated health check |
+| `src/api/ws/runStream.ts` | WS fan-out: 500-event replay buffer, 1hr TTL, late-subscriber catch-up |
+| `src/api/jobs/RunJob.ts` | Job lifecycle — `queued → running → passed/failed/error/cancelled` |
+| `src/api/jobs/RunJobStore.ts` | In-memory store + FIFO concurrency queue (default: CPU count workers) |
+
+### Key API behaviours
+
+- All trigger endpoints (`run`, `orchestrate`, etc.) accept `vars: Record<string,string>` — env vars injected via `withEnv()` for the duration of the job (e.g. `USERNAME`, `PASSWORD` for auth crawls)
+- Responses are job objects: `{ runId, status: "queued" }` — poll via REST or subscribe via WebSocket
+- WS stream buffers up to 500 events; a late subscriber receives the full replay before live events begin
+- Screenshot files served directly from `.aiqa/runs/:id/screenshots/` via static middleware
+- Disk persistence in `.aiqa/runs/<runId>/` — survives server restart for results browsing
+
+---
+
+### EPIC-EXT-B — Pure Chrome Extension ✅ DONE
+
+A zero-setup Chrome extension (Track B) — no AIQA server required. Uses Chrome's CDP API instead of Playwright.
+
+**How it works:** Install (load unpacked from `chrome-ext/`), open any web app, click the AIQA icon, and either record a user flow or type a natural-language goal. The extension generates and replays steps entirely within the browser.
+
+| Capability | Implementation |
+|---|---|
+| Browser automation | `ChromeDebuggerAdapter` — CDP navigate, click, fill, assert |
+| AI test generation | Page HTML → Claude API → YAML steps |
+| Record mode | Content script captures click/fill/navigate; replay with visual highlights |
+| Results | Pass/fail shown inline in side panel |
+| Persistence | `chrome.storage.local` for saved tests across sessions |
+| Export/import | Export test as YAML, import from `.yaml` file |
+
+**Navigation resilience fixes applied:**
+- Same-URL navigation retry (back/forward cache hit)
+- Cached page reload on `net::ERR_CACHE_MISS`
+- `--dry-run` flag for CLI orchestrate (explore + generate without running)
+
+---
+
+### EPIC-PORTAL — Web Portal ✅ DONE
+
+A React + Vite frontend served at the same port as the API server (`aiqa serve`).
+
+| Page | What it provides |
+|---|---|
+| **Dashboard** | Recent run summary cards — pass rate, score, duration trends |
+| **Tests** | File tree of YAML tests; click to view, edit inline with syntax highlighting, save via `PUT /api/tests` |
+| **Runs** | Paginated run history with status filter chips; `effectiveStatus` used for accurate filter counts |
+| **RunDetail** | Full step-by-step progress with per-step duration, error messages, failure screenshots, and an embedded HTML report iframe |
+| **Orchestrate** | URL input + `EnvVarPanel` (credential key=value pairs) → `POST /api/orchestrate` → live WS stream |
+
+**Portal polish applied (review pass):**
+- `ErrorBoundary` component wraps each page — crashes don't take down the whole app
+- Navigation guard prevents leaving mid-run without confirmation
+- Cancel button wired to `POST /api/runs/:id/cancel`
+- WS auto-reconnect on disconnect — banner suppressed after 500ms to avoid flicker on fast reconnects
+- Screenshots directory created per orchestrate run — paths relative to the run's folder
+- `300ms` wait before failure screenshot to allow error UI to render
+
+**Orchestrator improvements landed during portal work:**
+- Real CSS selectors in generated YAML (instead of hallucinated button labels)
+- YAML-safe quoting via `JSON.stringify` for target values containing special characters
+- Variable credentials — `username`/`password` templated into generated auth steps
+- `element_not_visible` assertion — confirms login form is gone after successful auth
+- Single-port server — portal static files served from the API server (no separate dev server in production)
+
+---
+
+### Stage 1b — Authenticated Re-exploration ✅ DONE (2026-05-12)
+
+After the anonymous BFS crawl, if a login page is found and credentials are available, AIQA logs in and crawls the authenticated portion of the app, merging discovered pages into the exploration before FlowMapper runs.
+
+**Architecture:**
+
+```
+Stage 1a:  Anonymous BFS  (existing)
+           ↓ finds login page with password input
+Stage 1b:  Authenticated BFS  (new)
+           ↓ login → shared BrowserContext → BFS post-login pages
+           ↓ merge new pages into exploration
+Stage 2+:  FlowMapper, Generator, Runner see full page set
+```
+
+**Key implementation details:**
+
+| Detail | Implementation |
+|---|---|
+| Shared session | `browser.newContext()` → all pages in context share cookies + localStorage |
+| SPA route discovery | Intercepts `history.pushState` during simulated `a[href="#"]` clicks to find React Router routes |
+| Session break detection | If any crawled page redirects back to login URL → stop (session expired) |
+| Credential resolution | Reads from raw env string OR `process.env` (set by API's `withEnv(body.vars)`) |
+| Non-fatal | Auth crawl failure (wrong creds, no redirect) logs a warning and continues with anonymous pages |
+| SauceDemo result | 1 anonymous page → 3 pages after auth crawl (login + `/inventory.html` + `/inventory-item.html`) |
+
+**Known limitation:** Apps that use `window.location.href = ...` for navigation (instead of `<a href>` or `history.pushState`) won't have those routes discovered. Most enterprise apps with proper anchor tags are not affected.
+
+---
+
+## Platform Metrics — After Phase 4
+
+| Metric | After Pre-Phase 4 Hardening | After Phase 4 |
+|---|---|---|
+| Platform access | CLI only | CLI + **REST API** + **Web Portal** + **Chrome Extension** |
+| API endpoints | 0 | **14 REST + 1 WS stream** |
+| Portal pages | 0 | **5 (Dashboard, Tests, Runs, RunDetail, Orchestrate)** |
+| Auth crawl | Anonymous only | **Anonymous + authenticated BFS merge** |
+| Alignment with vision | ~72% | **~90%** |
+| Step types | 13 | **14** (`element_not_visible` added) |
