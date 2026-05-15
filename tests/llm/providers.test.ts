@@ -2,6 +2,7 @@ import { LLMProvider, LLMRequest, LLMResponse, createLLMProvider } from "../../s
 import { OpenAILLMProvider }   from "../../src/llm/OpenAILLMProvider";
 import { GeminiLLMProvider }   from "../../src/llm/GeminiLLMProvider";
 import { FallbackLLMProvider } from "../../src/llm/FallbackLLMProvider";
+import { logger }              from "../../src/utils/logger";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -112,8 +113,8 @@ describe("FallbackLLMProvider", () => {
     await expect(fb.complete(req)).rejects.toThrow("HTTP 400");
   });
 
-  test("logs console.warn when fallback provider is activated", async () => {
-    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+  test("logs logger.warn when fallback provider is activated", async () => {
+    const warn = jest.spyOn(logger, "warn").mockImplementation(() => {});
     const fb = new FallbackLLMProvider([
       stubProvider("primary",  new Error("network error")),
       stubProvider("fallback", "recovered"),

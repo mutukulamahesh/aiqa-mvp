@@ -195,7 +195,7 @@ router.post("/run", validate(RunSchema), (req, res) => {
     const result  = await runner.run(testDef, onEvent);
 
     const summary = finishJob(job, [result]);
-    job.emit({ event: "done", status: job.meta.status as "passed" | "failed" | "error", summary });
+    job.emit({ event: "done", status: job.meta.status as "passed" | "failed" | "error", summary, droppedEvents: job.droppedEvents || undefined });
 
     await persistence.writeMeta(job.meta);
     await persistence.writeResults(job.meta.runId, [result]);
@@ -230,7 +230,7 @@ router.post("/run-all", validate(RunAllSchema), (req, res) => {
 
     const results = await runTestsParallel(files, { headless: body.headless, workers: body.workers, tags: body.tags }, job);
     const summary = finishJob(job, results);
-    job.emit({ event: "done", status: job.meta.status as "passed" | "failed" | "error", summary });
+    job.emit({ event: "done", status: job.meta.status as "passed" | "failed" | "error", summary, droppedEvents: job.droppedEvents || undefined });
 
     await persistence.writeMeta(job.meta);
     await persistence.writeResults(job.meta.runId, results);
@@ -331,7 +331,7 @@ router.post("/generate", validate(GenerateSchema), (req, res) => {
     const exploration = await persistence.readExploration(body.explorationId);
     if (!exploration) throw new Error(`Exploration not found: ${body.explorationId}`);
 
-    const explData  = exploration as unknown as ExplorationResult;
+    const explData  = exploration as ExplorationResult;
     const mapper    = new FlowMapper();
     const generator = new ScenarioGenerator();
 
@@ -423,6 +423,8 @@ router.post("/jira-sync", validate(JiraSyncSchema), (req, res) => {
     });
 
     const testResults = (Array.isArray(results) ? results : [results]) as import("../../runner/TestRunner").TestResult[];
+    // Note: results from disk are serialized JSON — shape is validated by the Jira adapter
+    // rather than Zod here because the schema may evolve independently of the API contract.
     const pushItems: PushResultItem[] = testResults.map(r => ({
       testName: r.testName,
       passed:   r.passed,

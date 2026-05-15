@@ -2,6 +2,14 @@
 // Provider modules are lazy-loaded via require() so that missing optional dependencies
 // (e.g. no @anthropic-ai/sdk installed) only throw at runtime when that provider is
 // actually used — not at import time when another provider is configured.
+// Import types at the top for TypeScript safety; values are loaded lazily below.
+import type { AnthropicLLMProvider as _AnthropicType } from "./AnthropicLLMProvider";
+import type { OpenAILLMProvider   as _OpenAIType }    from "./OpenAILLMProvider";
+import type { GeminiLLMProvider   as _GeminiType }    from "./GeminiLLMProvider";
+import type { MockLLMProvider     as _MockType }      from "./MockLLMProvider";
+import type { FallbackLLMProvider as _FallbackType }  from "./FallbackLLMProvider";
+import { getCircuitBreaker }                          from "../utils/circuitBreaker";
+
 /**
  * Canonical LLM prompt format. Every provider translates this internally —
  * callers never deal with provider-specific wire formats.
@@ -50,26 +58,38 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
   try {
     primary = buildSingle(resolved.provider, resolved.model);
   } catch (err) {
-    // Primary key missing — if fallbacks are configured, degrade gracefully rather than crash.
-    // This lets staging configs (provider: anthropic, fallback: [mock]) work in CI without a key.
     if (resolved.fallback?.length) {
       const msg = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[LLM] Primary provider "${resolved.provider}" unavailable (${msg}); using fallback.\n`);
       const fallbacks = resolved.fallback.map(name => buildSingle(name));
-      if (fallbacks.length === 1) return fallbacks[0];
-      const { FallbackLLMProvider } = require("./FallbackLLMProvider");
-      return new FallbackLLMProvider(fallbacks);
+      if (fallbacks.length === 1) return withCircuitBreaker(fallbacks[0]);
+      const { FallbackLLMProvider } = require("./FallbackLLMProvider") as { FallbackLLMProvider: typeof _FallbackType };
+      return withCircuitBreaker(new FallbackLLMProvider(fallbacks));
     }
     throw err;
   }
 
-  if (!resolved.fallback?.length) return primary;
+  if (!resolved.fallback?.length) return withCircuitBreaker(primary);
 
-  const { FallbackLLMProvider } = require("./FallbackLLMProvider");
-  return new FallbackLLMProvider([
+  const { FallbackLLMProvider } = require("./FallbackLLMProvider") as { FallbackLLMProvider: typeof _FallbackType };
+  return withCircuitBreaker(new FallbackLLMProvider([
     primary,
     ...resolved.fallback.map(name => buildSingle(name)),
-  ]);
+  ]));
+}
+
+/**
+ * Wraps a provider with a circuit breaker so repeated LLM failures trip the
+ * circuit and return fast errors instead of hanging requests.
+ * Mock providers are excluded — they never make real network calls.
+ */
+function withCircuitBreaker(provider: LLMProvider): LLMProvider {
+  if (provider.name === "mock") return provider;
+  const cb = getCircuitBreaker(provider.name);
+  return {
+    name: provider.name,
+    complete: (req) => cb.call(() => provider.complete(req)),
+  };
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -95,19 +115,19 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
     case "anthropic": {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
-      const { AnthropicLLMProvider } = require("./AnthropicLLMProvider");
+      const { AnthropicLLMProvider } = require("./AnthropicLLMProvider") as { AnthropicLLMProvider: typeof _AnthropicType };
       return new AnthropicLLMProvider(key, model);
     }
     case "openai": {
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new Error("OPENAI_API_KEY is not set");
-      const { OpenAILLMProvider } = require("./OpenAILLMProvider");
+      const { OpenAILLMProvider } = require("./OpenAILLMProvider") as { OpenAILLMProvider: typeof _OpenAIType };
       return new OpenAILLMProvider({ apiKey: key, model });
     }
     case "nvidia": {
       const key = process.env.NVIDIA_API_KEY;
       if (!key) throw new Error("NVIDIA_API_KEY is not set");
-      const { OpenAILLMProvider } = require("./OpenAILLMProvider");
+      const { OpenAILLMProvider } = require("./OpenAILLMProvider") as { OpenAILLMProvider: typeof _OpenAIType };
       return new OpenAILLMProvider({
         apiKey:  key,
         baseURL: "https://integrate.api.nvidia.com/v1",
@@ -117,11 +137,11 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
     case "gemini": {
       const key = process.env.GEMINI_API_KEY;
       if (!key) throw new Error("GEMINI_API_KEY is not set");
-      const { GeminiLLMProvider } = require("./GeminiLLMProvider");
+      const { GeminiLLMProvider } = require("./GeminiLLMProvider") as { GeminiLLMProvider: typeof _GeminiType };
       return new GeminiLLMProvider(key, model);
     }
     default: {
-      const { MockLLMProvider } = require("./MockLLMProvider");
+      const { MockLLMProvider } = require("./MockLLMProvider") as { MockLLMProvider: typeof _MockType };
       return new MockLLMProvider();
     }
   }

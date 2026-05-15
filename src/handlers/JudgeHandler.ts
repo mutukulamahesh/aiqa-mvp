@@ -42,7 +42,10 @@ function applyOp(op: string, score: number, threshold: number): boolean {
   }
 }
 
-const MAX_VALUE_LENGTH = 5_000;
+// Soft cap on the input passed to the LLM: keeps token usage predictable and
+// avoids context-window overflows on large API responses stored via store_as.
+// Configurable via AIQA_JUDGE_MAX_LENGTH if longer inputs are needed.
+const MAX_VALUE_LENGTH = parseInt(process.env.AIQA_JUDGE_MAX_LENGTH ?? "5000");
 
 export class JudgeHandler implements StepHandler {
   readonly handles = ["judge"];

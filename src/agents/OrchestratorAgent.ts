@@ -1,5 +1,6 @@
 import * as fs   from "fs";
 import * as path from "path";
+import { logger } from "../utils/logger";
 import { AppExplorer }        from "./AppExplorer";
 import { FlowMapper }          from "./FlowMapper";
 import { ScenarioGenerator }   from "./ScenarioGenerator";
@@ -112,7 +113,7 @@ export class OrchestratorAgent {
           }
         } catch (err) {
           // Non-fatal: continue with anonymous pages if auth crawl fails
-          console.warn(`  [Orchestrator] Auth re-exploration failed: ${(err as Error).message}`);
+          logger.warn(`[Orchestrator] Auth re-exploration failed: ${(err as Error).message}`);
         }
       }
     }
@@ -412,5 +413,5 @@ export class OrchestratorAgent {
 }
 
 function defaultProgress(stage: number, total: number, message: string): void {
-  console.log(`[${stage}/${total}] ${message}`);
+  logger.info(`[${stage}/${total}] ${message}`);
 }

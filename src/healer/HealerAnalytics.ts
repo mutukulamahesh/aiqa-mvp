@@ -64,18 +64,44 @@ export class HealerAnalytics {
   // ── Run recording ──────────────────────────────────────────────────────────
 
   recordRun(record: RunRecord): void {
-    const preMtime = fileMtime(this.logFile);
-    const runs     = this.loadRuns();
-    runs.push(record);
+    this.withFileLock(() => {
+      const preMtime = fileMtime(this.logFile);
+      const runs     = this.loadRuns();
+      runs.push(record);
 
-    const postMtime = fileMtime(this.logFile);
-    if (postMtime !== null && preMtime !== postMtime) {
-      // Another worker appended while we were loading — re-read and deduplicate by runId.
-      const fresh = this.loadRuns();
-      if (!fresh.some(r => r.runId === record.runId)) fresh.push(record);
-      this.saveRuns(fresh);
-    } else {
-      this.saveRuns(runs);
+      const postMtime = fileMtime(this.logFile);
+      if (postMtime !== null && preMtime !== postMtime) {
+        // Another worker appended while we were loading — re-read and deduplicate by runId.
+        const fresh = this.loadRuns();
+        if (!fresh.some(r => r.runId === record.runId)) fresh.push(record);
+        this.saveRuns(fresh);
+      } else {
+        this.saveRuns(runs);
+      }
+    });
+  }
+
+  /**
+   * Advisory file lock using O_EXCL (atomic on POSIX and Windows).
+   * If already locked, degrades gracefully — the mtime+dedup logic still prevents
+   * duplicate entries under concurrent writes.
+   */
+  private withFileLock(fn: () => void): void {
+    const lockPath = `${this.logFile}.lock`;
+    let acquired   = false;
+    try {
+      const fd = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_RDWR);
+      fs.closeSync(fd);
+      acquired = true;
+    } catch {
+      // Lock held — proceed without exclusive lock
+    }
+    try {
+      fn();
+    } finally {
+      if (acquired) {
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
     }
   }
 

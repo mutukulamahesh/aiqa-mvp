@@ -2,11 +2,14 @@ import * as os     from "os";
 import * as crypto from "crypto";
 import { RunJob, RunJobMeta, JobType, createRunJob } from "./RunJob";
 import * as persistence from "../persistence/runPersistence";
+import { sanitizeErrorMessage } from "../../utils/sanitizeError";
+import { logger } from "../../utils/logger";
 
 export class RunJobStore {
   private store        = new Map<string, RunJob>();
   private queue: Array<{ job: RunJob; execute: () => Promise<void> }> = [];
   private activeCount  = 0;
+  private draining     = false;   // guard against re-entrant _drain() calls
   readonly maxConcurrent = parseInt(process.env.AIQA_MAX_WORKERS ?? "") || os.cpus().length;
 
   create(type: JobType, screenshotsDir?: string): RunJob {
@@ -50,28 +53,45 @@ export class RunJobStore {
   }
 
   private _drain(): void {
-    while (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
-      const item = this.queue.shift()!;
-      this.activeCount++;
-      item.job.meta.status    = "running";
-      item.job.meta.startedAt = new Date().toISOString();
+    // Guard: if a _drain() call is already executing its synchronous while-loop,
+    // do not start a second one. The in-progress drain will pick up any items
+    // that were enqueued concurrently before it exits.
+    if (this.draining) return;
+    this.draining = true;
 
-      Promise.resolve()
-        .then(() => item.execute())
-        .catch(err => {
-          const message = (err as Error)?.message ?? String(err);
-          item.job.meta.status = "error";
-          item.job.meta.error  = message;
-          item.job.emit({ event: "error", message });
-          persistence.writeMeta(item.job.meta).catch(() => {});
-        })
-        .finally(() => {
-          item.job.meta.completedAt ??= new Date().toISOString();
-          this.activeCount--;
-          // Evict from memory after 1 hour; disk persists indefinitely
-          setTimeout(() => this.store.delete(item.job.meta.runId), 60 * 60 * 1000);
-          this._drain();
-        });
+    try {
+      while (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
+        const item = this.queue.shift()!;
+        this.activeCount++;
+        item.job.meta.status    = "running";
+        item.job.meta.startedAt = new Date().toISOString();
+
+        Promise.resolve()
+          .then(() => item.execute())
+          .catch(err => {
+            const rawMessage       = (err as Error)?.message ?? String(err);
+            const clientMessage    = sanitizeErrorMessage(err);
+            item.job.meta.status   = "error";
+            item.job.meta.error    = rawMessage;  // full detail kept in meta (server-side only)
+            logger.error(`Job ${item.job.meta.runId} failed: ${rawMessage}`);
+            item.job.emit({ event: "error", message: clientMessage });  // sanitized to clients
+            persistence.writeMeta(item.job.meta).catch(() => {});
+          })
+          .finally(() => {
+            item.job.meta.completedAt ??= new Date().toISOString();
+            this.activeCount--;
+            // Evict from memory after 1 hour; disk persists indefinitely
+            setTimeout(() => this.store.delete(item.job.meta.runId), 60 * 60 * 1000);
+            // Reset before recursive call so the next _drain() can enter.
+            this.draining = false;
+            this._drain();
+          });
+      }
+    } finally {
+      // Only reset if we didn't schedule async work (in which case .finally() resets it).
+      if (this.activeCount === 0 || this.queue.length === 0) {
+        this.draining = false;
+      }
     }
   }
 }

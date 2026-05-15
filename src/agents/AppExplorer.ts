@@ -1,4 +1,5 @@
 import { chromium, BrowserContext, Page } from "playwright";
+import { logger } from "../utils/logger";
 import {
   InputField,
   PageLink,
@@ -8,6 +9,10 @@ import {
 } from "./types";
 
 export type { InputField, PageLink, ExploredPage, ExplorationResult, ExplorerOptions };
+
+// Default wall-clock cap for the entire crawl (5 minutes).
+// Long crawls otherwise block the entire request with no cancellation path.
+export const DEFAULT_EXPLORE_TIMEOUT_MS = 300_000;
 
 const DEFAULT_IGNORE: RegExp[] = [
   /logout|signout|log-out|sign-out/i,
@@ -19,14 +24,17 @@ const DEFAULT_IGNORE: RegExp[] = [
 export class AppExplorer {
   async explore(url: string, opts: ExplorerOptions = {}): Promise<ExplorationResult> {
     const {
-      headless       = true,
-      maxPages       = 10,
-      maxDepth       = 3,
-      timeout        = 10_000,
-      ignorePatterns = DEFAULT_IGNORE,
+      headless          = true,
+      maxPages          = 10,
+      maxDepth          = 3,
+      timeout           = 10_000,
+      exploreTimeoutMs  = DEFAULT_EXPLORE_TIMEOUT_MS,
+      ignorePatterns    = DEFAULT_IGNORE,
     } = opts;
 
     const browser = await chromium.launch({ headless });
+    const deadline = Date.now() + exploreTimeoutMs;
+
     try {
       const baseUrl = new URL(url).origin;
       const visited = new Set<string>();
@@ -34,6 +42,12 @@ export class AppExplorer {
       const pages:  ExploredPage[] = [];
 
       while (queue.length > 0 && pages.length < maxPages) {
+        if (Date.now() > deadline) {
+          process.stderr.write(
+            `  [Explorer] Wall-clock timeout (${exploreTimeoutMs}ms) reached after ${pages.length} page(s) — stopping crawl early.\n`,
+          );
+          break;
+        }
         const { url: current, depth } = queue.shift()!;
         if (visited.has(current)) continue;
         visited.add(current);
@@ -52,7 +66,7 @@ export class AppExplorer {
             }
           }
         } catch (err) {
-          console.warn(`  [Explorer] Skipped ${current}: ${(err as Error).message}`);
+          logger.warn(`[Explorer] Skipped ${current}: ${(err as Error).message}`);
         } finally {
           await page.close();
         }
@@ -77,14 +91,17 @@ export class AppExplorer {
     opts:        ExplorerOptions = {},
   ): Promise<ExplorationResult> {
     const {
-      headless       = true,
-      maxPages       = 15,
-      maxDepth       = 3,
-      timeout        = 15_000,
-      ignorePatterns = DEFAULT_IGNORE,
+      headless         = true,
+      maxPages         = 15,
+      maxDepth         = 3,
+      timeout          = 15_000,
+      exploreTimeoutMs = DEFAULT_EXPLORE_TIMEOUT_MS,
+      ignorePatterns   = DEFAULT_IGNORE,
     } = opts;
 
-    const browser = await chromium.launch({ headless });
+    const browser  = await chromium.launch({ headless });
+    const deadline = Date.now() + exploreTimeoutMs;
+
     try {
       const baseUrl = new URL(authPageUrl).origin;
       const context: BrowserContext = await browser.newContext();
@@ -110,7 +127,7 @@ export class AppExplorer {
       }
 
       if (postLoginUrl === this.normalise(authPageUrl)) {
-        console.warn("  [Explorer] Auth crawl: login did not redirect — credentials may be wrong");
+        logger.warn("[Explorer] Auth crawl: login did not redirect — credentials may be wrong");
         return { baseUrl, exploredAt: new Date().toISOString(), pages: [], totalPages: 0, totalLinks: 0 };
       }
 
@@ -122,6 +139,12 @@ export class AppExplorer {
       const pages: ExploredPage[] = [];
 
       while (queue.length > 0 && pages.length < maxPages) {
+        if (Date.now() > deadline) {
+          process.stderr.write(
+            `  [Explorer] Auth crawl wall-clock timeout (${exploreTimeoutMs}ms) reached after ${pages.length} page(s) — stopping.\n`,
+          );
+          break;
+        }
         const { url: current, depth } = queue.shift()!;
         if (visited.has(current)) continue;
         visited.add(current);
@@ -152,7 +175,7 @@ export class AppExplorer {
             }
           }
         } catch (err) {
-          console.warn(`  [Explorer] Auth crawl skipped ${current}: ${(err as Error).message}`);
+          logger.warn(`[Explorer] Auth crawl skipped ${current}: ${(err as Error).message}`);
         } finally {
           await page.close();
         }

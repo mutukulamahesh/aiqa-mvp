@@ -11,5 +11,5 @@ export type RunEvent =
   | { event: "step_result"; index: number; passed: boolean; durationMs: number; error?: string; screenshotUrl?: string }
   | { event: "test_done";   testName: string; passed: boolean; durationMs: number }
   | { event: "log";         message: string }
-  | { event: "done";        status: "passed" | "failed" | "error"; summary: RunSummary }
+  | { event: "done";        status: "passed" | "failed" | "error"; summary: RunSummary; droppedEvents?: number }
   | { event: "error";       message: string }
