@@ -5,23 +5,34 @@ import StatusBadge from "../components/StatusBadge";
 
 export default function Runs() {
   const [runs, setRuns]       = useState<RunMeta[]>([]);
+  const [limit, setLimit]     = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState("");
   const [filter, setFilter]   = useState<string>("all");
   const navigate = useNavigate();
 
-  const load = () => {
+  const load = (lim?: number) => {
+    const effective = lim ?? limit;
     setLoading(true);
-    api.runs.list()
+    api.runs.list(effective)
       .then(setRuns)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   };
 
+  const loadMore = () => {
+    const next = limit + 20;
+    setLimit(next);
+    load(next);
+  };
+
   useEffect(() => { load(); }, []);
 
+  const effectiveStatus = (r: RunMeta) =>
+    (r.summary?.failed ?? 0) > 0 ? "failed" : r.status;
+
   const statuses = ["all", "passed", "failed", "running", "queued", "error", "cancelled"];
-  const visible  = filter === "all" ? runs : runs.filter(r => r.status === filter);
+  const visible  = filter === "all" ? runs : runs.filter(r => effectiveStatus(r) === filter);
 
   return (
     <div>
@@ -30,7 +41,7 @@ export default function Runs() {
           <h1 style={{ fontSize: 22, fontWeight: 700 }}>Runs</h1>
           <p style={{ color: "#64748b", marginTop: 2 }}>{runs.length} total runs</p>
         </div>
-        <button onClick={load} style={refreshBtn}>↻ Refresh</button>
+        <button onClick={() => load()} style={refreshBtn}>↻ Refresh</button>
       </div>
 
       {error && <div style={errStyle}>{error}</div>}
@@ -44,7 +55,7 @@ export default function Runs() {
             color: filter === s ? "#fff" : "#64748b",
             fontSize: 12, fontWeight: 500, cursor: "pointer",
           }}>
-            {s === "all" ? `All (${runs.length})` : `${s} (${runs.filter(r => r.status === s).length})`}
+            {s === "all" ? `All (${runs.length})` : `${s} (${runs.filter(r => effectiveStatus(r) === s).length})`}
           </button>
         ))}
       </div>
@@ -77,7 +88,7 @@ export default function Runs() {
                       onMouseLeave={e => (e.currentTarget.style.background = "")}>
                       <td style={tdStyle}><code style={{ fontSize: 11, color: "#6366f1" }}>{r.runId.slice(0, 24)}…</code></td>
                       <td style={tdStyle}>{r.type}</td>
-                      <td style={tdStyle}><StatusBadge status={r.status} /></td>
+                      <td style={tdStyle}><StatusBadge status={(r.summary?.failed ?? 0) > 0 ? "failed" : r.status} /></td>
                       <td style={tdStyle}>
                         {r.summary ? (
                           <span>
@@ -98,6 +109,13 @@ export default function Runs() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* Load more */}
+      {!loading && runs.length >= limit && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={loadMore} style={refreshBtn}>Load 20 more</button>
         </div>
       )}
     </div>

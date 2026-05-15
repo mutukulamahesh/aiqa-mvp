@@ -168,21 +168,30 @@ export class FlowMapper {
     const steps: FlowStep[] = [{ action: "navigate", target: page.url }];
 
     if (page.inputs.some(i => i.type === "email" || i.name?.includes("email"))) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "email", page), value: "testuser@example.com" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "email", page), value: "{{ USERNAME }}" });
     } else if (page.inputs.some(i => i.name?.includes("user") || i.placeholder?.toLowerCase().includes("user"))) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "username", page), value: "testuser" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "username", page), value: "{{ USERNAME }}" });
     }
 
     if (page.inputs.some(i => i.type === "password")) {
-      steps.push({ action: "fill", target: this.seedTarget(page.url, "password", page), value: "TestPassword123" });
+      steps.push({ action: "fill", target: this.seedTarget(page.url, "password", page), value: "{{ PASSWORD }}" });
     }
 
+    // Prefer visible button text → submit input CSS selector → generic fallback
     const submitBtn = page.buttons.find(b => /sign\s?in|log\s?in|login|submit/i.test(b));
-    const clickDescriptor = submitBtn ?? "Sign in";
-    steps.push({ action: "click", target: this.seedTarget(page.url, clickDescriptor, page) });
-    steps.push({ action: "assert", target: "url", value: "dashboard" });
+    const clickTarget = submitBtn ?? this.submitInputSelector(page) ?? "[type='submit']";
+    steps.push({ action: "click", target: this.seedTarget(page.url, clickTarget, page) });
+    // After login the form disappears regardless of what URL the app uses — universal success signal
+    steps.push({ action: "assert", target: "element_not_visible", value: clickTarget });
 
     return steps;
+  }
+
+  private submitInputSelector(page: ExploredPage): string | undefined {
+    const input = page.inputs.find(i => i.type === "submit" || i.type === "button");
+    if (!input) return undefined;
+    if (input.name) return `[name="${input.name}"]`;
+    return undefined;
   }
 
   private buildFormSteps(page: ExploredPage): FlowStep[] {
@@ -195,7 +204,8 @@ export class FlowMapper {
     }
 
     const submitBtn = page.buttons.find(b => /submit|send|save|register|sign\s?up/i.test(b));
-    if (submitBtn) steps.push({ action: "click", target: this.seedTarget(page.url, submitBtn, page) });
+    const formClickTarget = submitBtn ?? this.submitInputSelector(page);
+    if (formClickTarget) steps.push({ action: "click", target: this.seedTarget(page.url, formClickTarget, page) });
     steps.push({ action: "assert", target: "text", value: "success" });
 
     return steps;
@@ -267,6 +277,14 @@ export class FlowMapper {
       maxTokens:   1024,
     });
     const parsed = JSON.parse(res.content) as { flows: UserFlow[] };
-    return parsed.flows?.length ? parsed.flows.map((f, i) => ({ ...heuristic[i], ...f })) : heuristic;
+    if (!parsed.flows?.length) return heuristic;
+    // Only merge metadata — steps come from heuristic which uses real DOM attributes
+    return parsed.flows.map((f, i) => ({
+      ...heuristic[i],
+      name:        f.name        ?? heuristic[i]?.name,
+      description: f.description ?? heuristic[i]?.description,
+      type:        f.type        ?? heuristic[i]?.type,
+      priority:    f.priority    ?? heuristic[i]?.priority,
+    }));
   }
 }

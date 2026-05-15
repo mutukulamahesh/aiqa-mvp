@@ -9,6 +9,7 @@ export interface AdapterActions {
   assertTextVisible(text: string): Promise<void>;
   assertUrlContains(substring: string): Promise<void>;
   assertElementVisible(locator: string): Promise<void>;
+  assertElementNotVisible(locator: string): Promise<void>;
   screenshot(filePath: string): Promise<void>;
   /** Returns the browser's actual current URL (after redirects). */
   currentUrl(): Promise<string>;

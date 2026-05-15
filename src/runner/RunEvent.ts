@@ -2,6 +2,8 @@ export interface RunSummary {
   passed: number;
   failed: number;
   total:  number;
+  score?: number;
+  grade?: string;
 }
 
 export type RunEvent =

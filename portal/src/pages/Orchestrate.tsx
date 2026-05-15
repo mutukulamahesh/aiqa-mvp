@@ -1,12 +1,13 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { EnvVarPanel, EnvVar, envVarsToRecord } from "../components/EnvVarPanel";
 
 export default function Orchestrate() {
   const [url, setUrl]           = useState("");
   const [maxPages, setMaxPages] = useState("10");
   const [headless, setHeadless] = useState(true);
-  const [dryRun, setDryRun]     = useState(false);
+  const [vars, setVars]         = useState<EnvVar[]>([]);
   const [running, setRunning]   = useState(false);
   const [error, setError]       = useState("");
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ export default function Orchestrate() {
       const { runId } = await api.trigger.orchestrate(url, {
         maxPages: parseInt(maxPages, 10) || 10,
         headless,
-        dryRun,
+        vars: envVarsToRecord(vars),
       });
       navigate(`/runs/${runId}`);
     } catch (e) {
@@ -59,16 +60,18 @@ export default function Orchestrate() {
           />
         </Field>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "20px 0" }}>
+        <div style={{ marginBottom: 18 }}>
           <label style={checkLabel}>
             <input type="checkbox" checked={headless} onChange={e => setHeadless(e.target.checked)} />
             Run browser headlessly (recommended for CI)
           </label>
-          <label style={checkLabel}>
-            <input type="checkbox" checked={dryRun} onChange={e => setDryRun(e.target.checked)} />
-            Dry run — explore and generate tests without executing them
-          </label>
         </div>
+
+        <div style={{ marginBottom: 6, padding: "10px 14px", background: "#f0f9ff", borderRadius: 8, border: "1px solid #bae6fd", fontSize: 12, color: "#0369a1" }}>
+          <strong>Authentication tests</strong> — set <code>USERNAME</code> and <code>PASSWORD</code> below so generated login steps use real credentials.
+        </div>
+
+        <EnvVarPanel vars={vars} onChange={setVars} />
 
         <button onClick={start} disabled={running || !url.trim()} style={primaryBtn(running)}>
           {running ? "Starting pipeline…" : "⚡ Start Orchestration"}

@@ -167,12 +167,13 @@ export interface OrchestratorSummary {
 }
 
 export interface OrchestratorInput {
-  url:         string;
-  env?:        string;
-  maxPages?:   number;
-  headless?:   boolean;
-  timeout?:    number;
-  outDir?:     string;
-  dryRun?:     boolean;
-  onProgress?: (stage: number, total: number, message: string) => void;
+  url:            string;
+  env?:           string;
+  maxPages?:      number;
+  headless?:      boolean;
+  timeout?:       number;
+  outDir?:        string;
+  screenshotsDir?: string;
+  dryRun?:        boolean;
+  onProgress?:    (stage: number, total: number, message: string) => void;
 }

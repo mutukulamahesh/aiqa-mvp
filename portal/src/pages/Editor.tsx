@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { api } from "../api";
+import { EnvVarPanel, EnvVar, envVarsToRecord } from "../components/EnvVarPanel";
 
 const SAMPLE = `test:
   name: "My Test"
@@ -14,8 +15,13 @@ const SAMPLE = `test:
 `;
 
 export default function Editor() {
-  const [yaml, setYaml]         = useState(SAMPLE);
+  const location = useLocation();
+  const state    = location.state as { content?: string; fileName?: string } | null;
+
+  const [yaml, setYaml]         = useState(state?.content ?? SAMPLE);
+  const [fileName, setFileName] = useState<string | null>(state?.fileName ?? null);
   const [headless, setHeadless] = useState(true);
+  const [vars, setVars]         = useState<EnvVar[]>([]);
   const [running, setRunning]   = useState(false);
   const [error, setError]       = useState("");
   const navigate = useNavigate();
@@ -25,7 +31,7 @@ export default function Editor() {
     setError("");
     setRunning(true);
     try {
-      const { runId } = await api.trigger.run(yaml, { headless });
+      const { runId } = await api.trigger.run(yaml, { headless, vars: envVarsToRecord(vars) });
       navigate(`/runs/${runId}`);
     } catch (e) {
       setError((e as Error).message);
@@ -42,6 +48,12 @@ export default function Editor() {
 
       {error && <div style={errStyle}>{error}</div>}
 
+      {fileName && (
+        <div style={{ fontSize: 12, color: "#6366f1", marginBottom: 10, fontFamily: "ui-monospace, monospace" }}>
+          Editing: {fileName}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer" }}>
@@ -49,7 +61,7 @@ export default function Editor() {
           Headless mode
         </label>
         <div style={{ flex: 1 }} />
-        <button onClick={() => setYaml(SAMPLE)} style={secondaryBtn}>Reset sample</button>
+        <button onClick={() => { setYaml(SAMPLE); setFileName(null); }} style={secondaryBtn}>Reset sample</button>
         <button onClick={run} disabled={running || !yaml.trim()} style={primaryBtn(running)}>
           {running ? "Starting…" : "▶ Run"}
         </button>
@@ -61,7 +73,7 @@ export default function Editor() {
         onChange={e => setYaml(e.target.value)}
         spellCheck={false}
         style={{
-          width: "100%", height: "calc(100vh - 280px)",
+          width: "100%", height: "calc(100vh - 360px)",
           fontFamily: "ui-monospace, 'Cascadia Code', monospace",
           fontSize: 13, lineHeight: 1.6,
           padding: 16, border: "1px solid #e2e8f0", borderRadius: 10,
@@ -79,8 +91,13 @@ export default function Editor() {
         }}
       />
 
+      {/* Env vars */}
+      <div style={{ marginTop: 14 }}>
+        <EnvVarPanel vars={vars} onChange={setVars} />
+      </div>
+
       {/* YAML hint */}
-      <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+      <div style={{ marginTop: 6, fontSize: 11, color: "#94a3b8" }}>
         Supported actions: navigate · click · fill · assert (text/url/visible) · wait_for_element · wait_ms · store · if · for_each · judge
       </div>
     </div>

@@ -21,18 +21,31 @@ export default function Dashboard() {
   const [error, setError]   = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const load = () =>
     api.runs.list()
-      .then(r => setRuns(r.slice(0, 20)))
+      .then(setRuns)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
 
-  const completed = runs.filter(r => r.status === "passed" || r.status === "failed");
-  const passed    = completed.filter(r => r.status === "passed").length;
+  useEffect(() => { load(); }, []);
+
+  const effectiveStatus = (r: RunMeta) =>
+    (r.summary?.failed ?? 0) > 0 ? "failed" : r.status;
+
+  const completed = runs.filter(r => { const s = effectiveStatus(r); return s === "passed" || s === "failed"; });
+  const passed    = completed.filter(r => effectiveStatus(r) === "passed").length;
   const passRate  = completed.length ? Math.round((passed / completed.length) * 100) : 0;
   const running   = runs.filter(r => r.status === "running").length;
   const lastScore = runs.find(r => r.summary?.score !== undefined)?.summary?.score;
+
+  // Poll while jobs are running
+  useEffect(() => {
+    if (running === 0) return;
+    const timer = setInterval(() => {
+      api.runs.list().then(setRuns).catch(() => {});
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [running]);
 
   return (
     <div>
@@ -57,14 +70,17 @@ export default function Dashboard() {
             <div style={{ background: "#fff", borderRadius: 12, padding: "18px 24px", border: "1px solid #e2e8f0", marginBottom: 28 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Pass rate trend (last {completed.length} runs)</div>
               <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 40 }}>
-                {completed.slice(-20).map((r, i) => (
-                  <div key={i} title={r.runId} onClick={() => navigate(`/runs/${r.runId}`)} style={{
-                    flex: 1, height: r.status === "passed" ? "100%" : "40%",
-                    background: r.status === "passed" ? "#22c55e" : "#ef4444",
-                    borderRadius: "3px 3px 0 0", cursor: "pointer", minWidth: 8,
-                    transition: "opacity 0.15s",
-                  }} />
-                ))}
+                {completed.slice(-20).map((r, i) => {
+                  const isPassed = effectiveStatus(r) === "passed";
+                  return (
+                    <div key={i} title={r.runId} onClick={() => navigate(`/runs/${r.runId}`)} style={{
+                      flex: 1, height: isPassed ? "100%" : "40%",
+                      background: isPassed ? "#22c55e" : "#ef4444",
+                      borderRadius: "3px 3px 0 0", cursor: "pointer", minWidth: 8,
+                      transition: "opacity 0.15s",
+                    }} />
+                  );
+                })}
               </div>
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>Click a bar to view run details</div>
             </div>
@@ -96,7 +112,7 @@ export default function Dashboard() {
                       onMouseLeave={e => (e.currentTarget.style.background = "")}>
                       <td style={tdStyle}><code style={{ fontSize: 11, color: "#6366f1" }}>{r.runId.slice(0, 20)}…</code></td>
                       <td style={tdStyle}><span style={{ color: "#64748b" }}>{r.type}</span></td>
-                      <td style={tdStyle}><StatusBadge status={r.status} /></td>
+                      <td style={tdStyle}><StatusBadge status={effectiveStatus(r)} /></td>
                       <td style={tdStyle}>{r.summary?.score !== undefined ? `${r.summary.score}/100 (${r.summary.grade})` : "—"}</td>
                       <td style={tdStyle}>{r.startedAt ? new Date(r.startedAt).toLocaleString() : "—"}</td>
                     </tr>
