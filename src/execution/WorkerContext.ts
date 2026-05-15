@@ -10,14 +10,14 @@ export interface WorkerStore {
 
 export const workerStorage = new AsyncLocalStorage<WorkerStore>();
 
-/** Buffer a log line. Falls back to console.log when called outside a worker context. */
+/** Buffer a log line. Falls back to process.stdout when called outside a worker context. */
 export function wlog(msg: string): void {
   const store = workerStorage.getStore();
   if (store) {
     store.logs.push(msg + "\n");
     store.onEvent?.({ event: "log", message: msg });
   } else {
-    console.log(msg);
+    process.stdout.write(msg + "\n");
   }
 }
 

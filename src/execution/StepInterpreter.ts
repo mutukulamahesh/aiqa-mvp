@@ -23,8 +23,18 @@ export class StepInterpreter {
   private registry: HandlerRegistry;
   private dbHandler: DBActionHandler;
 
-  constructor() {
+  /**
+   * @param registry  Optional pre-built HandlerRegistry.  When provided, it is used
+   *                  as-is (useful for testing with mock handlers injected).
+   *                  When omitted, the default production registry is assembled.
+   */
+  constructor(registry?: HandlerRegistry) {
     this.dbHandler = new DBActionHandler();
+
+    if (registry) {
+      this.registry = registry;
+      return;
+    }
 
     // Sub-step executor passed to branching/looping handlers so they reuse
     // the full interpreter pipeline (healer, memory, error classification).

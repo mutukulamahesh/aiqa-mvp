@@ -35,6 +35,12 @@ export class ExecutionContext {
   private variables: Map<string, unknown> = new Map();
   readonly config: EnvConfig | null;
 
+  // Nesting depth for the DepthGuard — stored here so each test execution
+  // (each ExecutionContext instance) has independent depth tracking.
+  nestingDepth = 0;
+  incrementNestingDepth(): void { this.nestingDepth++; }
+  decrementNestingDepth(): void { this.nestingDepth = Math.max(0, this.nestingDepth - 1); }
+
   constructor(initial: Record<string, string> = {}, config: EnvConfig | null = null) {
     this.config = config;
     for (const [k, v] of Object.entries(initial)) {

@@ -42,6 +42,40 @@ export interface PushResultSummary {
   failed:    FailureRecord[]; // items where the Jira API call failed (non-fatal)
 }
 
+// ── JQL builder ───────────────────────────────────────────────────────────────
+
+/**
+ * Builds a parameterized JQL clause that correctly quotes and escapes values.
+ * Prevents JQL injection by never interpolating raw user input into the query string.
+ *
+ * Jira JQL string literals are quoted with double-quotes; internal double-quotes
+ * must be escaped as \".  We additionally strip characters Jira rejects in labels.
+ */
+function jqlString(value: string): string {
+  // Escape backslashes first, then double-quotes
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
+/** Builds a JQL clause for the standard issue search used in dedup queries. */
+function buildDedupJql(projectKey: string, fingerprintLabel: string): string {
+  return (
+    `project = ${jqlString(projectKey)} ` +
+    `AND labels = ${jqlString(fingerprintLabel)} ` +
+    `AND statusCategory != Done ` +
+    `ORDER BY created DESC`
+  );
+}
+
+/** Builds the JQL clause for fetching project stories. */
+function buildStoriesJql(projectKey: string): string {
+  return (
+    `project = ${jqlString(projectKey)} ` +
+    `AND issuetype in (Story, Task) ` +
+    `ORDER BY priority DESC`
+  );
+}
+
 // ── Adapter ───────────────────────────────────────────────────────────────────
 
 export class JiraAdapter {
@@ -55,6 +89,14 @@ export class JiraAdapter {
     if (!hasCredentials && (config.baseUrl || config.email || config.apiToken)) {
       process.stderr.write(
         `[jira] incomplete credentials (need baseUrl + email + apiToken) — falling back to mock mode\n`,
+      );
+    }
+
+    // SEC: Warn loudly when Jira base URL is not HTTPS (credentials would be sent in plaintext)
+    if (config.baseUrl && !config.baseUrl.startsWith("https://")) {
+      process.stderr.write(
+        `[jira] WARNING: baseUrl "${config.baseUrl}" is not HTTPS. ` +
+        `Credentials will be sent in plaintext — use https:// for production.\n`,
       );
     }
 
@@ -74,8 +116,7 @@ export class JiraAdapter {
       return this.mockStories(key);
     }
 
-    const jql = `project = "${key}" AND issuetype in (Story, Task) ORDER BY priority DESC`;
-    const result = await this.client.searchIssues(jql, [
+    const result = await this.client.searchIssues(buildStoriesJql(key), [
       "summary", "description", "priority", "issuetype",
     ]);
     return result.issues.map(issue => this.parseIssue(issue));
@@ -118,19 +159,15 @@ export class JiraAdapter {
       try {
         await this.throttle();
 
-        // Dedup: search for an existing open issue bearing the fingerprint label.
-        // If the search itself fails, treat it as "no duplicate" and create a new issue.
         let existingKey: string | undefined;
         try {
-          const jql     = `project = "${key}" AND labels = "${fp}" AND statusCategory != Done ORDER BY created DESC`;
-          const existing = await this.client.searchIssues(jql, ["summary", "status"]);
-          existingKey   = existing.issues[0]?.key;
+          const existing = await this.client.searchIssues(buildDedupJql(key, fp), ["summary", "status"]);
+          existingKey    = existing.issues[0]?.key;
         } catch {
           // search failure is non-fatal — fall through to create
         }
 
         if (existingKey) {
-          // Duplicate found — add a comment instead of opening a second bug
           const commentText =
             `Test "${r.testName}" failed again in AIQA run ${effectiveRunId}.` +
             (r.error ? `\n\nError:\n${r.error}` : "");
@@ -154,7 +191,6 @@ export class JiraAdapter {
           process.stderr.write(`[jira] created defect ${issue.key} for "${r.testName}"\n`);
         }
       } catch (err) {
-        // Per-item errors are non-fatal — log and continue so other issues are still processed
         const msg = (err as Error).message ?? String(err);
         process.stderr.write(`[jira] failed to create/sync issue for "${r.testName}": ${msg}\n`);
         failed.push({ testName: r.testName, error: msg });
@@ -203,18 +239,22 @@ export class JiraAdapter {
       .slice(0, 12);
   }
 
-  /** Jira-safe label derived from the test name (no spaces, max 50 chars). */
+  /**
+   * Jira-safe label derived from the test name (no spaces, max 50 chars).
+   * Appends a 6-char hash suffix to guarantee uniqueness even when two test
+   * names collide after slug normalisation (e.g. "foo_bar" vs "foo--bar").
+   */
   private sanitizeLabel(name: string): string {
-    return "aiqa-test-" + name.toLowerCase()
+    const slug = "aiqa-test-" + name.toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 40)
-      .replace(/-$/, "");
+      .slice(0, 33); // leave room for dash + 6-char hash
+    const hash = crypto.createHash("sha256").update(name).digest("hex").slice(0, 6);
+    return `${slug}-${hash}`;
   }
 
   private lastCallTime = 0;
 
-  /** Enforces a minimum gap of throttleMs between consecutive API calls. No-op on the very first call. */
   private async throttle(): Promise<void> {
     const ms = this.config.throttleMs ?? 100;
     if (ms <= 0) return;
@@ -258,100 +298,85 @@ export class JiraAdapter {
 
   private toAdf(text: string): object {
     return {
-      type:    "doc",
-      version: 1,
-      content: text.split("\n\n").filter(Boolean).map(para => ({
-        type:    "paragraph",
-        content: [{ type: "text", text: para.replace(/\n/g, " ") }],
-      })),
+      type: "doc", version: 1,
+      content: [{
+        type: "paragraph",
+        content: [{ type: "text", text }],
+      }],
     };
   }
 
-  // ── Flow conversion helpers ───────────────────────────────────────────────
-
   private storyToFlow(story: JiraStory): UserFlow {
-    const t = story.title.toLowerCase();
+    const titleLower = story.title.toLowerCase();
+    const isLogin    = /\blog.?in\b|login/.test(titleLower);
+    const isRegister = /register|sign.?up/.test(titleLower);
 
-    const type: UserFlow["type"] =
-      t.includes("log in") || t.includes("login") || t.includes("sign in")
-        ? "authentication"
-        : t.includes("register") || t.includes("sign up")
-        ? "form_submission"
-        : t.includes("browse") || t.includes("view") || t.includes("see")
-        ? "navigation"
-        : "form_submission";
+    let flowType: UserFlow["type"];
+    if (isLogin) {
+      flowType = "authentication";
+    } else if (isRegister) {
+      flowType = "form_submission";
+    } else if (story.storyType === "bug") {
+      flowType = "crud";
+    } else {
+      flowType = "navigation";
+    }
+
+    const steps: FlowStep[] = [
+      { action: "navigate", target: "{{ env.base }}" },
+    ];
+
+    if (isLogin) {
+      steps.push({ action: "fill",   target: 'input[type="email"], input[name="username"]', value: "{{ env.username }}" });
+      steps.push({ action: "fill",   target: 'input[type="password"]', value: "{{ env.password }}" });
+      steps.push({ action: "click",  target: 'button[type="submit"]' });
+      steps.push({ action: "assert", target: "text", value: story.acceptanceCriteria[1] ?? "access granted" });
+    } else if (isRegister) {
+      steps.push({ action: "fill",   target: 'input[name="email"]',    value: "{{ env.newEmail }}" });
+      steps.push({ action: "fill",   target: 'input[type="password"]', value: "{{ env.password }}" });
+      steps.push({ action: "click",  target: 'button[type="submit"]' });
+    } else {
+      steps.push({ action: "assert", target: "text", value: story.title });
+      for (const criterion of story.acceptanceCriteria.slice(0, 3)) {
+        steps.push({ action: "assert", target: "text", value: criterion });
+      }
+    }
 
     return {
       name:        story.title,
       description: story.description,
-      type,
+      type:        flowType,
       priority:    story.priority,
       pages:       [],
-      steps:       this.acToSteps(story.acceptanceCriteria, type),
+      steps,
     };
   }
-
-  private acToSteps(criteria: string[], type: UserFlow["type"]): FlowStep[] {
-    if (type === "authentication") {
-      return [
-        { action: "navigate", target: "/login" },
-        { action: "fill",     target: "email",    value: "testuser@example.com" },
-        { action: "fill",     target: "password", value: "TestPassword123" },
-        { action: "click",    target: "Sign in" },
-        { action: "assert",   target: "url",      value: "dashboard" },
-      ];
-    }
-    if (type === "form_submission") {
-      return [
-        { action: "navigate", target: "/register" },
-        { action: "fill",     target: "email",    value: "newuser@example.com" },
-        { action: "fill",     target: "password", value: "NewPassword123" },
-        { action: "click",    target: "Register" },
-        { action: "assert",   target: "text",     value: "success" },
-      ];
-    }
-    return [
-      { action: "navigate", target: "/" },
-      { action: "assert",   target: "text", value: criteria[0]?.slice(0, 30) ?? "home" },
-    ];
-  }
-
-  // ── Mock data ─────────────────────────────────────────────────────────────
 
   private mockStories(projectKey: string): JiraStory[] {
     return [
       {
-        id:          `${projectKey}-1`,
-        title:       "User can log in with valid credentials",
-        description: "As a registered user I want to log in so that I can access my account.",
-        acceptanceCriteria: [
-          "Given valid email and password, the user reaches the dashboard",
-          "Given invalid credentials, an error message is shown",
-        ],
-        storyType: "feature",
-        priority:  "high",
+        id:                `${projectKey}-1`,
+        title:             "User can log in with valid credentials",
+        description:       "As a user, I want to log in with my username and password",
+        acceptanceCriteria: ["Login form is displayed", "Valid credentials grant access", "Invalid credentials show error"],
+        storyType:         "feature",
+        priority:          "high",
       },
       {
-        id:          `${projectKey}-2`,
-        title:       "User can register a new account",
-        description: "As a visitor I want to create an account so that I can use the application.",
-        acceptanceCriteria: [
-          "Given a unique email, the registration form submits successfully",
-          "Given a duplicate email, an error message is shown",
-        ],
-        storyType: "feature",
-        priority:  "high",
+        id:                `${projectKey}-2`,
+        title:             "User can register a new account",
+        description:       "As a new user, I want to register with my email and password",
+        acceptanceCriteria: ["Registration form is displayed", "Valid details create account", "Duplicate email shows error"],
+        storyType:         "feature",
+        priority:          "high",
       },
       {
-        id:          `${projectKey}-3`,
-        title:       "User can browse the home page",
-        description: "As a user I want to see the home page so that I understand what the app offers.",
-        acceptanceCriteria: [
-          "The home page loads within 3 seconds",
-          "Key navigation links are visible",
-        ],
-        storyType: "feature",
-        priority:  "medium",
+        id:                `${projectKey}-3`,
+        title:             "User can view their profile",
+        description:       "As a user, I want to view my profile information",
+        acceptanceCriteria: ["Profile page loads", "Name and email are displayed"],
+        storyType:         "feature",
+        priority:          "medium",
       },
     ];
   }

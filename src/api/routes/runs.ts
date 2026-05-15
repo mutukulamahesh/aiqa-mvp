@@ -1,15 +1,25 @@
 import * as fs   from "fs";
 import * as path from "path";
 import { Router } from "express";
+import { z }      from "zod";
 import { jobStore } from "../jobs/RunJobStore";
 import * as persistence from "../persistence/runPersistence";
 
 const router = Router();
 
+const ListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(20),
+  type:  z.string().optional(),
+});
+
 // GET /api/runs
 router.get("/runs", (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit as string) || 20, 200);
-  const type  = req.query.type as string | undefined;
+  const parsed = ListQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid query" });
+    return;
+  }
+  const { limit, type } = parsed.data;
   res.json(jobStore.list(limit, type));
 });
 

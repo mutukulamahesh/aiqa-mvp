@@ -1,4 +1,5 @@
 import { LLMProvider, LLMRequest, LLMResponse } from "./LLMProvider";
+import { logger } from "../utils/logger";
 
 // Transient / capacity HTTP statuses worth retrying on the next provider.
 const RETRYABLE_HTTP = new Set([408, 429, 500, 502, 503, 504]);
@@ -49,7 +50,7 @@ export class FallbackLLMProvider implements LLMProvider {
       try {
         const result = await provider.complete(req);
         if (i > 0) {
-          console.warn(`[LLM] Degraded — primary failed, using fallback: ${provider.name}`);
+          logger.warn(`[LLM] Degraded — primary failed, using fallback: ${provider.name}`);
         }
         return result;
       } catch (err) {

@@ -21,7 +21,12 @@ export interface HealStat {
 // descriptor → ranked list of candidate selectors (best score first on retrieval)
 type CacheData = Record<string, Record<string, CacheEntry[]>>;
 
-const EVICT_THRESHOLD            = 3;
+// 3 consecutive failures signals the selector is reliably broken; evict it so
+// the healer can generate a fresh one rather than cycling through stale cache.
+const EVICT_THRESHOLD = 3;
+
+// Keeps memory bounded while preserving enough candidates for meaningful fallback.
+// 5 is enough to survive one full re-layout of a typical SPA page.
 const MAX_SELECTORS_PER_DESCRIPTOR = 5;
 
 export class HealerCache {
@@ -260,18 +265,45 @@ export class HealerCache {
   }
 
   private save(): void {
+    this.withFileLock(() => {
+      try {
+        const currentMtime = fileMtime(this.filePath);
+        if (this.loadMtime !== null && currentMtime !== null && currentMtime !== this.loadMtime) {
+          // Another worker wrote the file between our load and now — merge external changes.
+          try {
+            const external = this.migrate(JSON.parse(fs.readFileSync(this.filePath, "utf8")));
+            this.data = mergeCacheData(external, this.data);
+          } catch { /* merge failed — proceed with our state */ }
+        }
+        atomicWrite(this.filePath, JSON.stringify(this.data, null, 2));
+        this.loadMtime = fileMtime(this.filePath);
+      } catch { /* best-effort */ }
+    });
+  }
+
+  /**
+   * Advisory file lock using O_EXCL (atomic on both POSIX and Windows).
+   * Attempts to acquire once; if contended, degrades gracefully to the existing
+   * mtime-check+merge approach rather than blocking the event loop.
+   */
+  private withFileLock(fn: () => void): void {
+    const lockPath = `${this.filePath}.lock`;
+    let acquired   = false;
     try {
-      const currentMtime = fileMtime(this.filePath);
-      if (this.loadMtime !== null && currentMtime !== null && currentMtime !== this.loadMtime) {
-        // Another worker wrote the file between our load and now — merge external changes.
-        try {
-          const external = this.migrate(JSON.parse(fs.readFileSync(this.filePath, "utf8")));
-          this.data = mergeCacheData(external, this.data);
-        } catch { /* merge failed — proceed with our state */ }
+      const fd = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_RDWR);
+      fs.closeSync(fd);
+      acquired = true;
+    } catch {
+      // Lock held by another process — proceed without exclusive lock.
+      // The mtime-check+merge inside fn() provides sufficient coordination.
+    }
+    try {
+      fn();
+    } finally {
+      if (acquired) {
+        try { fs.unlinkSync(lockPath); } catch { /* ignore cleanup failure */ }
       }
-      atomicWrite(this.filePath, JSON.stringify(this.data, null, 2));
-      this.loadMtime = fileMtime(this.filePath); // update baseline for next save
-    } catch { /* best-effort */ }
+    }
   }
 }
 

@@ -33,11 +33,12 @@ export interface ExplorationResult {
 }
 
 export interface ExplorerOptions {
-  headless?:       boolean;
-  maxPages?:       number;
-  maxDepth?:       number;
-  timeout?:        number;
-  ignorePatterns?: RegExp[];
+  headless?:          boolean;
+  maxPages?:          number;
+  maxDepth?:          number;
+  timeout?:           number;   // per-page navigation timeout in ms (default: 10 000)
+  exploreTimeoutMs?:  number;   // wall-clock cap for the entire crawl (default: 300 000 / 5 min)
+  ignorePatterns?:    RegExp[];
 }
 
 // ── FlowMapper ────────────────────────────────────────────────────────────────

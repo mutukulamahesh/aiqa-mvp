@@ -8,6 +8,9 @@ import { SubStepExecutor } from "./ConditionHandler";
 
 export class LoopHandler implements StepHandler {
   readonly handles = ["for_each"];
+  // 100 iterations: generous enough for real data sets but prevents runaway loops
+  // from unbounded API responses.  Stored arrays are capped at 1 000 by ExecutionContext,
+  // so this guard fires first on a loop that would otherwise exhaust the cap.
   static readonly MAX_ITERATIONS = 100;
 
   constructor(private readonly executeSubStep: SubStepExecutor) {}

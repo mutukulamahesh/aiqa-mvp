@@ -262,6 +262,15 @@ export class FlowMapper {
     heuristic: UserFlow[],
     enriched: Array<{ name: string; description: string; type: UserFlow["type"]; priority: UserFlow["priority"] }>,
   ): UserFlow[] {
+    // Guard: if the LLM returned fewer items than the heuristic produced, the tail
+    // entries would silently use stale metadata (enriched[i] would be undefined).
+    // Log a warning so the mismatch is visible, then fall back to heuristic values.
+    if (enriched.length < heuristic.length) {
+      process.stderr.write(
+        `[FlowMapper] mergeMetadata: LLM returned ${enriched.length} flow(s) but heuristic produced ` +
+        `${heuristic.length} — using heuristic metadata for unmatched entries.\n`,
+      );
+    }
     return heuristic.map((flow, i) => ({
       ...flow,
       name:        enriched[i]?.name        ?? flow.name,
