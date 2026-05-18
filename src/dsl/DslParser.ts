@@ -37,11 +37,12 @@ type RawStep =
 
 interface RawTestFile {
   test: {
-    name:      string;
-    tags?:     string | string[];
-    retries?:  number;
-    variables?: Record<string, string>;
-    steps:     RawStep[];
+    name:            string;
+    tags?:           string | string[];
+    retries?:        number;
+    variables?:      Record<string, string>;
+    filesUnderTest?: string | string[];
+    steps:           RawStep[];
   };
 }
 
@@ -83,11 +84,17 @@ function buildDefinition(raw: RawTestFile, source: string): TestDefinition {
     ? Math.max(0, Math.floor(raw.test.retries))
     : 0;
 
+  const rawFut = raw.test.filesUnderTest;
+  const filesUnderTest: string[] = rawFut
+    ? (Array.isArray(rawFut) ? rawFut : [rawFut]).map(f => String(f).trim()).filter(Boolean)
+    : [];
+
   return {
     name:      raw.test.name,
     tags,
     retries,
     variables: raw.test.variables ?? {},
+    ...(filesUnderTest.length ? { filesUnderTest } : {}),
     steps,
   };
 }

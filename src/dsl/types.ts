@@ -43,9 +43,10 @@ export type StepAction =
     };
 
 export interface TestDefinition {
-  name:      string;
-  tags?:     string[];
-  retries?:  number;   // max retry attempts on transient failures (timeout/locator)
-  variables?: Record<string, string>;
-  steps:     StepAction[];
+  name:            string;
+  tags?:           string[];
+  retries?:        number;   // max retry attempts on transient failures (timeout/locator)
+  variables?:      Record<string, string>;
+  filesUnderTest?: string[]; // explicit file paths this test covers (used by --impact-only)
+  steps:           StepAction[];
 }
