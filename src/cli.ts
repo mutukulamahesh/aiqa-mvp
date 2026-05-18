@@ -14,6 +14,7 @@ import { TrendTracker } from "./reporters/TrendTracker";
 import { SlackNotifier } from "./reporters/SlackNotifier";
 import { EmailNotifier } from "./reporters/EmailNotifier";
 import { AllureReporter } from "./reporters/AllureReporter";
+import { JUnitReporter } from "./reporters/JUnitReporter";
 import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
@@ -365,10 +366,11 @@ program
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .option("--dry-run",              "List tests that would run without executing them")
   .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main). Requires a full clone (fetch-depth: 0 in CI).")
+  .option("--junit <file>",         "Write JUnit XML report to <file> (for CI test result parsers)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
     allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
-    impactOnly?: string | boolean;
+    impactOnly?: string | boolean; junit?: string;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -580,11 +582,18 @@ program
         : path.resolve(process.cwd(), "report/index.html");
 
     const baseUrlLabel = opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? "");
+
+    // Read trend history before HTML generation so the chart shows the current run context.
+    // Trend is appended after so this is the history up to (not including) the current run.
+    const tracker = resultsDir ? new TrendTracker(resultsDir, config.storage.maxHistory) : undefined;
+    const trendHistory = tracker?.read() ?? [];
+
     new HTMLReporter().generate(allResults, reportPath, {
       baseUrl: baseUrlLabel,
       circuitBreaker: circuitOpen
         ? { triggered: true, threshold: cbThreshold, skipped: skippedByCircuit }
         : undefined,
+      trendHistory,
     });
     console.log(`   HTML  → ${reportPath}`);
 
@@ -597,19 +606,26 @@ program
       console.log(`   Allure→ ${allureDir}`);
     }
 
+    // JUnit XML
+    if (opts.junit) {
+      const junitPath = path.resolve(process.cwd(), opts.junit);
+      new JUnitReporter().generate(allResults, junitPath);
+      console.log(`   JUnit → ${junitPath}`);
+    }
+
     // Trend tracking (always when --out is set)
-    if (resultsDir) {
-      const tracker = new TrendTracker(resultsDir, config.storage.maxHistory);
+    if (tracker && resultsDir) {
       tracker.append({
         runId,
-        date:       new Date().toISOString(),
+        date:        new Date().toISOString(),
         passed,
         failed,
-        total:      allResults.length,
-        score:      rpt.score,
-        grade:      rpt.grade,
-        durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
-        url:        baseUrlLabel || undefined,
+        total:       allResults.length,
+        score:       rpt.score,
+        grade:       rpt.grade,
+        durationMs:  allResults.reduce((s, r) => s + r.durationMs, 0),
+        url:         baseUrlLabel || undefined,
+        testResults: allResults.map(r => ({ name: r.testName, passed: r.passed })),
       });
       const trendLine = tracker.formatTrend();
       if (trendLine) console.log(trendLine);

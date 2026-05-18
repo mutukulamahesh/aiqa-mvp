@@ -1,17 +1,44 @@
 import * as fs   from "fs";
 import * as path from "path";
 
+export interface TestRunSummary {
+  name:   string;
+  passed: boolean;
+}
+
 export interface TrendRecord {
-  runId:      string;
-  date:       string;
-  passed:     number;
-  failed:     number;
-  total:      number;
-  score:      number;
-  grade:      string;
-  durationMs: number;
-  url?:       string;
-  tags?:      string[];
+  runId:        string;
+  date:         string;
+  passed:       number;
+  failed:       number;
+  total:        number;
+  score:        number;
+  grade:        string;
+  durationMs:   number;
+  url?:         string;
+  tags?:        string[];
+  testResults?: TestRunSummary[];
+}
+
+/** Returns the top N tests by failure count across all history records. */
+export function topFlakyTests(
+  records: TrendRecord[],
+  topN = 5,
+): { name: string; failCount: number; runCount: number }[] {
+  const failCounts = new Map<string, { fail: number; total: number }>();
+  for (const rec of records) {
+    for (const t of rec.testResults ?? []) {
+      const entry = failCounts.get(t.name) ?? { fail: 0, total: 0 };
+      entry.total++;
+      if (!t.passed) entry.fail++;
+      failCounts.set(t.name, entry);
+    }
+  }
+  return [...failCounts.entries()]
+    .filter(([, v]) => v.fail > 0)
+    .sort(([, a], [, b]) => b.fail - a.fail)
+    .slice(0, topN)
+    .map(([name, v]) => ({ name, failCount: v.fail, runCount: v.total }));
 }
 
 export class TrendTracker {
