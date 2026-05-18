@@ -1,7 +1,7 @@
 # AIQA — Progress Report
 
-> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-15
-> Platform alignment: **~90%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface: **DONE**
+> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-18
+> Platform alignment: **~93%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-12 + EPIC-3 + EPIC-5: **DONE**
 
 ---
 
@@ -948,3 +948,100 @@ Stage 2+:  FlowMapper, Generator, Runner see full page set
 | Auth crawl | Anonymous only | **Anonymous + authenticated BFS merge** |
 | Alignment with vision | ~72% | **~90%** |
 | Step types | 13 | **14** (`element_not_visible` added) |
+
+---
+
+## EPIC-12 — Impact Filter ✅ DONE (2026-05-15)
+
+Runs only tests affected by the current git diff — cuts CI time on PRs that touch a subset of the app.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/impact/GitDiffParser.ts` | Runs `git diff --name-only origin/main`, parses output into changed-file list |
+| `src/impact/ImpactMapper.ts` | Maps changed files → affected YAML tests via tag-matching and path-prefix matching |
+| `src/cli.ts` | `--impact-only` and `--changed-files` flags on `run-all`; prints skipped test count |
+
+### Key behaviour
+
+- `aiqa run-all --impact-only` — diffs current branch vs `origin/main`, maps changed files to test tags, skips unrelated tests
+- `--changed-files a.ts,b.ts` — bypass git diff; pass changed files directly (for CI environments that expose this list natively)
+- Tests tagged with an area that matches a changed path prefix are included; all others are skipped
+- If no tests match the diff, all tests run (safe fallback — never returns an empty suite)
+- Prints `[impact] Running N/M tests matched to N changed files` before the suite
+
+### Tests — `tests/impact/`
+
+- `GitDiffParser` (12 tests): parse output, empty diff, error handling
+- `ImpactMapper` (17 tests): tag mapping, path prefix matching, fallback, edge cases
+
+---
+
+## EPIC-3 (Reports Polish) ✅ DONE (2026-05-18)
+
+Upgraded the reporting layer with CI-standard JUnit XML and richer HTML reports.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/reporters/JUnitReporter.ts` | Produces xUnit-compatible XML: `<testsuites>` → `<testsuite errors="0" timestamp>` → `<testcase classname=testId>` with `<failure>` elements; time in seconds |
+| `src/reporters/TrendTracker.ts` | Added `TestRunSummary` + `testResults?` (backward-compat) to `TrendRecord`; exported `topFlakyTests()` |
+| `src/reporters/HTMLReporter.ts` | SVG pass-rate trend chart (self-contained, no CDN); top-5 flaky tests heatmap; CSS step-duration bars |
+| `src/cli.ts` | `--junit <file>` flag on `run` and `run-all`; reads trend history before HTML generation; appends `testResults` per-test data to history record |
+
+### Key behaviour
+
+- `--junit results/junit.xml` — CI picks up the file natively; no plugin required
+- Trend chart shows last 20 runs as an SVG polyline with Y-axis labels (LPAD=34 ensures labels aren't clipped)
+- Heatmap shows top-5 tests by fail count across history with proportional bars — hidden on first run
+- `classname` in JUnit uses `testId` (stable slug) not `testName`, enabling per-file grouping in Xray / Zephyr
+- All attributes required by GitHub Actions / Azure DevOps test parsers: `errors="0"`, `timestamp` ISO
+
+### Tests — `tests/reporters/junit-reporter.test.ts` (14 tests)
+
+Covers XML structure, counts, time in seconds, escaping, empty results, `errors`/`timestamp` attributes, `classname=testId`.
+
+---
+
+## EPIC-5 (CLI/UX Polish) ✅ DONE (2026-05-18)
+
+Made the CLI feel like a first-class product: spinner, new utility commands, hardened doctor, shell completion.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/utils/Spinner.ts` | TTY-aware spinner — `start/stop/succeed/fail`; no-op in CI/pipes; `.unref()` so it never hangs the process |
+| `src/cli.ts` | 6 UX improvements (see below) |
+
+### CLI improvements
+
+| Feature | Command | Description |
+|---|---|---|
+| Test file listing | `aiqa list [dir]` | Tabular view: name (36 chars, truncated), tags (26 chars), step count, file path; parse errors shown as a row |
+| Hardened doctor | `aiqa doctor` | Playwright check via spinner; checks zod, .env, config file, disk space (`spawnSync` not `execSync`); exits 1 on critical issues |
+| Config validation | `aiqa config validate [env]` | Calls `resetConfig()` + `loadConfig(env)`, prints all resolved values; actionable error with fix suggestion |
+| Shell completion | `aiqa completion [shell]` | Generates bash or zsh completion scripts; errors with "Unsupported shell" for anything else |
+| Interactive init | `aiqa init [project]` | Project name now optional — interactive readline prompt when omitted; `--base-url` flag |
+| Actionable errors | `run`, `explore` | Parse errors show relative path + `aiqa list` hint; "no tests" suggests `aiqa init` |
+
+### Tests — `tests/cli/cli-ux.test.ts` (14 tests — all in-process, no subprocess overhead)
+
+Spinner (4), DslParser integration (4), completion script logic (3), init folder/YAML structure (3).
+
+---
+
+## Platform Metrics — After EPIC-12 + EPIC-3 + EPIC-5
+
+| Metric | After Phase 4 | Now (2026-05-18) |
+|---|---|---|
+| Tests passing | ~500 | **572** |
+| CI output formats | HTML only | HTML + **JUnit XML** |
+| CI time reduction | — | **`--impact-only`** (40%+ target) |
+| Report features | Pass/fail cards | + **trend chart** + **heatmap** + **duration bars** |
+| CLI commands | 11 | **15** (+ list, doctor, config validate, completion) |
+| Shell completion | ❌ None | ✅ bash + zsh |
+| Spinner UX | ❌ Raw output | ✅ TTY-aware spinner in explore + doctor |
+| Vision alignment | ~90% | **~93%** |

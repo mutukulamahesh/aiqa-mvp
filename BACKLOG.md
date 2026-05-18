@@ -315,16 +315,29 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | ID | Story | Status |
 |---|---|---|
 | 11.1 | Allure reporter integration alongside existing HTML reporter | [ ] |
-| 11.2 | Slack webhook — post run summary on complete or on failure, configurable channel | [ ] |
-| 11.3 | Email notification — send HTML report on suite complete via nodemailer + SMTP | [ ] |
-| 11.4 | Trend dashboard — pass rate over time, flakiness trends appended to `results/history.json` | [ ] |
+| 11.2 | Slack webhook — post run summary on complete or on failure, configurable channel | [x] |
+| 11.3 | Email notification — send HTML report on suite complete via nodemailer + SMTP | [x] |
+| 11.4 | Trend dashboard — pass rate over time, flakiness trends appended to `results/history.json` | [x] |
+| 11.5 | JUnit XML reporter — `--junit <file>` for GitHub Actions / GitLab / Azure DevOps test parsers | [x] |
+| 11.6 | HTML report enhancements — SVG trend chart, top-5 flaky heatmap, step duration bars | [x] |
 
-### EPIC-12 · Impact Filter
+### EPIC-12 · Impact Filter `[✅ DONE — 2026-05-15]`
 | ID | Story | Status |
 |---|---|---|
-| 12.1 | Git diff parser — identify changed files per PR (`git diff --name-only origin/main`) | [ ] |
-| 12.2 | File → test mapping — which YAML tests cover which app areas (tag-based or path-based) | [ ] |
-| 12.3 | `aiqa run-all --impact-only` — skip unaffected tests in CI (target: 40%+ CI time reduction) | [ ] |
+| 12.1 | Git diff parser — identify changed files per PR (`git diff --name-only origin/main`) | [x] |
+| 12.2 | File → test mapping — which YAML tests cover which app areas (tag-based or path-based) | [x] |
+| 12.3 | `aiqa run-all --impact-only` — skip unaffected tests in CI (target: 40%+ CI time reduction) | [x] |
+
+### EPIC-13 · CLI/UX Polish `[✅ DONE — 2026-05-18]`
+| ID | Story | Status |
+|---|---|---|
+| 13.1 | `Spinner` — TTY-aware spinner (no-op in CI), `.unref()` so it never hangs the process | [x] |
+| 13.2 | `aiqa list [dir]` — tabular view of all test files with name, tags, step count, path | [x] |
+| 13.3 | `aiqa doctor` — hardened health check: Node, Playwright, zod, .env, config, disk space, exit codes | [x] |
+| 13.4 | `aiqa config validate [env]` — validates + prints resolved config; actionable error messages | [x] |
+| 13.5 | `aiqa completion [shell]` — generates bash/zsh tab-completion scripts | [x] |
+| 13.6 | `aiqa init` — interactive prompt when project name omitted; `--base-url` flag | [x] |
+| 13.7 | Actionable errors — explore/run failures suggest next steps (`aiqa list`, `aiqa init`) | [x] |
 
 ---
 
@@ -397,17 +410,11 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | Phase 2 — Intelligence | 2 | 9 | ✅ DONE | Self-healing, memory |
 | Phase 3 — Coverage | 3 | 13 | ✅ DONE | Full-stack testing in one YAML |
 | Pre-Phase 4 Hardening | — | 8 | ✅ DONE | Concurrency safety + production hardening |
-| **Phase 4 — Product Surface** | **4** | **30** | **▶ NOW** | **API layer + Chrome Extension + Portal** |
-| Phase 5 — Enterprise | 3 | 11 | ⬜ | Jira full, Allure, CI impact filter |
-| Phase 6 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
-| Phase 7 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
-| Phase 8 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **25** | **109** | | |
+| Phase 4 — Product Surface | 4 | 30 | ✅ DONE | API layer + Chrome Extension + Portal |
+| Phase 4 — Enterprise (partial) | 3 | 16 | ▶ 5/16 done | Jira full, reports, CI impact filter, CLI polish |
+| Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
+| Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
+| Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
+| **Total** | **25+** | **116+** | | |
 
-**Build order for Phase 4:**
-1. EPIC-API (REST + WS server) — everything else depends on this
-2. EPIC-EXT-B (pure extension) — parallel, independent track
-3. EPIC-EXT-A (API-backed extension) — after EPIC-API is stable
-4. EPIC-PORTAL (web UI) — after EPIC-API is stable
-
-> **Phase 4 Product Surface is next. Start with EPIC-API.**
+**Next up: EPIC-10 Jira Full Integration, then EPIC-11.1 Allure reporter.**

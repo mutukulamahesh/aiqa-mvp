@@ -8,7 +8,7 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 
 ## What it does
 
-- **Init a project** in one command — folder structure, sample test, ready to run
+- **Init a project** in one command — folder structure, sample test, ready to run (interactive prompt or `--base-url` flag)
 - **Explore any app** autonomously and map its pages and flows; **authenticated re-exploration** logs in and crawls post-login pages automatically
 - **Generate test files** per page or per flow — no manual test writing
 - **Run tests** defined in YAML — web UI, API, database, or mixed
@@ -17,7 +17,9 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **Analytics after every run** — top unstable pages, most healed selectors, LLM calls saved
 - **Diagnose failures** automatically with AI root-cause analysis and screenshots
 - **Score readiness** — get a 0–100 grade on your test coverage
-- **HTML reports** generated automatically after every run
+- **Rich HTML reports** — pass-rate trend chart, top-5 flaky tests heatmap, step-by-step duration bars; generated automatically after every run
+- **CI-ready JUnit XML** — `--junit <file>` emits xUnit XML consumed natively by GitHub Actions, GitLab CI, and Azure DevOps test result parsers
+- **Run only impacted tests** — `--impact-only` runs only tests affected by the current git diff; targets 40%+ CI time reduction
 - **Import existing test cases** from CSV, Excel, or Gherkin — no rewrite needed
 - **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
 - **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
@@ -25,6 +27,7 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **Web Portal** — browser-based UI to trigger runs, view live progress, edit tests, and browse history
 - **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
 - **Chrome Extension** — test any app from the browser, no CLI or YAML needed
+- **Shell completion** — `aiqa completion bash|zsh` generates tab-completion scripts for your shell
 
 ---
 
@@ -207,13 +210,18 @@ The pure Chrome Extension lets non-technical users test any web app without inst
 
 ## CLI Reference
 
-### `aiqa init <project>` — Create a project workspace
+### `aiqa init [project]` — Create a project workspace
 
 ```bash
-npx aiqa init myproject
+npx aiqa init myproject                                   # explicit name
+npx aiqa init                                             # interactive prompt
+npx aiqa init myproject --base-url https://yourapp.com   # pre-fill sample URL
 ```
 
 Creates the folder structure (`tests/`, `results/`, `screenshots/`) and a starter `tests/sample.yaml`.
+
+Options:
+- `--base-url <url>` — pre-fill the `navigate:` URL in the generated sample test
 
 ---
 
@@ -287,6 +295,7 @@ Options:
 - `--headless` — run browser in headless mode (required in CI / no display)
 - `--out <folder>` — saves screenshots, results JSON, and HTML report into the project folder
 - `--report <file>` — explicit HTML report output path
+- `--junit <file>` — also write a JUnit XML report (for GitHub Actions, GitLab CI, Azure DevOps)
 
 On failure the DebuggerAgent automatically classifies the error, suggests a fix, and captures a screenshot:
 ```
@@ -310,6 +319,9 @@ Options:
 - `--report <file>` — explicit HTML report output path
 - `--results <file>` — explicit JSON results output path
 - `--base-url <url>` — base URL shown in the report header
+- `--junit <file>` — also write a JUnit XML report (for GitHub Actions, GitLab CI, Azure DevOps)
+- `--impact-only` — only run tests whose tags or file path match files changed in the current git diff vs main; prints skipped tests count
+- `--changed-files <list>` — comma-separated file list to use instead of git diff (for CI environments that expose changed files directly)
 
 ---
 
@@ -373,6 +385,78 @@ Output:
    Tests   : 7/8 passed  (87%)
    Coverage: UI, Assertions
    Issues  : 1 test failed
+```
+
+---
+
+### `aiqa list [dir]` — List test files
+
+Scans a directory for YAML test files and prints a summary table with name, tags, step count, and file path.
+
+```bash
+npx aiqa list                   # lists tests/ in current project
+npx aiqa list myproject/tests/  # explicit directory
+```
+
+Output:
+```
+NAME                                 TAGS                       STEPS  FILE
+Login flow                           smoke, regression              5  tests/login.yaml
+Checkout — guest user                regression                     8  tests/checkout.yaml
+API — create user                    api, smoke                     3  tests/api_create.yaml
+```
+
+---
+
+### `aiqa doctor` — System health check
+
+Checks that all platform dependencies are satisfied before a run.
+
+```bash
+npx aiqa doctor
+npx aiqa doctor --env staging
+```
+
+Checks performed:
+- Node.js version (≥ 18)
+- Playwright installation
+- `js-yaml` and `zod` packages
+- `.env` file presence
+- Environment config file validity
+- Disk space (warns if < 100 MB free)
+
+Exits `0` if all critical checks pass (warnings are non-blocking), exits `1` on any critical failure.
+
+---
+
+### `aiqa config validate [env]` — Validate environment config
+
+Loads and validates the config for an environment profile, prints all resolved values, and exits non-zero if the config is invalid.
+
+```bash
+npx aiqa config validate             # validates dev (default)
+npx aiqa config validate staging     # validates staging profile
+```
+
+Output:
+```
+✅ Config valid for env: staging
+   base     : https://staging.example.com
+   api      : https://staging.example.com/api
+   workers  : 4
+   headless : true
+   ...
+```
+
+---
+
+### `aiqa completion [shell]` — Shell tab-completion
+
+Generates a tab-completion script for your shell. Defaults to `bash`.
+
+```bash
+npx aiqa completion bash >> ~/.bashrc && source ~/.bashrc
+npx aiqa completion zsh  >> ~/.zshrc  && source ~/.zshrc
 ```
 
 ---
@@ -650,11 +734,14 @@ src/
     TestRunner.ts         ← End-to-end orchestration, retry, circuit breaker
     RunEvent.ts           ← Event types for WS streaming
   reporters/
-    HTMLReporter.ts       ← Self-contained HTML report generator
+    HTMLReporter.ts       ← Self-contained HTML report — trend chart, heatmap, duration bars
+    JUnitReporter.ts      ← JUnit/xUnit XML for GitHub Actions, GitLab CI, Azure DevOps
     AllureReporter.ts     ← Allure JSON output
-    TrendTracker.ts       ← Pass-rate trend history
+    TrendTracker.ts       ← Pass-rate trend history + topFlakyTests helper
     SlackNotifier.ts      ← Slack webhook post-run summary
     EmailNotifier.ts      ← Email HTML report via SMTP
+  utils/
+    Spinner.ts            ← TTY-aware CLI spinner (no-op in CI/pipes)
   config/
     ConfigLoader.ts       ← Zod-validated YAML config loader + secret checks
   llm/
@@ -687,6 +774,9 @@ src/
     ImportOrchestrator.ts ← Selects importer by file type, runs translation
   integrations/
     JiraAdapter.ts        ← Jira story → flow converter
+  impact/
+    GitDiffParser.ts      ← Parses `git diff --name-only` output into changed file list
+    ImpactMapper.ts       ← Maps changed files → affected YAML tests (tag + path matching)
   api/
     router.ts             ← Route registration
     middleware/
