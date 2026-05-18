@@ -55,6 +55,21 @@ export interface OrchestratorResult {
 
 const TOTAL_STAGES = 5;
 
+// Per-stage wall-clock cap for LLM-backed stages (default 5 min, override via env).
+const STAGE_TIMEOUT_MS = parseInt(process.env.AIQA_STAGE_TIMEOUT_MS ?? "", 10) || 300_000;
+
+function stageTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`[Orchestrator] Stage "${stage}" timed out after ${STAGE_TIMEOUT_MS}ms`)),
+        STAGE_TIMEOUT_MS,
+      )
+    ),
+  ]);
+}
+
 function makeRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -133,7 +148,7 @@ export class OrchestratorAgent {
     const analytics     = new HealerAnalytics(selectorCache);
     const flowMapper    = new FlowMapper(this.llm, selectorCache);
     try {
-      flows = await flowMapper.map(exploration);
+      flows = await stageTimeout(flowMapper.map(exploration), "flow_mapper");
     } catch (err) {
       return this.partialResult("flow_mapper", err as Error, runId, startTime, timings, input, { exploration });
     }
@@ -144,7 +159,7 @@ export class OrchestratorAgent {
     let scenarios: GeneratedScenario[];
     const t3 = Date.now();
     try {
-      scenarios = await new ScenarioGenerator(this.llm).generate(flows, input.url);
+      scenarios = await stageTimeout(new ScenarioGenerator(this.llm).generate(flows, input.url), "scenario_generator");
     } catch (err) {
       return this.partialResult("scenario_generator", err as Error, runId, startTime, timings, input, { exploration, flows });
     }

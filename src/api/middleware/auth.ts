@@ -1,3 +1,4 @@
+import * as crypto from "crypto";
 import { Request, Response, NextFunction } from "express";
 
 /**
@@ -23,7 +24,11 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const header = req.headers.authorization ?? "";
-  if (header === `Bearer ${apiKey}`) { next(); return; }
+  const header   = req.headers.authorization ?? "";
+  const expected = Buffer.from(`Bearer ${apiKey}`);
+  const actual   = Buffer.from(header);
+  const match    = expected.length === actual.length &&
+                   crypto.timingSafeEqual(expected, actual);
+  if (match) { next(); return; }
   res.status(401).json({ error: "Unauthorized" });
 }

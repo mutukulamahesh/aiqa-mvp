@@ -100,7 +100,7 @@ async function startRun(def: TestDefinition, tabId: number): Promise<void> {
 // Message handler (panel → SW)
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "run:smoke") {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (!tab?.id) return;
@@ -151,9 +151,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   // Recording mode
   if (msg?.type === "record:start") {
-    recordedSteps = [];
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "record:start" });
+      if (tab?.id) {
+        recordedStepsByTab.set(tab.id, []); // clear buffer for this tab
+        chrome.tabs.sendMessage(tab.id, { type: "record:start" });
+      }
     });
     sendResponse({ ok: true });
     return false;
@@ -162,19 +164,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "record:stop") {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       if (tab?.id) chrome.tabs.sendMessage(tab.id, { type: "record:stop" });
+      const steps = tab?.id != null ? (recordedStepsByTab.get(tab.id) ?? []) : [];
+      if (steps.length > 0) {
+        broadcast({ kind: "recorded:yaml", yaml: stepsToYaml(steps) });
+      }
+      if (tab?.id != null) recordedStepsByTab.delete(tab.id);
     });
-    if (recordedSteps.length > 0) {
-      broadcast({ kind: "recorded:yaml", yaml: stepsToYaml(recordedSteps) });
-    }
-    recordedSteps = [];
     sendResponse({ ok: true });
     return false;
   }
 
-  // Recorded events from content script — accumulate for YAML export on stop
+  // Recorded events from content script — accumulate per tab for YAML export on stop
   if (msg?.type === "recorded:event") {
-    const step = normalizeRecordedEvent(msg.event);
-    if (step) recordedSteps.push(step);
+    const tabId = sender.tab?.id;
+    if (tabId != null) {
+      const steps = recordedStepsByTab.get(tabId);
+      if (steps && steps.length < MAX_RECORDED_STEPS) {
+        const step = normalizeRecordedEvent(msg.event);
+        if (step) steps.push(step);
+      }
+    }
     return false;
   }
 
@@ -187,7 +196,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 import type { RecordedEvent, SelectorDescriptor } from "../shared/types";
 
-let recordedSteps: Array<Record<string, unknown>> = [];
+// Per-tab recording buffers — keyed by tab ID so simultaneous recordings
+// in different tabs don't interleave steps. Capped at MAX_RECORDED_STEPS
+// to prevent unbounded memory growth during long recording sessions.
+const recordedStepsByTab = new Map<number, Array<Record<string, unknown>>>();
+const MAX_RECORDED_STEPS = 10_000;
 
 function selectorToString(sel: SelectorDescriptor): string {
   if (sel.ariaLabel) return `aria=${sel.ariaLabel}`;

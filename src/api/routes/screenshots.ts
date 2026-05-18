@@ -12,6 +12,12 @@ router.get("/runs/:runId/screenshots/:file", async (req, res) => {
   try {
     const screenshotsDir = path.join(persistence.runDir(runId), "screenshots");
     const filePath = safeResolvePath(screenshotsDir, file);
+    const MAX_SCREENSHOT_BYTES = 50 * 1024 * 1024; // 50 MB
+    const stat = await fs.promises.stat(filePath);
+    if (stat.size > MAX_SCREENSHOT_BYTES) {
+      res.status(413).json({ error: "Screenshot file exceeds 50 MB size limit" });
+      return;
+    }
     const buffer = await fs.promises.readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const ct  = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"

@@ -43,7 +43,12 @@ export class ImportOrchestrator {
       usedNames.add(safeName);
 
       const yamlPath = path.join(opts.outDir, `${safeName}.yaml`);
-      fs.writeFileSync(yamlPath, translation.yaml, "utf-8");
+      try {
+        fs.writeFileSync(yamlPath, translation.yaml, "utf-8");
+      } catch (writeErr) {
+        try { fs.unlinkSync(yamlPath); } catch { /* partial file may not exist */ }
+        throw writeErr;
+      }
 
       // Save raw source for invalid tests so users can fix manually
       if (!translation.validated) {

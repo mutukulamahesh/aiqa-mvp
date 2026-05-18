@@ -288,8 +288,23 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // Keep this list in sync with HandlerRegistry registrations.
+  // All handler action names: navigate, click, fill (UIActionHandler) |
+  //   assert (AssertionHandler) | api (APIActionHandler) | db (DBActionHandler) |
+  //   wait_for_element, wait_ms, wait_for_url (WaitHandler) | store (StoreHandler) |
+  //   if (ConditionHandler) | for_each (LoopHandler) | judge (JudgeHandler)
+  const SUPPORTED = [
+    "navigate", "click", "fill",
+    "assert",
+    "api",
+    "db",
+    "wait_for_element", "wait_ms", "wait_for_url",
+    "store",
+    "if",
+    "for_each",
+    "judge",
+  ] as const;
   throw new Error(
-    `Step[${idx}]: unknown action. Supported: navigate, click, fill, assert, api, db, ` +
-    `wait_for_element, wait_ms, wait_for_url, store, if, for_each, judge. Got: ${JSON.stringify(raw)}`
+    `Step[${idx}]: unknown action. Supported: ${SUPPORTED.join(", ")}. Got: ${JSON.stringify(raw)}`
   );
 }

@@ -28,8 +28,10 @@ export class WaitHandler implements StepHandler {
 
   async execute(step: StepAction, adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
     if (step.action === "wait_ms") {
-      wwrite(`  ▶ wait_ms   → ${step.ms}ms`);
-      await new Promise(r => setTimeout(r, step.ms));
+      const MAX_WAIT_MS = 60_000;
+      const ms = Math.min(step.ms, MAX_WAIT_MS);
+      wwrite(`  ▶ wait_ms   → ${ms}ms${step.ms > MAX_WAIT_MS ? ` (capped from ${step.ms}ms)` : ""}`);
+      await new Promise(r => setTimeout(r, ms));
       return;
     }
 

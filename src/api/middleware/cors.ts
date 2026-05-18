@@ -23,7 +23,14 @@ export function verifyWsOrigin(req: IncomingMessage): boolean {
   const origin = req.headers.origin ?? "";
   return origins.some(allowed => {
     if (allowed === "*") return true;
-    if (allowed.endsWith("*")) return origin.startsWith(allowed.slice(0, -1));
+    if (allowed.includes("*")) {
+      // Convert glob to anchored regex: * matches [^.]+ only (no dot-segment bypass).
+      // e.g. "https://*.trusted.com" → /^https:\/\/[^.]+\.trusted\.com$/
+      const pattern = "^" +
+        allowed.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, "[^.]+") +
+        "$";
+      return new RegExp(pattern).test(origin);
+    }
     return allowed === origin;
   });
 }

@@ -27,8 +27,11 @@ export async function writeExploration(runId: string, exploration: unknown): Pro
 
 export async function readMeta(runId: string): Promise<RunJobMeta | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "meta.json"), "utf-8");
-    return JSON.parse(raw) as RunJobMeta;
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "meta.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    // Validate required shape — rejects corrupt/attacker-modified files
+    if (typeof parsed?.runId !== "string" || typeof parsed?.status !== "string") return null;
+    return parsed as RunJobMeta;
   } catch {
     return null;
   }

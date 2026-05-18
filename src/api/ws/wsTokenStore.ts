@@ -16,8 +16,8 @@ interface TokenEntry {
   expiresAt: number;
 }
 
-const TTL_MS  = 60_000;   // 60 seconds — enough for any reasonable client startup
-const MAX_TOKENS = 500;    // prevent unbounded memory growth
+const TTL_MS     = parseInt(process.env.AIQA_WS_TOKEN_TTL_MS  ?? "", 10) || 60_000;
+const MAX_TOKENS = parseInt(process.env.AIQA_WS_TOKEN_MAX     ?? "", 10) || 500;
 
 const store = new Map<string, TokenEntry>();
 
@@ -42,6 +42,7 @@ export function issueToken(): string {
 
 /** Validates and consumes the token (single-use). Returns true if valid. */
 export function consumeToken(token: string): boolean {
+  purgeExpired(); // evict orphaned tokens even when no new tokens are issued
   const entry = store.get(token);
   if (!entry) return false;
   store.delete(token); // single-use

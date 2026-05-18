@@ -150,6 +150,7 @@ export class JiraClient {
         });
       });
 
+      req.setTimeout?.(30_000, () => req.destroy?.(new Error("Jira request timed out after 30 s")));
       req.on("error", reject);
       if (payload !== undefined) req.write(payload);
       req.end();

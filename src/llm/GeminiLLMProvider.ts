@@ -15,11 +15,14 @@ export class GeminiLLMProvider implements LLMProvider {
   }
 
   async complete(req: LLMRequest): Promise<LLMResponse> {
-    const url = `${GEMINI_BASE}/${this.model}:generateContent?key=${this.apiKey}`;
+    const url = `${GEMINI_BASE}/${this.model}:generateContent`;
 
     const res = await fetch(url, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type":   "application/json",
+        "x-goog-api-key": this.apiKey,
+      },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: req.system }] },
         contents:           [{ role: "user", parts: [{ text: req.userMessage }] }],

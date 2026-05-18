@@ -118,6 +118,7 @@ export class SlackNotifier {
         }
       });
 
+      req.setTimeout(30_000, () => req.destroy(new Error("Slack webhook timed out after 30 s")));
       req.on("error", reject);
       req.write(body);
       req.end();

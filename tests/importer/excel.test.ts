@@ -89,9 +89,10 @@ describe("ExcelImporter", () => {
     expect(tc.steps).toEqual(["Fill form", "Submit"]);
   });
 
-  it("assigns auto-id from row index when ID column is absent", async () => {
+  it("assigns auto-id from actual Excel row number when ID column is absent", async () => {
     mockWorkbook({ Sheet1: makeSheet(["Test Name", "Steps"], [["My test", "Step"]]) });
     const [tc] = await new ExcelImporter().import("fake.xlsx");
-    expect(tc.id).toBe("row-1");
+    // First data row is Excel row 2 (row 1 is the header) — ID reflects actual spreadsheet position
+    expect(tc.id).toBe("row-2");
   });
 });

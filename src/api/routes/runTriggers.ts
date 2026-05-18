@@ -86,7 +86,17 @@ function accept(res: import("express").Response, job: RunJob): void {
 // NOTE: mutates process.env (a global singleton). Safe only because jobStore runs one job
 // at a time per the concurrency limit. If parallelism is ever raised, replace with a
 // per-process env isolation mechanism (e.g. worker_threads with their own env copy).
+// Runtime guard: abort if parallelism has been raised without updating this code.
 async function withEnv<T>(vars: Record<string, string> | undefined, fn: () => Promise<T>): Promise<T> {
+  if (vars && Object.keys(vars).length > 0) {
+    const maxWorkers = parseInt(process.env.AIQA_MAX_WORKERS ?? "1", 10);
+    if (maxWorkers > 1) {
+      throw new Error(
+        "withEnv: process.env mutation is not safe when AIQA_MAX_WORKERS > 1. " +
+        "Use worker_threads with isolated env copies before raising parallelism.",
+      );
+    }
+  }
   if (!vars || Object.keys(vars).length === 0) return fn();
   const saved: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(vars)) {
