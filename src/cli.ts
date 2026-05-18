@@ -20,6 +20,8 @@ import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
 import { HealerAnalytics } from "./healer/HealerAnalytics";
 import { cleanArtifacts, warnLargeFile } from "./utils/StorageManager";
+import { getChangedFiles, getGitRoot } from "./impact/GitDiffParser";
+import { ImpactMapper } from "./impact/ImpactMapper";
 
 const program = new Command();
 
@@ -362,9 +364,11 @@ program
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .option("--dry-run",              "List tests that would run without executing them")
+  .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
     allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
+    impactOnly?: string | boolean;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -408,6 +412,23 @@ program
       console.log(`   Tag filter: [${filterTags.join(", ")}] → ${files.length} matching file(s)`);
     }
 
+    if (opts.impactOnly !== undefined) {
+      const base = typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main";
+      try {
+        const changed = getChangedFiles({ base });
+        if (changed.length === 0) {
+          console.log(`   Impact filter: no changed files since [${base}] — nothing to run`);
+          process.exit(0);
+        }
+        const gitRoot = getGitRoot();
+        const before  = files.length;
+        files = new ImpactMapper().filterTests(files, changed, parseTestFile, gitRoot ?? undefined);
+        console.log(`   Impact filter: [${base}] → ${changed.length} changed file(s) → ${files.length}/${before} test(s) impacted`);
+      } catch (err) {
+        console.warn(`   ⚠️  Impact filter failed (${(err as Error).message}) — running all tests`);
+      }
+    }
+
     if (files.length === 0) {
       console.error(`❌ No YAML files found in ${testsDir}${filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : ""}`);
       process.exit(1);
@@ -427,8 +448,9 @@ program
       }
       console.log(`\n─────────────────────────────────────────`);
       console.log(`   Would run : ${files.length} test(s)`);
-      if (filterTags.length) console.log(`   Tag filter: [${filterTags.join(", ")}]`);
-      if (outRoot)           console.log(`   Out       : ${outRoot}`);
+      if (filterTags.length)          console.log(`   Tag filter    : [${filterTags.join(", ")}]`);
+      if (opts.impactOnly !== undefined) console.log(`   Impact filter : [${typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main"}]`);
+      if (outRoot)                    console.log(`   Out           : ${outRoot}`);
       console.log(`─────────────────────────────────────────\n`);
       process.exit(0);
     }
