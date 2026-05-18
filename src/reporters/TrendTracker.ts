@@ -1,17 +1,44 @@
 import * as fs   from "fs";
 import * as path from "path";
 
+export interface TestRunSummary {
+  name:   string;
+  passed: boolean;
+}
+
 export interface TrendRecord {
-  runId:      string;
-  date:       string;
-  passed:     number;
-  failed:     number;
-  total:      number;
-  score:      number;
-  grade:      string;
-  durationMs: number;
-  url?:       string;
-  tags?:      string[];
+  runId:        string;
+  date:         string;
+  passed:       number;
+  failed:       number;
+  total:        number;
+  score:        number;
+  grade:        string;
+  durationMs:   number;
+  url?:         string;
+  tags?:        string[];
+  testResults?: TestRunSummary[];
+}
+
+/** Returns the top N tests by failure count across all history records. */
+export function topFlakyTests(
+  records: TrendRecord[],
+  topN = 5,
+): { name: string; failCount: number; runCount: number }[] {
+  const failCounts = new Map<string, { fail: number; total: number }>();
+  for (const rec of records) {
+    for (const t of rec.testResults ?? []) {
+      const entry = failCounts.get(t.name) ?? { fail: 0, total: 0 };
+      entry.total++;
+      if (!t.passed) entry.fail++;
+      failCounts.set(t.name, entry);
+    }
+  }
+  return [...failCounts.entries()]
+    .filter(([, v]) => v.fail > 0)
+    .sort(([, a], [, b]) => b.fail - a.fail)
+    .slice(0, topN)
+    .map(([name, v]) => ({ name, failCount: v.fail, runCount: v.total }));
 }
 
 export class TrendTracker {
@@ -23,7 +50,12 @@ export class TrendTracker {
   }
 
   append(record: TrendRecord): void {
-    // Capture mtime before reading so we can detect a concurrent write
+    // Capture mtime before reading so we can detect a concurrent write.
+    // Note: on HFS+/ext3 filesystems (1-second mtime resolution), two workers
+    // starting within the same second both see the same mtimeBefore and race to
+    // renameSync. The rename is atomic so no partial writes occur, but the slower
+    // writer's record will silently overwrite the faster one. For most single-worker
+    // setups this is fine; parallel workers sharing a results dir should use a lock.
     const mtimeBefore = this.mtime();
     const history     = this.read();
     history.push(record);

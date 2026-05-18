@@ -14,7 +14,9 @@ import { TrendTracker } from "./reporters/TrendTracker";
 import { SlackNotifier } from "./reporters/SlackNotifier";
 import { EmailNotifier } from "./reporters/EmailNotifier";
 import { AllureReporter } from "./reporters/AllureReporter";
-import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
+import { JUnitReporter } from "./reporters/JUnitReporter";
+import { Spinner } from "./utils/Spinner";
+import { loadConfig, resetConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
@@ -70,13 +72,28 @@ function saveResults(results: unknown[], dir: string): string {
 // ── init ──────────────────────────────────────────────────────────────────────
 
 program
-  .command("init <project>")
+  .command("init [project]")
   .description("Create a new AIQA project workspace with folder structure and a sample test")
-  .action((project: string) => {
-    const root        = path.resolve(process.cwd(), project);
-    const testsDir    = path.join(root, "tests");
-    const resultsDir  = path.join(root, "results");
-    const screensDir  = path.join(root, "screenshots");
+  .option("--base-url <url>", "Base URL to pre-fill in the sample test (default: https://example.com)")
+  .action(async (project: string | undefined, opts: { baseUrl?: string }) => {
+    // 5-7: interactive mode — prompt when project name is omitted
+    if (!project) {
+      const readline = await import("readline");
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      project = await new Promise<string>(resolve => {
+        rl.question("Project name: ", ans => { rl.close(); resolve(ans.trim()); });
+      });
+      if (!project) {
+        console.error("❌ Project name is required.");
+        process.exit(1);
+      }
+    }
+
+    const baseUrl    = opts.baseUrl ?? "https://example.com";
+    const root       = path.resolve(process.cwd(), project);
+    const testsDir   = path.join(root, "tests");
+    const resultsDir = path.join(root, "results");
+    const screensDir = path.join(root, "screenshots");
 
     [root, testsDir, resultsDir, screensDir].forEach(ensureDir);
 
@@ -85,7 +102,7 @@ program
       `  name: "Sample — Page Load"`,
       `  tags: [smoke]`,
       `  steps:`,
-      `    - navigate: "https://example.com"`,
+      `    - navigate: "${baseUrl}"`,
       `    - assert:`,
       `        text: "Example Domain"`,
       ``,
@@ -100,7 +117,7 @@ program
     console.log(`   ${project}/screenshots/    ← failure screenshots saved here`);
     console.log(`   ${project}/tests/sample.yaml  ← starter test`);
     console.log(`\nNext steps:`);
-    console.log(`   aiqa explore <url> --out ${project}`);
+    console.log(`   aiqa explore ${baseUrl} --out ${project}`);
     console.log(`   aiqa generate --out ${project} --per-page`);
     console.log(`   aiqa run-all --out ${project} --headless`);
     console.log();
@@ -131,6 +148,7 @@ program
       testDef = parseTestFile(testFilePath);
     } catch (err) {
       console.error(`❌ Failed to parse test file: ${(err as Error).message}`);
+      console.error(`   → Check YAML syntax. Validate with: aiqa list ${path.dirname(path.relative(process.cwd(), testFilePath)) || "."}`);
       process.exit(1);
     }
 
@@ -198,6 +216,8 @@ program
     console.log(`─────────────────────────────────────────\n`);
 
     const explorer = new AppExplorer();
+    const explSpin = new Spinner();
+    explSpin.start(`Crawling ${url} (max ${maxPages} pages, depth ${maxDepth})…`);
     try {
       const result = await explorer.explore(url, {
         headless: config.execution.headless,
@@ -205,6 +225,7 @@ program
         maxDepth,
         timeout: config.timeouts.navigation,
       });
+      explSpin.stop();
 
       ensureDir(path.dirname(outPath));
       fs.writeFileSync(outPath, JSON.stringify(result, null, 2));
@@ -215,7 +236,12 @@ program
       console.log(`\n   Saved → ${outPath}`);
       console.log(`─────────────────────────────────────────\n`);
     } catch (err) {
-      console.error(`❌ Exploration failed: ${(err as Error).message}`);
+      explSpin.stop();
+      const msg = (err as Error).message;
+      console.error(`❌ Exploration failed: ${msg}`);
+      if (msg.includes("net::ERR") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
+        console.error(`   → Is the app running at ${url}? Check connectivity first.`);
+      }
       process.exit(1);
     }
   });
@@ -365,10 +391,11 @@ program
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .option("--dry-run",              "List tests that would run without executing them")
   .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main). Requires a full clone (fetch-depth: 0 in CI).")
+  .option("--junit <file>",         "Write JUnit XML report to <file> (for CI test result parsers)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
     allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
-    impactOnly?: string | boolean;
+    impactOnly?: string | boolean; junit?: string;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
@@ -455,6 +482,7 @@ program
         process.exit(0);
       }
       console.error(`❌ No YAML files found in ${testsDir}${filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : ""}`);
+      console.error(`   → Run "aiqa list ${path.relative(process.cwd(), testsDir) || "."}" to see what's there, or "aiqa init <project>" to scaffold a new project.`);
       process.exit(1);
     }
 
@@ -527,7 +555,10 @@ program
         try {
           testDef = parseTestFile(file);
         } catch (err) {
-          console.error(`  ⚠️  Skipped ${path.basename(file)}: ${(err as Error).message}`);
+          const msg = (err as Error).message;
+          // 5-3: include relative path + actionable hint
+          console.error(`  ⚠️  Skipped ${path.relative(process.cwd(), file)}: ${msg}`);
+          console.error(`       → Check YAML syntax with: aiqa list ${path.dirname(path.relative(process.cwd(), file))}`);
           skippedByParse++;
           continue;
         }
@@ -580,11 +611,18 @@ program
         : path.resolve(process.cwd(), "report/index.html");
 
     const baseUrlLabel = opts.baseUrl ?? (outRoot ? path.basename(outRoot) : dir ?? "");
+
+    // Read trend history before HTML generation so the chart shows the current run context.
+    // Trend is appended after so this is the history up to (not including) the current run.
+    const tracker = resultsDir ? new TrendTracker(resultsDir, config.storage.maxHistory) : undefined;
+    const trendHistory = tracker?.read() ?? [];
+
     new HTMLReporter().generate(allResults, reportPath, {
       baseUrl: baseUrlLabel,
       circuitBreaker: circuitOpen
         ? { triggered: true, threshold: cbThreshold, skipped: skippedByCircuit }
         : undefined,
+      trendHistory,
     });
     console.log(`   HTML  → ${reportPath}`);
 
@@ -597,19 +635,26 @@ program
       console.log(`   Allure→ ${allureDir}`);
     }
 
+    // JUnit XML
+    if (opts.junit) {
+      const junitPath = path.resolve(process.cwd(), opts.junit);
+      new JUnitReporter().generate(allResults, junitPath);
+      console.log(`   JUnit → ${junitPath}`);
+    }
+
     // Trend tracking (always when --out is set)
-    if (resultsDir) {
-      const tracker = new TrendTracker(resultsDir, config.storage.maxHistory);
+    if (tracker && resultsDir) {
       tracker.append({
         runId,
-        date:       new Date().toISOString(),
+        date:        new Date().toISOString(),
         passed,
         failed,
-        total:      allResults.length,
-        score:      rpt.score,
-        grade:      rpt.grade,
-        durationMs: allResults.reduce((s, r) => s + r.durationMs, 0),
-        url:        baseUrlLabel || undefined,
+        total:       allResults.length,
+        score:       rpt.score,
+        grade:       rpt.grade,
+        durationMs:  allResults.reduce((s, r) => s + r.durationMs, 0),
+        url:         baseUrlLabel || undefined,
+        testResults: allResults.map(r => ({ name: r.testName, passed: r.passed })),
       });
       const trendLine = tracker.formatTrend();
       if (trendLine) console.log(trendLine);
@@ -913,48 +958,94 @@ program
     console.log(`\n🩺 AIQA Doctor — environment check`);
     console.log(`─────────────────────────────────────────`);
 
+    const issues: string[] = [];
+
     // Node.js version
-    const nodeVer = process.versions.node;
-    const [nodeMajor] = nodeVer.split(".").map(Number);
-    const nodeOk = nodeMajor >= 18;
-    console.log(`${nodeOk ? "✅" : "❌"} Node.js  ${nodeVer}${nodeOk ? "" : "  (need ≥18)"}`);
+    const nodeVer   = process.versions.node;
+    const nodeMajor = parseInt(nodeVer.split(".")[0], 10);
+    const nodeOk    = nodeMajor >= 18;
+    console.log(`${nodeOk ? "✅" : "❌"} Node.js  ${nodeVer}${nodeOk ? "" : "  → need ≥18. Download: https://nodejs.org"}`);
+    if (!nodeOk) issues.push("Node.js ≥18 required");
 
     // Anthropic API key
     const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
-    console.log(`${hasKey ? "✅" : "⚠️ "} ANTHROPIC_API_KEY  ${hasKey ? "set (real LLM enabled)" : "not set (using mock LLM)"}`);
+    console.log(`${hasKey ? "✅" : "⚠️ "} ANTHROPIC_API_KEY  ${hasKey ? "set (real LLM enabled)" : "not set → using mock LLM. Set in .env or shell."}`);
 
     // @anthropic-ai/sdk installed
     let sdkInstalled = false;
-    try {
-      require.resolve("@anthropic-ai/sdk");
-      sdkInstalled = true;
-    } catch { /* not installed */ }
-    console.log(`${sdkInstalled ? "✅" : "⚠️ "} @anthropic-ai/sdk  ${sdkInstalled ? "installed" : "not installed — run: npm install @anthropic-ai/sdk"}`);
+    try { require.resolve("@anthropic-ai/sdk"); sdkInstalled = true; } catch { /* ok */ }
+    console.log(`${sdkInstalled ? "✅" : "⚠️ "} @anthropic-ai/sdk  ${sdkInstalled ? "installed" : "not installed → run: npm install @anthropic-ai/sdk"}`);
 
-    // Playwright browsers
+    // Playwright browsers (slow — show spinner)
+    const spin = new Spinner();
+    spin.start("Playwright Chromium — launching test browser…");
     let playwrightOk = false;
+    let playwrightErr = "";
     try {
       const { chromium } = await import("playwright");
       const browser = await chromium.launch({ headless: true });
       await browser.close();
       playwrightOk = true;
-    } catch { /* not installed */ }
-    console.log(`${playwrightOk ? "✅" : "❌"} Playwright Chromium  ${playwrightOk ? "ready" : "not found — run: npx playwright install chromium"}`);
+    } catch (e) {
+      playwrightErr = (e as Error).message.split("\n")[0];
+    }
+    spin.stop();
+    console.log(`${playwrightOk ? "✅" : "❌"} Playwright Chromium  ${playwrightOk ? "ready" : `not ready → run: npx playwright install chromium\n   Detail: ${playwrightErr}`}`);
+    if (!playwrightOk) issues.push("Playwright Chromium not installed");
 
     // js-yaml
     let yamlOk = false;
+    try { require.resolve("js-yaml"); yamlOk = true; } catch { /* ok */ }
+    console.log(`${yamlOk ? "✅" : "❌"} js-yaml  ${yamlOk ? "installed" : "not installed → run: npm install"}`);
+    if (!yamlOk) issues.push("js-yaml not installed");
+
+    // zod
+    let zodOk = false;
+    try { require.resolve("zod"); zodOk = true; } catch { /* ok */ }
+    console.log(`${zodOk ? "✅" : "❌"} zod  ${zodOk ? "installed" : "not installed → run: npm install"}`);
+    if (!zodOk) issues.push("zod not installed");
+
+    // Config file present
+    const configDir  = path.resolve(process.cwd(), "config", "environments");
+    const configFile = path.join(configDir, `${process.env.AIQA_ENV ?? "dev"}.yaml`);
+    const configOk   = fs.existsSync(configFile);
+    console.log(`${configOk ? "✅" : "⚠️ "} Config  ${configOk ? configFile : `not found at ${configFile} → run: aiqa init <project>`}`);
+
+    // .env file presence (informational)
+    const envFile = path.resolve(process.cwd(), ".env");
+    const hasEnv  = fs.existsSync(envFile);
+    console.log(`${hasEnv ? "✅" : "⚠️ "} .env file  ${hasEnv ? "found" : "not found — secrets can also be set as shell env vars"}`);
+
+    // Disk space (warn if < 100 MB free on cwd drive)
     try {
-      require.resolve("js-yaml");
-      yamlOk = true;
-    } catch { /* not installed */ }
-    console.log(`${yamlOk ? "✅" : "❌"} js-yaml  ${yamlOk ? "installed" : "not installed — run: npm install"}`);
+      const { spawnSync } = await import("child_process");
+      // Cross-platform: df on Unix, wmic on Windows — array args avoids shell injection
+      let freeMB = Infinity;
+      if (process.platform === "win32") {
+        const drive = path.parse(process.cwd()).root.replace(/\\/g, "");
+        const out   = spawnSync("wmic", ["LogicalDisk", `where DeviceID="${drive}"`, "get", "FreeSpace", "/Value"], { encoding: "utf-8", timeout: 5000 }).stdout ?? "";
+        const match = out.match(/FreeSpace=(\d+)/);
+        if (match) freeMB = parseInt(match[1], 10) / 1024 / 1024;
+      } else {
+        const out   = spawnSync("df", ["-k", process.cwd()], { encoding: "utf-8", timeout: 5000 }).stdout ?? "";
+        const lines = out.trim().split("\n");
+        const cols  = lines[lines.length - 1].trim().split(/\s+/);
+        if (cols[3]) freeMB = parseInt(cols[3], 10) / 1024;
+      }
+      const diskOk = freeMB > 100;
+      console.log(`${diskOk ? "✅" : "⚠️ "} Disk space  ${Math.round(freeMB)} MB free${diskOk ? "" : " — less than 100 MB, screenshots/results may fail"}`);
+      if (!diskOk) issues.push("Low disk space (<100 MB)");
+    } catch { /* disk check optional — skip on error */ }
 
     console.log(`─────────────────────────────────────────`);
-    const allGood = nodeOk && playwrightOk && yamlOk;
-    if (allGood) {
-      console.log(`✅ All critical checks passed. Run "aiqa help" for usage.\n`);
+    const critical = !nodeOk || !playwrightOk || !yamlOk;
+    if (issues.length === 0) {
+      console.log(`✅ All checks passed. Run "aiqa help" for usage.\n`);
+    } else if (critical) {
+      console.log(`❌ ${issues.length} issue(s) found — fix before running tests:\n   ${issues.join("\n   ")}\n`);
+      process.exit(1);
     } else {
-      console.log(`⚠️  Fix the issues above, then re-run: aiqa doctor\n`);
+      console.log(`⚠️  ${issues.length} warning(s) — non-critical, AIQA will still run:\n   ${issues.join("\n   ")}\n`);
     }
   });
 
@@ -1312,6 +1403,158 @@ program
     // Keep process alive
     process.on("SIGINT",  () => { console.log("\nShutting down..."); process.exit(0); });
     process.on("SIGTERM", () => { console.log("\nShutting down..."); process.exit(0); });
+  });
+
+// ── list ──────────────────────────────────────────────────────────────────────
+
+program
+  .command("list [dir]")
+  .description("List all YAML test files in a directory with name, tags and step count")
+  .option("--out <folder>", "Project folder — lists tests from <folder>/tests/")
+  .action((dir: string | undefined, opts: { out?: string }) => {
+    const outRoot  = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
+    const testsDir = dir
+      ? path.resolve(process.cwd(), dir)
+      : outRoot
+        ? path.join(outRoot, "tests")
+        : process.cwd();
+
+    let files: string[];
+    try {
+      files = fs.readdirSync(testsDir)
+        .filter(f => f.endsWith(".yaml") || f.endsWith(".yml"))
+        .sort()
+        .map(f => path.join(testsDir, f));
+    } catch {
+      console.error(`❌ Cannot read directory: ${testsDir}`);
+      console.error(`   Check the path exists or use --out <project-folder>`);
+      process.exit(1);
+    }
+
+    if (files.length === 0) {
+      console.log(`\nNo YAML test files found in: ${testsDir}`);
+      console.log(`   Create one with: aiqa init <project>  or write a test.yaml manually.\n`);
+      return;
+    }
+
+    // Column widths
+    const COL_NAME = 36, COL_TAGS = 26, COL_STEPS = 6;
+    const header = [
+      "Name".padEnd(COL_NAME),
+      "Tags".padEnd(COL_TAGS),
+      "Steps".padStart(COL_STEPS),
+      "File",
+    ].join("  ");
+    const divider = "─".repeat(header.length);
+
+    console.log(`\n${files.length} test(s) in ${testsDir}\n`);
+    console.log(header);
+    console.log(divider);
+
+    let parsed = 0, errCount = 0;
+    for (const f of files) {
+      try {
+        const def  = parseTestFile(f);
+        const name = def.name.length > COL_NAME ? def.name.slice(0, COL_NAME - 1) + "…" : def.name;
+        const tags = (def.tags ?? []).join(", ");
+        const tagsStr = tags.length > COL_TAGS ? tags.slice(0, COL_TAGS - 1) + "…" : tags;
+        console.log([
+          name.padEnd(COL_NAME),
+          tagsStr.padEnd(COL_TAGS),
+          String(def.steps.length).padStart(COL_STEPS),
+          `  ${path.relative(process.cwd(), f)}`,
+        ].join("  "));
+        parsed++;
+      } catch (err) {
+        const rel = path.relative(process.cwd(), f);
+        console.log(`${"(parse error)".padEnd(COL_NAME)}  ${"".padEnd(COL_TAGS)}  ${"?".padStart(COL_STEPS)}  ${rel}  ⚠`);
+        errCount++;
+      }
+    }
+
+    console.log(divider);
+    console.log(`${parsed} parseable  ${errCount > 0 ? `${errCount} with errors` : ""}\n`.trim() + "\n");
+  });
+
+// ── config validate ───────────────────────────────────────────────────────────
+
+program
+  .command("config validate")
+  .description("Validate the current environment config and print all resolved values")
+  .option("--env <env>", "Environment name (default: AIQA_ENV or 'dev')")
+  .action((opts: { env?: string }) => {
+    const env = opts.env ?? process.env.AIQA_ENV ?? "dev";
+    console.log(`\n🔧 AIQA Config Validate  [env: ${env}]`);
+    console.log(`─────────────────────────────────────────`);
+
+    let config: ReturnType<typeof cfg>;
+    try {
+      resetConfig();
+      config = loadConfig(env);
+    } catch (err) {
+      const msg = (err as Error).message;
+      console.error(`❌ Config invalid:\n   ${msg.replace(/\n/g, "\n   ")}`);
+      console.error(`\n   Fix: edit config/environments/${env}.yaml and re-run: aiqa config validate`);
+      process.exit(1);
+    }
+
+    const print = (key: string, val: unknown) =>
+      console.log(`   ${key.padEnd(30)} ${JSON.stringify(val)}`);
+
+    print("environment",              config.environment);
+    print("urls.base",                config.urls.base);
+    print("urls.api",                 config.urls.api);
+    print("execution.workers",        config.execution.workers);
+    print("execution.headless",       config.execution.headless);
+    print("execution.retries",        config.execution.retries);
+    print("execution.circuitBreaker", config.execution.circuitBreaker);
+    print("timeouts.action",          config.timeouts.action);
+    print("timeouts.navigation",      config.timeouts.navigation);
+    print("screenshots.onFailure",    config.screenshots.onFailure);
+    print("screenshots.dir",          config.screenshots.dir);
+    print("llm.provider",             config.llm.provider);
+    print("features.llmEnabled",      config.features.llmEnabled);
+    if (config.jira?.baseUrl) {
+      print("jira.baseUrl",           config.jira.baseUrl);
+      print("jira.projectKey",        config.jira.projectKey);
+    }
+    console.log(`─────────────────────────────────────────`);
+    console.log(`✅ Config is valid.\n`);
+  });
+
+// ── completion ────────────────────────────────────────────────────────────────
+
+program
+  .command("completion [shell]")
+  .description("Print shell completion script. Supported: bash, zsh (default: bash)")
+  .action((shell: string | undefined) => {
+    const sh = (shell ?? "bash").toLowerCase();
+    const cmds = [
+      "init", "run", "run-all", "explore", "generate", "score",
+      "list", "doctor", "config validate", "import", "orchestrate", "serve",
+      "jira-sync", "completion", "help",
+    ].join(" ");
+
+    if (sh === "bash") {
+      console.log(`# Add to ~/.bashrc:\n# eval "$(aiqa completion bash)"\n`);
+      console.log(`_aiqa_completion() {
+  local cur="\${COMP_WORDS[COMP_CWORD]}"
+  COMPREPLY=($(compgen -W "${cmds}" -- "$cur"))
+}
+complete -F _aiqa_completion aiqa`);
+    } else if (sh === "zsh") {
+      console.log(`# Add to ~/.zshrc:\n# eval "$(aiqa completion zsh)"\n`);
+      console.log(`#compdef aiqa
+_aiqa() {
+  local -a cmds
+  cmds=(${cmds.split(" ").map(c => `'${c}'`).join(" ")})
+  _describe 'command' cmds
+}
+compdef _aiqa aiqa`);
+    } else {
+      console.error(`❌ Unsupported shell: ${sh}. Supported: bash, zsh`);
+      process.exit(1);
+    }
   });
 
 program.parse(process.argv);
