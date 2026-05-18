@@ -16,7 +16,7 @@ import { EmailNotifier } from "./reporters/EmailNotifier";
 import { AllureReporter } from "./reporters/AllureReporter";
 import { JUnitReporter } from "./reporters/JUnitReporter";
 import { Spinner } from "./utils/Spinner";
-import { loadConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
+import { loadConfig, resetConfig, checkSecrets, EnvConfig } from "./config/ConfigLoader";
 import { ImportOrchestrator } from "./importers/ImportOrchestrator";
 import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
@@ -1018,16 +1018,16 @@ program
 
     // Disk space (warn if < 100 MB free on cwd drive)
     try {
-      const { execSync } = await import("child_process");
-      // Cross-platform: df on Unix, wmic on Windows
+      const { spawnSync } = await import("child_process");
+      // Cross-platform: df on Unix, wmic on Windows — array args avoids shell injection
       let freeMB = Infinity;
       if (process.platform === "win32") {
         const drive = path.parse(process.cwd()).root.replace(/\\/g, "");
-        const out   = execSync(`wmic LogicalDisk where DeviceID="${drive}" get FreeSpace /Value`, { encoding: "utf-8", timeout: 5000 });
+        const out   = spawnSync("wmic", ["LogicalDisk", `where DeviceID="${drive}"`, "get", "FreeSpace", "/Value"], { encoding: "utf-8", timeout: 5000 }).stdout ?? "";
         const match = out.match(/FreeSpace=(\d+)/);
         if (match) freeMB = parseInt(match[1], 10) / 1024 / 1024;
       } else {
-        const out   = execSync(`df -k "${process.cwd()}"`, { encoding: "utf-8", timeout: 5000 });
+        const out   = spawnSync("df", ["-k", process.cwd()], { encoding: "utf-8", timeout: 5000 }).stdout ?? "";
         const lines = out.trim().split("\n");
         const cols  = lines[lines.length - 1].trim().split(/\s+/);
         if (cols[3]) freeMB = parseInt(cols[3], 10) / 1024;
@@ -1489,7 +1489,6 @@ program
 
     let config: ReturnType<typeof cfg>;
     try {
-      const { loadConfig, resetConfig } = require("./config/ConfigLoader") as typeof import("./config/ConfigLoader");
       resetConfig();
       config = loadConfig(env);
     } catch (err) {
@@ -1532,7 +1531,7 @@ program
     const sh = (shell ?? "bash").toLowerCase();
     const cmds = [
       "init", "run", "run-all", "explore", "generate", "score",
-      "list", "doctor", "config", "import", "orchestrate", "serve",
+      "list", "doctor", "config validate", "import", "orchestrate", "serve",
       "jira-sync", "completion", "help",
     ].join(" ");
 

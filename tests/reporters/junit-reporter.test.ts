@@ -91,6 +91,18 @@ describe("JUnitReporter.buildXml", () => {
     const nameCount = (xml.match(/name="My Suite"/g) ?? []).length;
     expect(nameCount).toBeGreaterThanOrEqual(2);
   });
+
+  test("testsuite includes errors=0 and a timestamp attribute", () => {
+    const xml = reporter.buildXml([makeResult()]);
+    expect(xml).toContain('errors="0"');
+    expect(xml).toMatch(/timestamp="[0-9T:.Z-]+"/);
+  });
+
+  test("classname uses testId, not testName", () => {
+    const xml = reporter.buildXml([makeResult({ testId: "login-test", testName: "Login test" })]);
+    expect(xml).toContain('classname="login-test"');
+    expect(xml).not.toContain('classname="Login test"');
+  });
 });
 
 describe("JUnitReporter.generate", () => {

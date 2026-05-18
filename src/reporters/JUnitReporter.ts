@@ -19,16 +19,17 @@ export class JUnitReporter {
   }
 
   buildXml(results: TestResult[], suiteName = "AIQA"): string {
-    const total    = results.length;
-    const failures = results.filter(r => !r.passed).length;
-    const totalSec = (results.reduce((s, r) => s + r.durationMs, 0) / 1000).toFixed(3);
+    const total     = results.length;
+    const failures  = results.filter(r => !r.passed).length;
+    const totalSec  = (results.reduce((s, r) => s + r.durationMs, 0) / 1000).toFixed(3);
+    const timestamp = new Date().toISOString();
 
     const cases = results.map(r => this.testCase(r)).join("\n    ");
 
     return [
       `<?xml version="1.0" encoding="UTF-8"?>`,
       `<testsuites name="${esc(suiteName)}" tests="${total}" failures="${failures}" time="${totalSec}">`,
-      `  <testsuite name="${esc(suiteName)}" tests="${total}" failures="${failures}" time="${totalSec}">`,
+      `  <testsuite name="${esc(suiteName)}" tests="${total}" failures="${failures}" errors="0" time="${totalSec}" timestamp="${timestamp}">`,
       `    ${cases}`,
       `  </testsuite>`,
       `</testsuites>`,
@@ -37,7 +38,7 @@ export class JUnitReporter {
 
   private testCase(r: TestResult): string {
     const sec = (r.durationMs / 1000).toFixed(3);
-    const open = `<testcase name="${esc(r.testName)}" classname="${esc(r.testName)}" time="${sec}">`;
+    const open = `<testcase name="${esc(r.testName)}" classname="${esc(r.testId)}" time="${sec}">`;
 
     if (r.passed) return `${open}</testcase>`;
 

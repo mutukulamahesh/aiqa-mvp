@@ -97,7 +97,8 @@ describe("aiqa list — DslParser integration", () => {
 // ── completion scripts ────────────────────────────────────────────────────────
 
 describe("completion scripts", () => {
-  const CMDS = "init run run-all explore generate score list doctor config import orchestrate serve jira-sync completion help";
+  // "config validate" replaces bare "config" — bare "config" has no action and errors at runtime
+  const CMDS = "init run run-all explore generate score list doctor config validate import orchestrate serve jira-sync completion help";
 
   function bashScript(): string {
     return [
@@ -137,11 +138,11 @@ describe("completion scripts", () => {
   });
 
   test("all defined commands are in the completion list", () => {
-    const cmds = CMDS.split(" ");
-    expect(cmds).toContain("run-all");
-    expect(cmds).toContain("list");
-    expect(cmds).toContain("doctor");
-    expect(cmds).toContain("completion");
+    expect(CMDS).toContain("run-all");
+    expect(CMDS).toContain("list");
+    expect(CMDS).toContain("doctor");
+    expect(CMDS).toContain("completion");
+    expect(CMDS).toContain("config validate");   // subcommand form, not bare "config"
   });
 });
 

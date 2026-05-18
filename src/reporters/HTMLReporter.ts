@@ -350,11 +350,13 @@ ${heatmapHtml}
     );
     if (rates.length < 2) return "";
 
-    const W = 600, H = 100, PAD = 10;
-    const innerW = W - PAD * 2;
+    const W = 600, H = 100;
+    const LPAD = 34;   // left margin wide enough for "100%" label at font-size 9
+    const PAD  = 10;   // top / right / bottom padding
+    const innerW = W - LPAD - PAD;
     const innerH = H - PAD * 2;
     const pts = rates.map((r, i) => {
-      const x = PAD + (i / (rates.length - 1)) * innerW;
+      const x = LPAD + (i / (rates.length - 1)) * innerW;
       const y = PAD + innerH - (r / 100) * innerH;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(" ");
@@ -364,15 +366,15 @@ ${heatmapHtml}
     return `<div class="trend-section">
   <h2>Pass Rate Trend <span style="font-size:.8rem;font-weight:400;color:#94a3b8">(last ${rates.length} runs)</span></h2>
   <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-label="Pass rate trend chart">
-    <line x1="${PAD}" y1="${PAD + innerH * 0.25}" x2="${W - PAD}" y2="${PAD + innerH * 0.25}"
+    <line x1="${LPAD}" y1="${PAD + innerH * 0.25}" x2="${W - PAD}" y2="${PAD + innerH * 0.25}"
           stroke="#f1f5f9" stroke-width="1"/>
-    <line x1="${PAD}" y1="${PAD + innerH * 0.5}"  x2="${W - PAD}" y2="${PAD + innerH * 0.5}"
+    <line x1="${LPAD}" y1="${PAD + innerH * 0.5}"  x2="${W - PAD}" y2="${PAD + innerH * 0.5}"
           stroke="#f1f5f9" stroke-width="1"/>
-    <line x1="${PAD}" y1="${PAD + innerH * 0.75}" x2="${W - PAD}" y2="${PAD + innerH * 0.75}"
+    <line x1="${LPAD}" y1="${PAD + innerH * 0.75}" x2="${W - PAD}" y2="${PAD + innerH * 0.75}"
           stroke="#f1f5f9" stroke-width="1"/>
-    <text x="${PAD - 4}" y="${PAD + 4}" text-anchor="end" font-size="9" fill="#94a3b8">100%</text>
-    <text x="${PAD - 4}" y="${PAD + innerH * 0.5 + 4}" text-anchor="end" font-size="9" fill="#94a3b8">50%</text>
-    <text x="${PAD - 4}" y="${PAD + innerH + 4}" text-anchor="end" font-size="9" fill="#94a3b8">0%</text>
+    <text x="${LPAD - 4}" y="${PAD + 4}" text-anchor="end" font-size="9" fill="#94a3b8">100%</text>
+    <text x="${LPAD - 4}" y="${PAD + innerH * 0.5 + 4}" text-anchor="end" font-size="9" fill="#94a3b8">50%</text>
+    <text x="${LPAD - 4}" y="${PAD + innerH + 4}" text-anchor="end" font-size="9" fill="#94a3b8">0%</text>
     <polyline points="${pts}" fill="none" stroke="#6366f1" stroke-width="2" stroke-linejoin="round"/>
     <text x="${W - PAD}" y="${PAD + innerH - (latest / 100) * innerH - 6}"
           text-anchor="end" font-size="10" fill="#6366f1" font-weight="bold">${latest}%</text>

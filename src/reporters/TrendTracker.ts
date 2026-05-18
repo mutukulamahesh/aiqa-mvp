@@ -50,7 +50,12 @@ export class TrendTracker {
   }
 
   append(record: TrendRecord): void {
-    // Capture mtime before reading so we can detect a concurrent write
+    // Capture mtime before reading so we can detect a concurrent write.
+    // Note: on HFS+/ext3 filesystems (1-second mtime resolution), two workers
+    // starting within the same second both see the same mtimeBefore and race to
+    // renameSync. The rename is atomic so no partial writes occur, but the slower
+    // writer's record will silently overwrite the faster one. For most single-worker
+    // setups this is fine; parallel workers sharing a results dir should use a lock.
     const mtimeBefore = this.mtime();
     const history     = this.read();
     history.push(record);

@@ -19,7 +19,7 @@ export class Spinner {
       this.frame = (this.frame + 1) % FRAMES.length;
       process.stdout.write(`\r${FRAMES[this.frame]} ${text}`);
     }, INTERVAL_MS);
-    if (this.timer.unref) this.timer.unref();
+    this.timer.unref();
   }
 
   succeed(text: string): void {
