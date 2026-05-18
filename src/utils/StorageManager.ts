@@ -1,5 +1,6 @@
 import * as fs   from "fs";
 import * as path from "path";
+import { logger } from "./logger";
 
 const FIELD_MAX_BYTES = 2048;
 
@@ -53,13 +54,13 @@ export function cleanArtifacts(opts: CleanOptions): number {
           } else {
             fs.unlinkSync(full);
           }
-          console.log(`   [cleanup] removed ${full}`);
+          logger.info(`[cleanup] removed ${full}`);
           deleted++;
         }
       } catch { /* already removed or locked — skip */ }
     }
   }
-  if (deleted > 0) console.log(`   [cleanup] ${deleted} artifact(s) removed (retaining last ${opts.retainRuns} run(s))`);
+  if (deleted > 0) logger.info(`[cleanup] ${deleted} artifact(s) removed (retaining last ${opts.retainRuns} run(s))`);
   return deleted;
 }
 

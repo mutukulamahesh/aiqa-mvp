@@ -96,6 +96,9 @@ const CONFIG_DIR = path.resolve(process.cwd(), "config", "environments");
 
 let _loaded: EnvConfig | null = null;
 
+// Node.js is single-threaded: the _loaded check and assignment below cannot race
+// within one process. If worker_threads are introduced, each thread has its own
+// module scope and its own _loaded — this remains safe per-thread.
 export function loadConfig(env: string = "dev"): EnvConfig {
   if (_loaded) {
     if (_loaded.environment !== env) {

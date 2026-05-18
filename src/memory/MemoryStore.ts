@@ -197,7 +197,9 @@ export class MemoryStore {
         const oldest = keys.reduce((a, b) =>
           this.data.steps[a].lastUpdated < this.data.steps[b].lastUpdated ? a : b
         );
-        delete this.data.steps[oldest];
+        // Guard: concurrent callers may both reach this branch before either deletes.
+        // The second delete is a no-op in JS, but the step may already be gone.
+        if (this.data.steps[oldest]) delete this.data.steps[oldest];
       }
       this.data.steps[stepKey] = {
         stepKey,

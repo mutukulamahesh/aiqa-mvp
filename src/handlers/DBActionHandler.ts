@@ -32,11 +32,12 @@ export class DBActionHandler implements StepHandler {
     const params = step.params?.map(p => (typeof p === "string" ? ctx.resolve(p) : p));
 
     // ── read-only guard ──────────────────────────────────────────────────────
-    // Strip leading block/line comments so "/* foo */ SELECT" still passes.
-    const stripped = sql.replace(/^\s*(\/\*[\s\S]*?\*\/|--[^\n]*\n?)*/g, "");
+    // Test the full SQL directly — the comment-stripping regex was removed because
+    // it false-positived on "--" inside string literals (e.g. WHERE name = '-- note').
+    // Parameterized queries are the primary injection defence; read-only mode is belt-and-suspenders.
     let readOnly = true;
     try { readOnly = getConfig().db.readOnly; } catch { /* config not loaded — stay safe */ }
-    if (readOnly && !/^\s*select\b/i.test(stripped)) {
+    if (readOnly && !/^\s*select\b/i.test(sql)) {
       throw new Error(
         `db: read-only mode is enabled — only SELECT queries are allowed. ` +
         `Got: "${sql.slice(0, 60)}${sql.length > 60 ? "…" : ""}". ` +

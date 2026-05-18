@@ -277,18 +277,20 @@ describe("DBActionHandler — read-only guard", () => {
     ).resolves.toBeUndefined();
   });
 
-  test("SELECT after block comment passes", async () => {
+  test("SELECT after block comment is blocked (comment stripping removed — H-11)", async () => {
     const handler = new DBActionHandler(new MockDBAdapter());
+    // Comment stripping was removed because it false-positived on "--" inside string literals.
+    // Queries must now start with SELECT directly — no leading comments allowed in read-only mode.
     await expect(
       handler.execute({ action: "db", query: "/* safety comment */ SELECT 1" }, noopAdapter, makeCtx())
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("read-only mode is enabled");
   });
 
-  test("SELECT after line comment passes", async () => {
+  test("SELECT after line comment is blocked (comment stripping removed — H-11)", async () => {
     const handler = new DBActionHandler(new MockDBAdapter());
     await expect(
       handler.execute({ action: "db", query: "-- read-only\nSELECT 1" }, noopAdapter, makeCtx())
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("read-only mode is enabled");
   });
 
   test("INSERT is blocked when read-only (default)", async () => {

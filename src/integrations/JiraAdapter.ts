@@ -1,6 +1,7 @@
 import * as crypto from "crypto";
 import { JiraClient, JiraIssue } from "./JiraClient";
 import { UserFlow, FlowStep } from "../agents/FlowMapper";
+import { logger } from "../utils/logger";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,12 +93,17 @@ export class JiraAdapter {
       );
     }
 
-    // SEC: Warn loudly when Jira base URL is not HTTPS (credentials would be sent in plaintext)
+    // SEC: Reject non-HTTPS Jira URLs — credentials would be sent in plaintext.
+    // Set AIQA_JIRA_ALLOW_HTTP=true only for local/dev environments.
     if (config.baseUrl && !config.baseUrl.startsWith("https://")) {
-      process.stderr.write(
-        `[jira] WARNING: baseUrl "${config.baseUrl}" is not HTTPS. ` +
-        `Credentials will be sent in plaintext — use https:// for production.\n`,
-      );
+      if (process.env.AIQA_JIRA_ALLOW_HTTP === "true") {
+        logger.warn(`[JiraAdapter] Connecting to Jira over HTTP — credentials in plaintext: ${config.baseUrl}`);
+      } else {
+        throw new Error(
+          `[JiraAdapter] baseUrl must use https://. Got: "${config.baseUrl}". ` +
+          `Set AIQA_JIRA_ALLOW_HTTP=true to override (not recommended for production).`,
+        );
+      }
     }
 
     this.useMock = config.useMock ?? !hasCredentials;

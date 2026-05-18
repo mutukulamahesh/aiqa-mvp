@@ -34,11 +34,12 @@ export class LoopHandler implements StepHandler {
       );
     }
 
-    wwrite(`  ▶ for_each   → ${list.length} item(s) as "${step.as}"`);
+    const items = [...list]; // snapshot — prevents mutation if a sub-step writes back to the same var
+    wwrite(`  ▶ for_each   → ${items.length} item(s) as "${step.as}"`);
 
-    for (let i = 0; i < list.length; i++) {
-      ctx.set(step.as, list[i]);
-      wlog(`      ↳ iteration ${i + 1}/${list.length}`);
+    for (let i = 0; i < items.length; i++) {
+      ctx.set(step.as, items[i]);
+      wlog(`      ↳ iteration ${i + 1}/${items.length}`);
       for (const subStep of step.steps) {
         await this.executeSubStep(subStep, adapter, ctx);
       }

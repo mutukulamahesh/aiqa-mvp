@@ -60,6 +60,21 @@ export function attachWsServer(server: http.Server): WebSocketServer {
     wss.handleUpgrade(req, socket, head, ws => wss.emit("connection", ws, req));
   });
 
+  // Idle timeout: terminate connections that haven't ponged within IDLE_MS.
+  // Prevents abandoned connections from accumulating file descriptors.
+  const IDLE_MS = 5 * 60_000;
+  wss.on("connection", (ws: WebSocket) => {
+    let alive = true;
+    ws.on("pong", () => { alive = true; });
+    const heartbeat = setInterval(() => {
+      if (!alive) { ws.terminate(); return; }
+      alive = false;
+      if (ws.readyState === WebSocket.OPEN) ws.ping();
+    }, IDLE_MS / 2);
+    ws.on("close", () => clearInterval(heartbeat));
+    ws.on("error", () => clearInterval(heartbeat));
+  });
+
   wss.on("connection", async (ws: WebSocket, req: http.IncomingMessage) => {
     const url   = new URL(req.url ?? "/", `${requestScheme(req)}://${req.headers.host}`);
     const match = url.pathname.match(RUN_STREAM_PATH);

@@ -4,6 +4,7 @@ import { ExecutionContext } from "../execution/ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
 import { APIExecutor } from "../execution/APIExecutor";
 import { wwrite } from "../execution/WorkerContext";
+import { logger } from "../utils/logger";
 
 /**
  * Checks whether a resolved URL is covered by an allowlist/denylist entry.
@@ -68,6 +69,15 @@ export class APIActionHandler implements StepHandler {
     //           "https://internal.api.evil.com" cannot bypass a denylist entry
     //           for "https://internal.api" via shared prefix.
     const apiCfg = ctx.config?.api;
+    if (!apiCfg) {
+      // No api config section — SSRF allowlist/denylist is inactive.
+      // Set api.allowlist / api.denylist in your environment config to restrict outbound calls.
+      // Log only origin+path — omit query string to avoid leaking credentials in ?access_token= params.
+      let safeUrl: string;
+      try { const u = new URL(url); safeUrl = u.origin + u.pathname; }
+      catch { safeUrl = url.slice(0, 100); }
+      logger.warn(`[api] SSRF guard inactive — no api config section. URL: ${safeUrl}`);
+    }
     if (apiCfg) {
       if (apiCfg.denylist.some(entry => matchesUrlEntry(url, entry))) {
         throw new Error(`api step blocked — URL matches denylist: ${url}`);

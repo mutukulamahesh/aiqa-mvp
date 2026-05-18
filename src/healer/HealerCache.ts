@@ -70,11 +70,13 @@ export class HealerCache {
 
   /** Returns the best-scored selector for a descriptor, or undefined.
    *  When contextKey is provided, prefers entries that match it; entries without
-   *  a contextKey are always eligible (backward compat with pre-SPA cache files). */
+   *  a contextKey are always eligible (backward compat with pre-SPA cache files).
+   *  NOTE: does not perform live DOM validation — use tryCache() when live validation is needed. */
   get(pageUrl: string, descriptor: string, contextKey?: string): string | undefined {
     const entries = this.data[this.normalizeUrl(pageUrl)]?.[descriptor];
     if (!entries?.length) return undefined;
-    const pool = this.contextFilter(entries, contextKey);
+    const pool = this.contextFilter(entries, contextKey)
+      .filter(e => e.failureCount < EVICT_THRESHOLD); // skip near-eviction entries
     return this.sorted(pool)[0]?.selector;
   }
 

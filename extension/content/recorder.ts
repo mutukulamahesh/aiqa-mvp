@@ -133,7 +133,9 @@ function buildSelector(el: HTMLElement): SelectorDescriptor {
   return { css };
 }
 
-function buildCssSelector(el: HTMLElement): string {
+const MAX_SELECTOR_DEPTH = 10;
+
+function buildCssSelector(el: HTMLElement, depth = 0): string {
   if (el.id) return `#${CSS.escape(el.id)}`;
 
   const tag = el.tagName.toLowerCase();
@@ -143,11 +145,13 @@ function buildCssSelector(el: HTMLElement): string {
   const type = el.getAttribute("type");
   if (type) return `${tag}[type="${type}"]`;
 
-  // nth-child as last resort
+  // nth-child as last resort — guarded against shadow DOM elements where
+  // indexOf returns -1 (producing invalid :nth-child(0)).
   const parent = el.parentElement;
-  if (parent) {
+  if (parent && depth < MAX_SELECTOR_DEPTH) {
     const index = Array.from(parent.children).indexOf(el) + 1;
-    return `${buildCssSelector(parent)} > ${tag}:nth-child(${index})`;
+    if (index < 1) return tag; // el not in parent.children (e.g. shadow DOM)
+    return `${buildCssSelector(parent, depth + 1)} > ${tag}:nth-child(${index})`;
   }
   return tag;
 }

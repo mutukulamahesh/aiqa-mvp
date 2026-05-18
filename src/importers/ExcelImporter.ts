@@ -41,7 +41,6 @@ export class ExcelImporter {
     }
 
     const results: RawTestCase[] = [];
-    let rowIndex = 0;
 
     sheet.eachRow((row, rowNum) => {
       if (rowNum === 1) return; // skip header row
@@ -54,9 +53,8 @@ export class ExcelImporter {
         ? rawSteps.split(/\n|;|\d+\.\s+/).map(s => s.trim()).filter(Boolean)
         : [];
 
-      rowIndex++;
       results.push({
-        id:           this.cell(row, idCol)   || `row-${rowIndex}`,
+        id:           this.cell(row, idCol)   || `row-${rowNum}`, // use actual row number, not insert count
         name,
         precondition: this.cell(row, preconditionCol) || undefined,
         steps,

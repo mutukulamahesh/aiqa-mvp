@@ -65,8 +65,10 @@ export class CSVImporter {
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-        else { inQuotes = !inQuotes; }
+        if (inQuotes && line[i + 1] === '"') { current += '"'; i++; } // escaped quote
+        else if (inQuotes)    { inQuotes = false; }                    // closing quote
+        else if (current === "") { inQuotes = true; }                  // opening quote — field start only
+        else { current += ch; }                                        // literal quote mid-unquoted field
       } else if (ch === "," && !inQuotes) {
         values.push(current);
         current = "";

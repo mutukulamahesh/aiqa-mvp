@@ -212,7 +212,8 @@ describe("GeminiLLMProvider", () => {
 
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("generateContent");
-    expect(url).toContain("key=my-key");
+    expect(url).not.toContain("key="); // key must NOT appear in URL (C-1 fix)
+    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("my-key");
 
     const body = JSON.parse(init.body as string);
     expect(body.system_instruction.parts[0].text).toBe("sys");

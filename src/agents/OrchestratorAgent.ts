@@ -55,6 +55,22 @@ export interface OrchestratorResult {
 
 const TOTAL_STAGES = 5;
 
+// Per-stage wall-clock cap for LLM-backed stages (default 5 min, override via env).
+const STAGE_TIMEOUT_MS = parseInt(process.env.AIQA_STAGE_TIMEOUT_MS ?? "", 10) || 300_000;
+
+function stageTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      const t = setTimeout(
+        () => reject(new Error(`[Orchestrator] Stage "${stage}" timed out after ${STAGE_TIMEOUT_MS}ms`)),
+        STAGE_TIMEOUT_MS,
+      );
+      t.unref(); // don't keep the process alive when the main promise wins
+    }),
+  ]);
+}
+
 function makeRunId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -133,7 +149,7 @@ export class OrchestratorAgent {
     const analytics     = new HealerAnalytics(selectorCache);
     const flowMapper    = new FlowMapper(this.llm, selectorCache);
     try {
-      flows = await flowMapper.map(exploration);
+      flows = await stageTimeout(flowMapper.map(exploration), "flow_mapper");
     } catch (err) {
       return this.partialResult("flow_mapper", err as Error, runId, startTime, timings, input, { exploration });
     }
@@ -144,7 +160,7 @@ export class OrchestratorAgent {
     let scenarios: GeneratedScenario[];
     const t3 = Date.now();
     try {
-      scenarios = await new ScenarioGenerator(this.llm).generate(flows, input.url);
+      scenarios = await stageTimeout(new ScenarioGenerator(this.llm).generate(flows, input.url), "scenario_generator");
     } catch (err) {
       return this.partialResult("scenario_generator", err as Error, runId, startTime, timings, input, { exploration, flows });
     }
@@ -184,11 +200,16 @@ export class OrchestratorAgent {
     const t4 = Date.now();
     const runner = new TestRunner({ headless: input.headless ?? true, timeout: input.timeout, screenshotsDir: input.screenshotsDir });
     try {
-      for (const scenario of validated) {
-        const def    = parseTestDefinition(scenario.yaml);
-        const result = await runner.run(def);
-        results.push(result);
-      }
+      await stageTimeout(
+        (async () => {
+          for (const scenario of validated) {
+            const def    = parseTestDefinition(scenario.yaml);
+            const result = await runner.run(def);
+            results.push(result);
+          }
+        })(),
+        "test_runner",
+      );
     } catch (err) {
       return this.partialResult("test_runner", err as Error, runId, startTime, timings, input, {
         exploration, flows, scenarios, results,
@@ -204,12 +225,15 @@ export class OrchestratorAgent {
       if (!result.passed) {
         const failedStep = result.stepResults?.find(s => !s.passed);
         if (failedStep) {
-          const debug = await debugger_.analyze({
-            test_name:     result.testName,
-            step_action:   failedStep.action,
-            step_index:    result.stepResults!.indexOf(failedStep),
-            error_message: result.error ?? failedStep.error ?? "unknown",
-          });
+          const debug = await stageTimeout(
+            debugger_.analyze({
+              test_name:     result.testName,
+              step_action:   failedStep.action,
+              step_index:    result.stepResults!.indexOf(failedStep),
+              error_message: result.error ?? failedStep.error ?? "unknown",
+            }),
+            "debugger",
+          );
           debugMap.set(result.testName, debug);
         }
       }

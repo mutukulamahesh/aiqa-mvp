@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+import { logger } from "../utils/logger";
 // Provider modules are lazy-loaded via require() so that missing optional dependencies
 // (e.g. no @anthropic-ai/sdk installed) only throw at runtime when that provider is
 // actually used — not at import time when another provider is configured.
@@ -96,9 +97,13 @@ function withCircuitBreaker(provider: LLMProvider): LLMProvider {
 
 function resolveFromEnv(): LLMConfig {
   const provider = (process.env.LLM_PROVIDER as ProviderName | undefined) ?? autoDetect();
-  const fallback = process.env.LLM_FALLBACK
-    ? process.env.LLM_FALLBACK.split(",").map(s => s.trim() as ProviderName).filter(Boolean)
+  const rawFallback = process.env.LLM_FALLBACK;
+  const fallback: ProviderName[] = rawFallback
+    ? rawFallback.split(",").map(s => s.trim() as ProviderName).filter(Boolean)
     : [];
+  if (rawFallback && fallback.length === 0) {
+    logger.warn(`[LLMProvider] LLM_FALLBACK="${rawFallback}" produced no valid providers — fallback disabled`);
+  }
   return { provider, fallback };
 }
 

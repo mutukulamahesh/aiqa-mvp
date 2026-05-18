@@ -27,8 +27,11 @@ export async function writeExploration(runId: string, exploration: unknown): Pro
 
 export async function readMeta(runId: string): Promise<RunJobMeta | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "meta.json"), "utf-8");
-    return JSON.parse(raw) as RunJobMeta;
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "meta.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    // Validate required shape — rejects corrupt/attacker-modified files
+    if (typeof parsed?.runId !== "string" || typeof parsed?.status !== "string") return null;
+    return parsed as RunJobMeta;
   } catch {
     return null;
   }
@@ -36,8 +39,10 @@ export async function readMeta(runId: string): Promise<RunJobMeta | null> {
 
 export async function readResults(runId: string): Promise<unknown | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "results.json"), "utf-8");
-    return JSON.parse(raw);
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "results.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -45,8 +50,10 @@ export async function readResults(runId: string): Promise<unknown | null> {
 
 export async function readExploration(runId: string): Promise<unknown | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "exploration.json"), "utf-8");
-    return JSON.parse(raw);
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "exploration.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as { pages?: unknown }).pages)) return null;
+    return parsed;
   } catch {
     return null;
   }

@@ -50,8 +50,11 @@ export class LLMClient {
     }
 
     const data = await res.json() as {
-      content: Array<{ type: string; text?: string }>;
+      content?: Array<{ type: string; text?: string }>;
     };
+    if (!Array.isArray(data?.content)) {
+      throw new Error(`LLMClient: unexpected response shape — content is not an array`);
+    }
     return data.content.find((c) => c.type === "text")?.text ?? "";
   }
 }
