@@ -832,4 +832,6 @@ tests/
 
 ## License
 
-MIT
+Copyright 2026 Mahesh Mutukula
+
+Licensed under the [Apache License, Version 2.0](LICENSE). You may use, modify, and distribute this software freely provided you retain the copyright notice and license file.
