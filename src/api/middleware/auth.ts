@@ -24,11 +24,13 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const header   = req.headers.authorization ?? "";
-  const expected = Buffer.from(`Bearer ${apiKey}`);
-  const actual   = Buffer.from(header);
-  const match    = expected.length === actual.length &&
-                   crypto.timingSafeEqual(expected, actual);
+  const header = req.headers.authorization ?? "";
+  // Hash both sides to fixed-length (SHA-256 = 32 bytes) before comparing.
+  // This removes the byte-length side channel from the short-circuit `length ===` check
+  // that would otherwise reveal the key length to an attacker probing header sizes.
+  const expectedHash = crypto.createHash("sha256").update(`Bearer ${apiKey}`).digest();
+  const actualHash   = crypto.createHash("sha256").update(header).digest();
+  const match        = crypto.timingSafeEqual(expectedHash, actualHash);
   if (match) { next(); return; }
   res.status(401).json({ error: "Unauthorized" });
 }

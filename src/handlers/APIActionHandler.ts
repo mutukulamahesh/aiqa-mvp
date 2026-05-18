@@ -72,7 +72,11 @@ export class APIActionHandler implements StepHandler {
     if (!apiCfg) {
       // No api config section — SSRF allowlist/denylist is inactive.
       // Set api.allowlist / api.denylist in your environment config to restrict outbound calls.
-      logger.warn(`[api] SSRF guard inactive — no api config section. URL: ${url}`);
+      // Log only origin+path — omit query string to avoid leaking credentials in ?access_token= params.
+      let safeUrl: string;
+      try { const u = new URL(url); safeUrl = u.origin + u.pathname; }
+      catch { safeUrl = url.slice(0, 100); }
+      logger.warn(`[api] SSRF guard inactive — no api config section. URL: ${safeUrl}`);
     }
     if (apiCfg) {
       if (apiCfg.denylist.some(entry => matchesUrlEntry(url, entry))) {

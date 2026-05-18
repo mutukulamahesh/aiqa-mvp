@@ -39,8 +39,10 @@ export async function readMeta(runId: string): Promise<RunJobMeta | null> {
 
 export async function readResults(runId: string): Promise<unknown | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "results.json"), "utf-8");
-    return JSON.parse(raw);
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "results.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -48,8 +50,10 @@ export async function readResults(runId: string): Promise<unknown | null> {
 
 export async function readExploration(runId: string): Promise<unknown | null> {
   try {
-    const raw = await fs.promises.readFile(path.join(runDir(runId), "exploration.json"), "utf-8");
-    return JSON.parse(raw);
+    const raw    = await fs.promises.readFile(path.join(runDir(runId), "exploration.json"), "utf-8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as { pages?: unknown }).pages)) return null;
+    return parsed;
   } catch {
     return null;
   }

@@ -61,12 +61,13 @@ const STAGE_TIMEOUT_MS = parseInt(process.env.AIQA_STAGE_TIMEOUT_MS ?? "", 10) |
 function stageTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(
+    new Promise<never>((_, reject) => {
+      const t = setTimeout(
         () => reject(new Error(`[Orchestrator] Stage "${stage}" timed out after ${STAGE_TIMEOUT_MS}ms`)),
         STAGE_TIMEOUT_MS,
-      )
-    ),
+      );
+      t.unref(); // don't keep the process alive when the main promise wins
+    }),
   ]);
 }
 
@@ -199,11 +200,16 @@ export class OrchestratorAgent {
     const t4 = Date.now();
     const runner = new TestRunner({ headless: input.headless ?? true, timeout: input.timeout, screenshotsDir: input.screenshotsDir });
     try {
-      for (const scenario of validated) {
-        const def    = parseTestDefinition(scenario.yaml);
-        const result = await runner.run(def);
-        results.push(result);
-      }
+      await stageTimeout(
+        (async () => {
+          for (const scenario of validated) {
+            const def    = parseTestDefinition(scenario.yaml);
+            const result = await runner.run(def);
+            results.push(result);
+          }
+        })(),
+        "test_runner",
+      );
     } catch (err) {
       return this.partialResult("test_runner", err as Error, runId, startTime, timings, input, {
         exploration, flows, scenarios, results,
@@ -219,12 +225,15 @@ export class OrchestratorAgent {
       if (!result.passed) {
         const failedStep = result.stepResults?.find(s => !s.passed);
         if (failedStep) {
-          const debug = await debugger_.analyze({
-            test_name:     result.testName,
-            step_action:   failedStep.action,
-            step_index:    result.stepResults!.indexOf(failedStep),
-            error_message: result.error ?? failedStep.error ?? "unknown",
-          });
+          const debug = await stageTimeout(
+            debugger_.analyze({
+              test_name:     result.testName,
+              step_action:   failedStep.action,
+              step_index:    result.stepResults!.indexOf(failedStep),
+              error_message: result.error ?? failedStep.error ?? "unknown",
+            }),
+            "debugger",
+          );
           debugMap.set(result.testName, debug);
         }
       }
