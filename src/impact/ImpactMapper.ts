@@ -47,9 +47,11 @@ export class ImpactMapper {
     }
 
     // Strategy 3: name-word heuristic — only for tests with neither filesUnderTest nor tags.
-    // Words ≥ 4 chars to reduce noise from short common words.
+    // Words ≥ 4 chars to reduce noise. Matched against path segment-words (split by ".")
+    // so "auth" matches the directory segment "auth" but not the segment "author" — consistent
+    // with Strategy 2's full-segment comparison.
     const nameWords = words(testDef.name).filter(w => w.length >= 4);
-    return nameWords.some(w => normalized.some(f => f.includes(w)));
+    return nameWords.some(w => normalized.some(f => segmentWords(f).includes(w)));
   }
 
   /**
@@ -94,6 +96,13 @@ function normalizePath(p: string): string {
 
 function pathSegments(p: string): string[] {
   return p.split("/").filter(Boolean);
+}
+
+/** Splits every path segment by "." so "login.ts" yields ["login","ts"].
+ *  Allows name-word "login" to match the file segment "login.ts" while
+ *  "auth" still does NOT match "author" (different words after the split). */
+function segmentWords(p: string): string[] {
+  return pathSegments(p).flatMap(seg => seg.split(".").filter(Boolean));
 }
 
 function words(s: string): string[] {

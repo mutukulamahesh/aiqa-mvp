@@ -20,7 +20,7 @@ import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
 import { HealerAnalytics } from "./healer/HealerAnalytics";
 import { cleanArtifacts, warnLargeFile } from "./utils/StorageManager";
-import { getChangedFiles, getGitRoot } from "./impact/GitDiffParser";
+import { getChangedFiles, getGitRoot, isShallowClone } from "./impact/GitDiffParser";
 import { ImpactMapper } from "./impact/ImpactMapper";
 
 const program = new Command();
@@ -364,7 +364,7 @@ program
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .option("--dry-run",              "List tests that would run without executing them")
-  .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main)")
+  .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main). Requires a full clone (fetch-depth: 0 in CI).")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
     allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
@@ -412,24 +412,48 @@ program
       console.log(`   Tag filter: [${filterTags.join(", ")}] → ${files.length} matching file(s)`);
     }
 
-    if (opts.impactOnly !== undefined) {
-      const base = typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main";
+    let impactFilterActive = false;
+    const impactBase = opts.impactOnly !== undefined
+      ? (typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main")
+      : undefined;
+
+    if (impactBase !== undefined) {
+      impactFilterActive = true;
       try {
-        const changed = getChangedFiles({ base });
-        if (changed.length === 0) {
-          console.log(`   Impact filter: no changed files since [${base}] — nothing to run`);
-          process.exit(0);
+        if (isShallowClone()) {
+          console.warn(`   ⚠️  Shallow clone detected — --impact-only may miss changes (use fetch-depth: 0 in CI)`);
         }
+        const changed = getChangedFiles({ base: impactBase });
         const gitRoot = getGitRoot();
         const before  = files.length;
-        files = new ImpactMapper().filterTests(files, changed, parseTestFile, gitRoot ?? undefined);
-        console.log(`   Impact filter: [${base}] → ${changed.length} changed file(s) → ${files.length}/${before} test(s) impacted`);
+        files = changed.length > 0
+          ? new ImpactMapper().filterTests(files, changed, parseTestFile, gitRoot ?? undefined)
+          : [];
+        console.log(`   Impact filter: [${impactBase}] → ${changed.length} changed file(s) → ${files.length}/${before} test(s) impacted`);
       } catch (err) {
         console.warn(`   ⚠️  Impact filter failed (${(err as Error).message}) — running all tests`);
+        impactFilterActive = false;
       }
     }
 
     if (files.length === 0) {
+      if (opts.dryRun) {
+        // Let dry-run block show the "0 tests" summary instead of silently exiting
+        const nothingMsg = impactFilterActive
+          ? " (no tests impacted by recent changes)"
+          : filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : "";
+        console.log(`\n🔍 AIQA Dry Run — 0 test(s) would run${nothingMsg}\n`);
+        console.log(`─────────────────────────────────────────`);
+        if (filterTags.length)   console.log(`   Tag filter    : [${filterTags.join(", ")}]`);
+        if (impactBase)          console.log(`   Impact filter : [${impactBase}]`);
+        if (outRoot)             console.log(`   Out           : ${outRoot}`);
+        console.log(`─────────────────────────────────────────\n`);
+        process.exit(0);
+      }
+      if (impactFilterActive) {
+        console.log(`   ℹ️  No tests impacted by changes since [${impactBase}] — nothing to run`);
+        process.exit(0);
+      }
       console.error(`❌ No YAML files found in ${testsDir}${filterTags.length ? ` matching tags [${filterTags.join(", ")}]` : ""}`);
       process.exit(1);
     }

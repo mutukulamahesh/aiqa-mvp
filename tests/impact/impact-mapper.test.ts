@@ -60,10 +60,29 @@ describe("ImpactMapper.isImpacted — name heuristic (no filesUnderTest, no tags
     expect(mapper.isImpacted(d, ["src/auth/login.ts"])).toBe(true);
   });
 
+  test("word matches filename stem (strips extension)", () => {
+    // "login" word matches "login.ts" because "login.ts".split(".") = ["login","ts"]
+    const d = def({ name: "Login flow" });
+    expect(mapper.isImpacted(d, ["src/auth/login.ts"])).toBe(true);
+  });
+
+  test("word does NOT match partial segment — auth vs author false-positive", () => {
+    // With the old substring strategy, "auth" would match "src/author/bio.ts" because
+    // "src/author/bio.ts".includes("auth") is true. With segment-word matching it does not.
+    const d = def({ name: "Auth flow" }); // words: ["auth", "flow"]
+    expect(mapper.isImpacted(d, ["src/author/bio.ts"])).toBe(false);
+    // but "auth" DOES match the directory segment "auth"
+    expect(mapper.isImpacted(d, ["src/auth/login.ts"])).toBe(true);
+  });
+
   test("short words (< 4 chars) are ignored to reduce noise", () => {
-    const d = def({ name: "API test" }); // "api" is 3 chars, "test" is 4
-    // "test" appears in path "tests/foo.ts" — still matches
-    expect(mapper.isImpacted(d, ["tests/foo.ts"])).toBe(true);
+    // "api" is 3 chars (filtered), "test" is 4 chars (kept).
+    // "test" matches the stem of "test.ts" (segment-word split: ["test", "ts"])
+    const d = def({ name: "API test" });
+    expect(mapper.isImpacted(d, ["src/test.ts"])).toBe(true);
+    // "api" alone (3 chars) would be filtered even when the path has an "api" segment
+    const apiOnly = def({ name: "API" }); // only word is "api" — too short, filtered
+    expect(mapper.isImpacted(apiOnly, ["src/api/users.ts"])).toBe(false);
   });
 
   test("no match when name words are unrelated to changed paths", () => {
@@ -131,5 +150,23 @@ describe("ImpactMapper.filterTests", () => {
   test("empty changedFiles → no tests impacted (returns empty)", () => {
     const parse = (_f: string) => def({ name: "Login", filesUnderTest: ["src/auth/login.ts"] });
     expect(mapper.filterTests(["login.yaml"], [], parse)).toEqual([]);
+  });
+
+  test("filesUnderTest + gitRoot: resolves absolute yaml path before comparing changed files", () => {
+    // Test declares filesUnderTest pointing to auth/login.ts
+    // Changed file is src/auth/login.ts (relative to git root /repo)
+    // yaml is at /repo/tests/login.yaml — gitRoot helps match the yaml itself if needed,
+    // but here the filesUnderTest declaration drives the match
+    const parse = (_f: string) => def({
+      name:            "Login",
+      filesUnderTest:  ["src/auth/login.ts"],
+    });
+    const result = mapper.filterTests(
+      ["/repo/tests/login.yaml"],
+      ["src/auth/login.ts"],
+      parse,
+      "/repo",
+    );
+    expect(result).toEqual(["/repo/tests/login.yaml"]);
   });
 });
