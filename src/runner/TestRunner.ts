@@ -23,15 +23,16 @@ export interface RunnerOptions {
 }
 
 export interface TestResult {
-  testId:       string;
-  testName:     string;
-  tags:         string[];
-  passed:       boolean;
-  durationMs:   number;
-  retryCount:   number;
-  error?:       string;
-  stepResults:  StepResult[];
-  debugResult?: DebugResult;
+  testId:          string;
+  testName:        string;
+  tags:            string[];
+  passed:          boolean;
+  durationMs:      number;
+  retryCount:      number;
+  error?:          string;
+  stepResults:     StepResult[];
+  debugResult?:    DebugResult;
+  screenshotPath?: string;
 }
 
 export interface StepResult {
@@ -248,14 +249,15 @@ export class TestRunner {
 
           const result: TestResult = {
             testId,
-            testName:   test.name,
-            tags:       test.tags ?? [],
-            passed:     false,
-            durationMs: Date.now() - totalStart,
-            retryCount: attempt,
-            error:      `Step ${i + 1} (${step.action}) failed: ${msg}`,
+            testName:       test.name,
+            tags:           test.tags ?? [],
+            passed:         false,
+            durationMs:     Date.now() - totalStart,
+            retryCount:     attempt,
+            error:          `Step ${i + 1} (${step.action}) failed: ${msg}`,
             stepResults,
             debugResult,
+            screenshotPath,
           };
           onEvent?.({ event: "test_done", testName: test.name, passed: false, durationMs: result.durationMs });
           return result;

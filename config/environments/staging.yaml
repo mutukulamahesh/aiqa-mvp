@@ -27,6 +27,17 @@ results:
 features:
   llmEnabled: true
 
+# SSRF guard — only these URL prefixes are permitted in api: steps.
+# Empty allowlist blocks all outbound API calls. Add entries for every
+# external host your tests need to reach.
+api:
+  allowlist:
+    - "https://jsonplaceholder.typicode.com"  # public test API used in smoke tests
+    - "https://staging.example.com"           # staging application API base
+  denylist:
+    - "http://169.254.169.254"                # block AWS/GCP instance metadata
+    - "http://metadata.google.internal"       # block GCP metadata endpoint
+
 storage:
   maxHistory:   200
   maxArtifacts: 10
@@ -38,7 +49,7 @@ llm:
 # Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
 jira:
   baseUrl:                "https://aiqajira.atlassian.net"
-  projectKey:             "AIQA"
+  projectKey:             "SCRUM"
   email:                  "mmk.mutu@gmail.com"
   createDefectsOnFailure: true    # auto-create bugs on CI failures
   xraySyncEnabled:        false
