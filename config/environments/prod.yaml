@@ -47,7 +47,7 @@ llm:
 # Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
 jira:
   baseUrl:                "https://aiqajira.atlassian.net"
-  projectKey:             "AIQA"
+  projectKey:             "SCRUM"
   email:                  "mmk.mutu@gmail.com"
   createDefectsOnFailure: true    # auto-create bugs on failures
   xraySyncEnabled:        false

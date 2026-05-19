@@ -53,7 +53,7 @@ api:
 #
 jira:
   baseUrl:                "https://aiqajira.atlassian.net"
-  projectKey:             "AIQA"
+  projectKey:             "SCRUM"
   email:                  "mmk.mutu@gmail.com"
   createDefectsOnFailure: false   # set true to auto-create bugs when using run-all
   xraySyncEnabled:        false   # set true + testPlanKey to push results to Xray
