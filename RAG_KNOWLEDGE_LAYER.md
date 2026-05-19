@@ -1,198 +1,414 @@
-# AIQA — RAG Knowledge Layer Vision
+# AIQA — RAG Knowledge Layer
 
-> Status: **Parked — future epic, post current backlog**
-> Captured: 2026-05-15
-> Author: Strategic session with Mahesh Mutukula
+> Status: **Active — Phase 1 in planning (2026-05-19)**
+> Original capture: 2026-05-15
+> Author: Mahesh Mutukula
 
 ---
 
 ## The Problem This Solves
 
 Current AIQA generates tests by *exploring what is on the page* (structural intelligence).
-It does not know *what matters about what is on the page* — the business rules, the known failure history, the risk areas that caused P1s last quarter.
+It does not know *what matters about what is on the page* — the business rules, the known failure
+history, the risk areas that caused P1s last quarter.
 
-That knowledge exists in every enterprise — scattered across Jira, Confluence, Xray, Zephyr, Postman, RCA docs, and engineers' heads. It is never used at test generation time.
+That knowledge exists in every enterprise — scattered across Jira, Confluence, Xray, Zephyr, Postman,
+RCA docs, and engineers' heads. It is never used at test generation time.
 
 **The RAG Knowledge Layer closes this gap.**
 
 ---
 
-## Core Idea
-
-Introduce a knowledge ingestion and retrieval layer that continuously learns from enterprise SDLC/STLC artifacts, then injects that context into every test generation decision AIQA makes.
-
-When a user asks:
-> "Generate tests for checkout coupon functionality"
-
-The system:
-1. Retrieves: related user stories, acceptance criteria, past defect patterns for checkout, known edge cases (coupon + loyalty points), API contract for the promo endpoint
-2. Understands: risk areas, prior failure modes, business rules
-3. Generates: ready-to-run YAML tests that reflect organizational knowledge — not just what's visible on screen
-
----
-
 ## Vision Statement
 
-> **"Your QA platform that knows what your organization knows — and never forgets."**
+> **"Your QA platform that knows what your organisation knows — and never forgets."**
 
 This is not test generation. It is **Institutional QA Memory** — a new product category.
 
 ---
 
-## Knowledge Sources (Ingestion Targets)
+## Zero-Cost Stack (Phase 1)
 
-| Source | What It Contributes |
-|--------|---------------------|
-| Jira Stories | Acceptance criteria, feature intent, scope |
-| Jira Defect History | Known failure patterns, recurring bugs, risky areas |
-| Xray / Zephyr | Historical test coverage, what has been tested before |
-| Confluence Pages | Test plans, release notes, runbooks, architecture docs |
-| Postman / OpenAPI | API contracts, expected request/response shapes |
-| Git history | What changed, what broke after what commit |
-| Production incidents / RCA | High-risk areas, cascading failure patterns |
-| Regression suites | What the team has learned is worth re-testing |
+| Need | Tool | Cost |
+|------|------|------|
+| Embed text → searchable numbers | `@xenova/transformers` · `all-MiniLM-L6-v2` (25 MB, runs locally) | Free — no API key |
+| Store + search those numbers | `vectra` (pure Node.js, saves to local JSON file) | Free — no server |
+
+No cloud. No API keys. No Docker. Two `npm install`s.
 
 ---
 
-## Platform Architecture (Conceptual)
+## Input → Output Flow
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                   KNOWLEDGE LAYER (NEW)                   │
-│                                                          │
-│  Connectors → Chunker → Embedder → Vector DB            │
-│  (Jira, Confluence, Xray, Git, Postman, Incidents)      │
-│                                                          │
-│  Permission-aware retrieval (source ACL inherited)       │
-│  TTL / change-detection to prevent stale knowledge       │
-│  Provenance tracking (which source informed which test)  │
-└───────────────────────┬──────────────────────────────────┘
-                        │  context chunks injected here
-                        ▼
-┌──────────────────────────────────────────────────────────┐
-│                  REASONING LAYER (AIQA TODAY)             │
-│                                                          │
-│  OrchestratorAgent → FlowMapper → ScenarioGenerator     │
-│  Runner → Healer → ReadinessScorer                       │
-│                                                          │
-│  FlowMapper already accepts context → RAG is additive   │
-│  JiraAdapter already fetches stories → extend, not redo │
-└───────────────────────┬──────────────────────────────────┘
-                        │
-┌───────────────────────▼──────────────────────────────────┐
-│                  EXECUTION LAYER                          │
-│  Playwright → API Executor → DB Validator                │
-└──────────────────────────────────────────────────────────┘
+INGEST  (aiqa knowledge ingest --jira SCRUM)
+────────────────────────────────────────────
+JiraConnector.fetch()
+  → stories + defects from Jira REST API
+  → ADF description + AC + title → plain text
+  → NaiveChunker splits into KnowledgeChunks (max 2000 chars)
+
+KnowledgeIngester
+  → deduplicate by sourceId
+  → Embedder.embed(chunk.text) → number[384]
+  → VectorIndex.add(chunk, vector)
+  → writes .aiqa/knowledge/index/ + meta.json
+
+OUTPUT:
+  Fetched 47 stories, 23 defects
+  Embedded 312 chunks → .aiqa/knowledge/index/
+  Health: GOOD (312 chunks, avg age 3 days)
+
+────────────────────────────────────────────
+RETRIEVE  (at generate / orchestrate time)
+────────────────────────────────────────────
+KnowledgeRetriever.retrieve("checkout coupon page")
+  → Embedder.embed(query) → number[384]
+  → VectorIndex.search(vector, topK=5)
+  → CosineSimilarityReranker.rerank(candidates)
+  → returns top 5 RetrievedChunks ranked by score
+
+[
+  { text: "SCRUM-12: Coupon validated before loyalty points", score: 0.91 },
+  { text: "SCRUM-34: Loyalty discount applied twice (defect)", score: 0.87 },
+  { text: "SCRUM-41: Checkout timeout on slow network",       score: 0.81 },
+]
+
+────────────────────────────────────────────
+GENERATE  (existing FlowMapper + ScenarioGenerator)
+────────────────────────────────────────────
+FlowMapper.map(exploration, ragContext)
+  → LLM sees: page structure + retrieved org knowledge
+  → generates flows covering known edge cases
+
+ScenarioGenerator.generate(flows, ragContext)
+  → YAML tests carry source: [SCRUM-12, SCRUM-34]
 ```
 
-**Key architectural note:** RAG enriches the *prompt context* passed to existing agents.
-FlowMapper, ScenarioGenerator, and the Healer already consume LLM context.
-The knowledge layer is a new input source — it does not replace current agents.
+---
+
+## Data Model
+
+```typescript
+interface KnowledgeChunk {
+  text:        string;
+  sourceId:    string;                              // "SCRUM-42"
+  sourceName:  string;                              // "jira"
+  type:        "story" | "defect" | "page" | "api" | "git";
+  tags:        string[];                            // ["checkout", "coupon"]
+  severity?:   "critical" | "high" | "medium" | "low";
+  version?:    string;                              // "2.4.1"
+  confidence:  number;                              // 1.0 default; feedback loop updates
+  relations:   { type: string; targetId: string }[]; // Knowledge Graph — empty in Phase 1
+  ingestedAt:  string;                              // ISO date — enables recency scoring
+}
+
+interface RetrievedChunk extends KnowledgeChunk {
+  score: number;   // 0.0–1.0 cosine similarity (Phase 1); hybrid score (Phase 2)
+}
+```
 
 ---
 
-## Autonomous Workflow Potential
+## Plugin Interfaces (all injectable, all testable)
+
+### Chunker
+```typescript
+interface Chunker {
+  chunk(text: string, metadata: ChunkMetadata): KnowledgeChunk[];
+}
+
+// Phase 1: character-based, ships now
+class NaiveChunker implements Chunker { ... }      // max 2000 chars
+
+// Phase 2: one chunk per AC bullet
+class ACChunker implements Chunker { ... }
+
+// Phase 3: LLM-assisted boundary detection
+class SemanticChunker implements Chunker { ... }
+```
+
+Config-driven: `knowledge.chunker: naive | ac-aware | semantic`
+
+### Reranker
+```typescript
+interface Reranker {
+  rerank(query: string, candidates: RetrievedChunk[]): RetrievedChunk[];
+}
+
+// Phase 1: pure cosine similarity, ships now
+class CosineSimilarityReranker implements Reranker { ... }
+
+// Phase 2: multi-signal hybrid
+class HybridReranker implements Reranker {
+  // score = (0.6 × semantic) + (0.2 × recency) + (0.1 × severity) + (0.1 × sourceWeight)
+}
+```
+
+### Embedder
+```typescript
+interface IEmbedder {
+  embed(text: string): Promise<number[]>;
+}
+
+// Production: real local model, lazy-loads on first call
+class Embedder implements IEmbedder { ... }
+
+// CI / tests: deterministic, no model download
+class StubEmbedder implements IEmbedder {
+  async embed(text: string): Promise<number[]> {
+    const seed = text.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    return Array.from({ length: 384 }, (_, i) => Math.sin(seed + i));
+  }
+}
+```
+
+### KnowledgeConnector
+```typescript
+interface KnowledgeConnector {
+  name: string;
+  fetch(): Promise<KnowledgeChunk[]>;
+}
+
+// Phase 1: implemented
+class JiraConnector implements KnowledgeConnector { ... }
+
+// Phase 2: stubs only in Phase 1
+class ConfluenceConnector implements KnowledgeConnector { ... }
+class OpenAPIConnector  implements KnowledgeConnector { ... }
+class GitConnector      implements KnowledgeConnector { ... }
+```
+
+---
+
+## Architecture
 
 ```
-Code change detected (GitHub PR / git diff)
-        ↓
-Impact filter identifies affected flows (EPIC-12 already planned)
-        ↓
-Knowledge layer retrieves: related stories, defect history, risk tags
-        ↓
-Generator creates targeted tests for the changed surface
-        ↓
-Human sign-off before merge (trust gate — always keep this)
-        ↓
-Test results feed back into knowledge layer (closed loop)
-        ↓
-System learns: which patterns catch real bugs in this org
+┌──────────────────────────────────────────────────────────────┐
+│                    KNOWLEDGE LAYER                            │
+│                                                              │
+│  Connectors → Chunker → Embedder → VectorIndex              │
+│  (Jira ✅  Confluence ⬜  OpenAPI ⬜  Git ⬜)                 │
+│                                                              │
+│  KnowledgeRetriever ← query → Reranker → RetrievedChunks   │
+│  KnowledgeStore.feedback() ← execution outcomes (Phase 2)   │
+│  GraphEnricher (relations traversal — Phase 3)               │
+└────────────────────────┬─────────────────────────────────────┘
+                         │  context chunks injected here
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   REASONING LAYER (AIQA today)               │
+│                                                              │
+│  FlowMapper ✅ · ScenarioGenerator ✅                         │
+│  HealerAgent ⬜ · JudgeHandler ⬜ · ImpactMapper ⬜           │
+│  ReadinessScorer ⬜ (Phase 2 wiring)                         │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-The **closed loop** is the differentiator. Every test run outcome — pass, fail, flaky —
-becomes a training signal that improves future test generation quality for this org specifically.
+**Key principle:** RAG enriches the *prompt context* passed to existing agents.
+It does not replace or restructure any existing component.
 
 ---
 
-## Enterprise Requirements (Non-Negotiable)
+## File Structure
 
-1. **On-premise deployment** — vector DB and LLM must run fully air-gapped (BFSI, healthcare, defense requirement)
-2. **Permission inheritance** — knowledge from restricted Confluence pages must not leak across team boundaries
-3. **Provenance / audit trail** — every generated test must carry: which story, which defect, which spec informed it
-4. **Knowledge health score** — warn when source data quality is too low to generate reliable tests
-5. **Connector plugin architecture** — so community/customers can maintain connectors without core team bottleneck
+```
+src/
+  knowledge/
+    types.ts                    ← KnowledgeChunk, RetrievedChunk, KnowledgeConfig
+    Embedder.ts                 ← @xenova/transformers wrapper (lazy-load, injectable)
+    VectorIndex.ts              ← vectra LocalIndex wrapper
+    KnowledgeStore.ts           ← ingest + retrieve + feedback stub
+    KnowledgeIngester.ts        ← runs connectors → deduplicates → stores → meta.json
+    KnowledgeRetriever.ts       ← standalone query interface (used by FlowMapper etc.)
+    HealthScorer.ts             ← GOOD / WARN / STALE / EMPTY from meta.json
+    chunkers/
+      Chunker.ts                ← interface
+      NaiveChunker.ts           ← Phase 1 impl (max 2000 chars)
+    rerankers/
+      Reranker.ts               ← interface
+      CosineSimilarityReranker.ts ← Phase 1 impl
+    connectors/
+      KnowledgeConnector.ts     ← interface
+      JiraConnector.ts          ← Phase 1: stories + defects
+      ConfluenceConnector.ts    ← Phase 2: stub only
+      OpenAPIConnector.ts       ← Phase 2: stub only
+      GitConnector.ts           ← Phase 2: stub only
 
----
+tests/
+  knowledge/
+    embedder.test.ts            ← StubEmbedder only, no model download
+    vector-index.test.ts        ← real vectra, temp dir
+    knowledge-store.test.ts     ← StubEmbedder + real vectra
+    jira-connector.test.ts      ← injectable transport
+    knowledge-ingester.test.ts
+    knowledge-retriever.test.ts
+    flow-mapper-rag.test.ts     ← chunks appear in LLM prompt
 
-## Risks and Mitigations
-
-| Risk | Mitigation |
-|------|------------|
-| Stale knowledge (18-month-old stories describe a UI that no longer exists) | TTL + change-detection on source documents |
-| Embedding drift as requirements evolve | Re-embed on source update, not just on schedule |
-| LLM blending retrieved chunks incorrectly | Show source chunk alongside generated test for human validation |
-| Connector maintenance cost sprawl | Plugin architecture — connectors are external, not core |
-| QA engineer trust ("is it replacing me?") | Human sign-off gate + "it handles boilerplate, you handle exploratory" positioning |
-| Data quality = output quality | Knowledge health score surfaced in UI before generation |
-
----
-
-## Differentiation
-
-| Dimension | Selenium/Playwright | Current AIQA | AIQA + Knowledge Layer |
-|-----------|--------------------|--------------|-----------------------|
-| Test source | Engineer writes | AI explores UI | AI understands business intent |
-| Context awareness | None | Page structure | Org history + requirements |
-| Maintenance | Manual | Self-healing | Context-aware healing + risk prediction |
-| Coverage | What engineer thinks of | What is visible | What is historically risky |
-| Learning | None | None | Continuously improves per org |
-| Enterprise fit | Good | Emerging | Native |
-
-**The one-line pitch:**
-> Traditional tools test what you *tell* them to test. AIQA tests what your organization has *learned* matters.
-
----
-
-## Evolution Path (Phases)
-
-| Phase | What It Does |
-|-------|-------------|
-| 1 (now) | Test web apps from exploration + human-provided YAML |
-| 2 (current backlog) | Test web apps with impact-awareness (git diff → affected flows) |
-| 3 (this vision) | Test web apps with full organizational knowledge context |
-| 4 (agentic) | Autonomous agents monitor production, generate probes, file defects, update knowledge |
-| 5 (AI system testing) | Test customers' own AI models — prompt injection, output consistency, hallucination rates |
-
-Phase 5 is not speculative — as customers deploy AI features, AIQA's architecture applies directly.
-The "application under test" becomes an LLM rather than a web UI. Same agent architecture, new target.
+.aiqa/
+  knowledge/
+    index/                      ← vectra files (gitignored, regenerated from Jira)
+    meta.json                   ← chunk count, last ingested, sources, health
+```
 
 ---
 
-## What Current Architecture Already Does Right (No Changes Needed)
+## Config
 
-These decisions made today will support the knowledge layer when we build it:
+```yaml
+# config/environments/dev.yaml
+knowledge:
+  enabled: true
+  indexPath: ".aiqa/knowledge"
+  topK: 5
+  chunker: naive
+  connectors:
+    - type: jira
+      projectKey: SCRUM
+```
 
-- **FlowMapper accepts LLM context** — can accept retrieved knowledge chunks with no interface change
-- **JiraAdapter already fetches stories** — the connector pattern is established; extend to full ingestion pipeline
-- **Structured logger** — provenance events need structured, queryable logs; already in place
-- **Circuit breaker on LLM calls** — retrieval + generation chains will need the same resilience
-- **StepInterpreter HandlerRegistry is injectable** — knowledge-aware handlers can be swapped in for testing
-- **API layer exists** — knowledge ingestion and retrieval will be REST endpoints on the same server
-- **On-premise deployment already works** — the air-gap requirement is already met by design
+```yaml
+# staging / prod
+knowledge:
+  enabled: true
+  indexPath: ".aiqa/knowledge"
+  topK: 5
+  chunker: naive
+  connectors:
+    - type: jira
+      projectKey: SCRUM
+    # - type: confluence    ← Phase 2
+    #   spaceKey: QA
+    # - type: openapi       ← Phase 2
+    #   url: https://api.example.com/openapi.json
+```
 
 ---
 
-## Suggested Build Sequence (When We Return To This)
+## CLI
 
-1. **Jira-only RAG context** — lowest connector cost, already partially integrated via JiraAdapter. Prove that retrieved story context improves FlowMapper output quality vs exploration-only.
-2. **Defect history retrieval** — closes the "we've seen this before" loop. Feed Jira defect fields into retrieval index alongside stories.
-3. **Provenance output** — every generated test YAML carries `# source: JIRA-123, defect-history:checkout` comments.
-4. **Confluence + OpenAPI connectors** — broader context, higher coverage quality.
-5. **Closed-loop learning** — test outcomes feed back into knowledge index as weighted signals.
-6. **Permission-aware retrieval** — required before any multi-tenant or enterprise SaaS deployment.
-7. **Agentic monitoring** — production anomaly detection triggers autonomous test probe generation.
+```bash
+# Build / refresh the knowledge index
+aiqa knowledge ingest --jira SCRUM
+
+# Output:
+#   Fetched 47 stories, 23 defects
+#   Embedded 312 chunks → .aiqa/knowledge/index/
+#   Health: GOOD (312 chunks, avg age 3 days)
+
+# Check index health without re-ingesting
+aiqa knowledge status
+
+# Output:
+#   Source      Chunks   Last ingested   Status
+#   jira        312      2026-05-19      GOOD
+#   Total       312      avg age 3 days  GOOD
+
+# Generate with RAG (automatic if knowledge.enabled = true and index exists)
+aiqa generate --out my-app --jira SCRUM
+#   Retrieved 5 chunks for "checkout" (SCRUM-12, SCRUM-34, SCRUM-41)
+#   Generated 8 scenarios (vs 5 without RAG)
+```
 
 ---
 
-*This document is a strategic vision record. It does not represent committed scope.*
-*Revisit after EPIC-12 (Impact Filter) and EPIC-Jira-Full (full Jira/Slack/Email integration) are complete.*
+## What Generated YAML Looks Like
+
+```yaml
+# Without RAG
+test:
+  name: "Checkout — place order"
+  steps:
+    - navigate: "/checkout"
+    - click: "Place Order"
+    - assert:
+        text: "Order confirmed"
+
+# With RAG
+test:
+  name: "Checkout — coupon validation before loyalty points"
+  source: [SCRUM-12, SCRUM-34]
+  steps:
+    - navigate: "/checkout"
+    - fill: { field: "Coupon code", value: "INVALID" }
+    - assert:
+        text: "Invalid coupon"
+    - fill: { field: "Coupon code", value: "SAVE10" }
+    - click: "Apply"
+    - assert:
+        text: "Loyalty points applied after coupon"
+```
+
+---
+
+## Five Architectural Decisions (agreed 2026-05-19)
+
+### 1. Hybrid Retrieval (Phase 2)
+Phase 1 ships cosine-only. `Reranker` is injectable so Phase 2 upgrades without changing callers:
+- `score = (0.6 × semantic) + (0.2 × recency) + (0.1 × severity) + (0.1 × sourceWeight)`
+- All metadata needed for this formula is stored in Phase 1 chunks — no schema migration
+
+### 2. Smart Chunking (Phase 2)
+Phase 1 ships `NaiveChunker`. `Chunker` is injectable so Phase 2 upgrades without changing connectors:
+- `ACChunker` — one chunk per AC bullet (more precise retrieval)
+- `SemanticChunker` — LLM-assisted boundary detection (Phase 3)
+
+### 3. Feedback Learning Loop (Phase 2)
+`KnowledgeStore.feedback(sourceId, outcome)` is a stub in Phase 1. Phase 2 activates it:
+- `TestRunner` calls `feedback()` after each test run
+- Failed/flaky sources gain confidence → rank higher in retrieval
+- Passed sources that never catch bugs slowly decay → rank lower
+- Confidence scores feed into the hybrid reranker (decision 1)
+
+### 4. Retrieval Beyond Generation (Phase 2)
+`KnowledgeRetriever` is standalone — not coupled to `FlowMapper`. Any component can inject it:
+- `HealerAgent` — "is this selector brittle based on past defects?"
+- `JudgeHandler` — "is this LLM output consistent with known AC?"
+- `ImpactMapper` — "what Jira stories does this git change touch?"
+- `ReadinessScorer` — "what risk areas have P1 defect history?"
+
+### 5. Knowledge Graph (Phase 3)
+`relations[]` is present on every chunk in Phase 1 (empty array). Phase 3 adds:
+- `GraphEnricher` post-retrieval step — expands chunks by one-hop traversal
+- Multi-hop reasoning: story ↔ defect ↔ API ↔ test ↔ production incident
+- Permission-aware retrieval (required for multi-tenant SaaS)
+
+---
+
+## Knowledge Sources Roadmap
+
+| Source | Connector | Phase |
+|--------|-----------|-------|
+| Jira Stories + Defects | `JiraConnector` | ✅ Phase 1 |
+| Confluence Pages | `ConfluenceConnector` | Phase 2 |
+| OpenAPI / Postman | `OpenAPIConnector` | Phase 2 |
+| Git history | `GitConnector` | Phase 2 |
+| Production RCAs | `JiraConnector` (defect type) | Phase 1 (via defects) |
+| Xray / Zephyr | `XrayConnector` | Phase 3 |
+| AIQA run history | Internal feedback loop | Phase 2 |
+
+---
+
+## Enterprise Non-Negotiables
+
+1. **On-premise deployment** — `@xenova/transformers` + `vectra` run fully air-gapped. No cloud dependency.
+2. **Permission inheritance** — future: knowledge from restricted sources must not leak across team boundaries
+3. **Provenance / audit trail** — every generated test carries `source: [SCRUM-12, SCRUM-34]`
+4. **Knowledge health score** — `GOOD` / `WARN` / `STALE` / `EMPTY` surfaced in CLI before generation
+5. **Connector plugin architecture** — new connectors implement one interface, zero core changes
+
+---
+
+## Definition of Done — Phase 1
+
+- [ ] `aiqa knowledge ingest --jira SCRUM` builds index from real Jira (SCRUM project)
+- [ ] `aiqa knowledge status` prints health score + source breakdown
+- [ ] `aiqa generate` with `knowledge.enabled: true` produces YAML with `source:` fields
+- [ ] `FlowMapper` generates more edge-case flows with RAG than without (manual comparison)
+- [ ] All 38 knowledge tests pass (no real model download in CI — `StubEmbedder`)
+- [ ] `tsc --noEmit` clean
+- [ ] CI pipeline passes
+
+---
+
+*Phase 2 and Phase 3 are parked. Return to them after Phase 1 is stable and proven.*

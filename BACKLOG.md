@@ -341,6 +341,66 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
+## Phase 4 — Knowledge Layer `[NEXT — EPIC-RAG]`
+> Give AIQA organisational memory — tests generated from UI exploration AND historical knowledge
+
+### EPIC-RAG · RAG Knowledge Layer
+
+**Unlock conditions met:** EPIC-12 Impact Filter ✅ · EPIC-10 Jira Full Integration ✅ · EPIC-13 CLI/UX Polish ✅
+
+**Zero-cost stack:** `@xenova/transformers` (local embeddings, no API key) · `vectra` (local JSON vector index, no server)
+
+**Architecture principles agreed:**
+- Hybrid retrieval (Phase 1: cosine-only; Phase 2: semantic + recency + severity + source weight)
+- Injectable `Chunker` interface (Phase 1: NaiveChunker; Phase 2: AC-aware; Phase 3: semantic)
+- Injectable `Reranker` interface (Phase 1: cosine; Phase 2: multi-signal)
+- `KnowledgeStore.feedback()` stub from day 1 — feedback learning loop activates in Phase 2
+- `relations[]` on every chunk from day 1 — Knowledge Graph traversal activates in Phase 3
+- `KnowledgeRetriever` is standalone — any component (Healer, Judge, ImpactMapper) can use it
+
+#### Phase 1 — Jira-only, prove value
+
+| ID | Story | Status |
+|---|---|---|
+| RAG-1 | Data types: `KnowledgeChunk` (text, sourceId, sourceName, type, tags, severity, version, confidence, relations[], ingestedAt), `RetrievedChunk` (+score), `KnowledgeConfig` | [ ] |
+| RAG-2 | `Embedder` — lazy-loads `all-MiniLM-L6-v2` locally via `@xenova/transformers`; `embed(text): Promise<number[]>`; injectable `IEmbedder` interface; `StubEmbedder` for CI (no model download) | [ ] |
+| RAG-3 | `VectorIndex` — wraps `vectra` `LocalIndex`; `add`, `search(vector, topK)`, `clear`, `save`, `load`; stores to `indexPath` | [ ] |
+| RAG-4 | `KnowledgeStore` — combines `IEmbedder` + `VectorIndex`; `ingest(chunks[])`, `retrieve(query, topK)`, `feedback(sourceId, outcome)` stub | [ ] |
+| RAG-5 | `Chunker` interface + `NaiveChunker` (max 2000 chars, config-driven via `knowledge.chunker`) | [ ] |
+| RAG-6 | `Reranker` interface + `CosineSimilarityReranker` (Phase 1 default); pluggable for hybrid in Phase 2 | [ ] |
+| RAG-7 | `KnowledgeConnector` interface: `{ name: string; fetch(): Promise<KnowledgeChunk[]> }` — all connectors implement this | [ ] |
+| RAG-8 | `JiraConnector` — uses existing `JiraClient` (injectable transport); fetches stories + defects; ADF → plain text; maps severity/tags | [ ] |
+| RAG-9 | `KnowledgeIngester` — runs configured connectors, deduplicates by `sourceId`, calls `KnowledgeStore.ingest()`, writes `meta.json` | [ ] |
+| RAG-10 | `KnowledgeRetriever` — standalone service; loads index from disk; `retrieve(query, topK)`; returns `[]` gracefully if index missing | [ ] |
+| RAG-11 | `HealthScorer` — reads `meta.json`; returns `GOOD` / `WARN` (>14 days) / `STALE` (>30 days) / `EMPTY`; chunk count + source breakdown | [ ] |
+| RAG-12 | Config: `knowledge:` block in `ConfigLoader` Zod schema + all three env YAMLs; `enabled`, `indexPath`, `topK`, `chunker`, `connectors[]` | [ ] |
+| RAG-13 | CLI: `aiqa knowledge ingest [--jira KEY] [--env ENV]` — progress output, health score after | [ ] |
+| RAG-14 | CLI: `aiqa knowledge status` — chunk count, sources, avg age, health score table | [ ] |
+| RAG-15 | Wire `KnowledgeRetriever` into `FlowMapper.map()` — retrieve per-flow context, inject as extra LLM prompt context | [ ] |
+| RAG-16 | Wire `KnowledgeRetriever` into `ScenarioGenerator.generate()` — inject chunks into scenario generation prompt | [ ] |
+| RAG-17 | `source?: string[]` in `TestDefinition` DSL — DSL parser reads it, `ScenarioGenerator` writes it, `aiqa list` shows it | [ ] |
+| RAG-18 | Tests: `Embedder` (StubEmbedder — no model download), `VectorIndex`, `KnowledgeStore` — ~15 tests | [ ] |
+| RAG-19 | Tests: `JiraConnector` — injectable transport, same pattern as `jira.test.ts` — ~10 tests | [ ] |
+| RAG-20 | Tests: `KnowledgeIngester`, `KnowledgeRetriever`, `HealthScorer` — ~8 tests | [ ] |
+| RAG-21 | Tests: `FlowMapper` with RAG context — verify chunks appear in LLM prompt, output unchanged without RAG — ~5 tests | [ ] |
+| RAG-22 | Connector stubs: `ConfluenceConnector`, `OpenAPIConnector`, `GitConnector` — interface only, not implemented | [ ] |
+| RAG-23 | Docs: BACKLOG, README, VISION, PROGRESS, RAG_KNOWLEDGE_LAYER.md | [ ] |
+
+#### Phase 2 — Hybrid retrieval + feedback loop (future)
+- `HybridReranker` — score = (0.6 × semantic) + (0.2 × recency) + (0.1 × severity) + (0.1 × sourceWeight)
+- `ACChunker` — one chunk per AC bullet instead of per story
+- `KnowledgeStore.feedback()` activated — execution outcomes update `confidence` scores
+- Retrieval consumers: `HealerAgent`, `JudgeHandler`, `ImpactMapper`, `ReadinessScorer`
+- `ConfluenceConnector`, `OpenAPIConnector`, `GitConnector` — full implementation
+
+#### Phase 3 — Knowledge Graph (future)
+- `GraphEnricher` — expands retrieved chunks by traversing `relations[]` one hop
+- Multi-hop reasoning: story ↔ defect ↔ API ↔ test ↔ production incident
+- `SemanticChunker` — LLM-assisted boundary detection
+- Permission-aware retrieval — source ACL inherited (required for multi-tenant SaaS)
+
+---
+
 ## Phase 5 — GenAI Testing `[UNIQUE CAPABILITY]`
 > Test AI systems the same way we test web apps
 
@@ -411,10 +471,11 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | Phase 3 — Coverage | 3 | 13 | ✅ DONE | Full-stack testing in one YAML |
 | Pre-Phase 4 Hardening | — | 8 | ✅ DONE | Concurrency safety + production hardening |
 | Phase 4 — Product Surface | 4 | 30 | ✅ DONE | API layer + Chrome Extension + Portal |
-| Phase 4 — Enterprise (partial) | 4 | 20 | ▶ 9/20 done | Jira full ✅, reports ✅, CI impact filter ✅, CLI polish ✅ |
+| Phase 4 — Enterprise | 4 | 20 | ✅ DONE | Jira full ✅, reports ✅, CI impact filter ✅, CLI polish ✅ |
+| Phase 4 — Knowledge Layer | 1 | 23 | ▶ NEXT | RAG — organisational memory, Jira-first |
 | Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **25+** | **116+** | | |
+| **Total** | **26+** | **139+** | | |
 
-**Next up: EPIC-11.1 Allure reporter.**
+**Next up: EPIC-RAG · RAG Knowledge Layer (Phase 1 — Jira connector, local embeddings, FlowMapper wiring).**
