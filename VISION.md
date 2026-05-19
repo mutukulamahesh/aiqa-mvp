@@ -126,7 +126,7 @@ No code. No imports. No framework knowledge required.
 
 ## Current State
 
-The platform is production-ready across all core layers. ~93% of the full vision is implemented.
+The platform is production-ready across all core layers. ~95% of the full vision is implemented.
 
 | Component | Status |
 |---|---|
@@ -148,13 +148,13 @@ The platform is production-ready across all core layers. ~93% of the full vision
 | REST + WebSocket API (14 endpoints + 1 WS stream) | ✅ Done |
 | Web Portal (Dashboard, Tests, Runs, RunDetail, Orchestrate) | ✅ Done |
 | Chrome Extension (zero-setup, CDP-based) | ✅ Done |
-| Jira integration (story → test generation) | 🔧 Partial (skeleton exists) |
+| Jira integration (AC extraction, bug creation + screenshot, sprint filter, Xray sync) | ✅ Done |
 | Allure reporter | ⬜ Planned |
 | AI application testing (LLM eval, agentic workflows) | ⬜ Planned |
 | Desktop automation + vision | ⬜ Planned |
 | SaaS / multi-tenant | ⬜ Planned |
 
-**572 tests passing** · TypeScript strict · Zero known security issues
+**582 tests passing** · TypeScript strict · Zero known security issues
 
 ---
 

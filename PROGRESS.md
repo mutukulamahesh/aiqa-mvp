@@ -1,7 +1,7 @@
 # AIQA — Progress Report
 
-> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-18
-> Platform alignment: **~93%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-12 + EPIC-3 + EPIC-5: **DONE**
+> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-19
+> Platform alignment: **~95%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-10 + EPIC-12 + EPIC-3 + EPIC-5: **DONE**
 
 ---
 
@@ -1045,3 +1045,70 @@ Spinner (4), DslParser integration (4), completion script logic (3), init folder
 | Shell completion | ❌ None | ✅ bash + zsh |
 | Spinner UX | ❌ Raw output | ✅ TTY-aware spinner in explore + doctor |
 | Vision alignment | ~90% | **~93%** |
+
+---
+
+## EPIC-10 — Jira Full Integration ✅ DONE (2026-05-19)
+
+Completes the Jira integration layer — AIQA now reads stories from Jira, creates bugs for failures with screenshots attached, and syncs results to Xray. Verified end-to-end: real bug SCRUM-1 created on `aiqajira.atlassian.net`.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/integrations/JiraClient.ts` | Added `attachFile()` — multipart/form-data upload to `/attachments` endpoint with 30s timeout, 50 MB size cap, sanitised filename, cryptographic boundary |
+| `src/integrations/JiraAdapter.ts` | `extractAcceptanceCriteria()` — parses ADF `bulletList`/`orderedList`/`taskList` under "Acceptance Criteria" heading; falls back to all list items; handles plain-text `customfield_10016`. `fetchStories(projectKey, sprintId)` — sprint JQL filter. `pushResults()` — attaches screenshot to newly created bugs |
+| `src/runner/TestRunner.ts` | `screenshotPath?` added to `TestResult` — first failure screenshot propagated from `StepResult` |
+| `src/cli.ts` | `generate --sprint <id>` — filter Jira stories by sprint. `--jira-defects` passes `screenshotPath` through to bug creation. `jira-sync` dry-run prints screenshot path |
+| `config/environments/*.yaml` | `api.allowlist` added to all three env configs — fixes CI pipeline blocked by SSRF guard for 5 merges |
+
+### Key behaviour
+
+**Acceptance criteria extraction (10.1)**
+- Scans ADF document for a heading matching `acceptance.crit` or `^ac[:\s]` (case-insensitive)
+- Extracts list items under that heading, stopping at the next heading — items under "Notes" or other sections are not included
+- Falls back to all list items in the document when no AC heading is present
+- Also reads `customfield_10016` (Jira's dedicated AC field) — plain-text with bullet prefix stripping
+
+**Sprint filter (10.2)**
+- `aiqa generate --jira SCRUM --sprint 42` — adds `sprint = "42"` JQL clause via `jqlString()` (injection-safe)
+- Sprint omitted → no sprint clause, fetches all stories in project
+
+**Screenshot attachment (10.3)**
+- `TestResult.screenshotPath` captures the local path of the first failure screenshot
+- `JiraClient.attachFile()` uploads it to the Jira bug via multipart/form-data
+- Non-fatal: if attachment fails, the bug is already created — warning is logged and `pushResults` continues
+- Size cap: 50 MB enforced via `fs.statSync` before `readFileSync` (consistent with screenshots API route)
+
+**Xray sync (10.4)**
+- `syncXrayResults()` was already complete — no changes needed
+
+**CI pipeline fix**
+- Root cause: `api.allowlist: []` (empty = block all) applied by Zod default even when no `api:` key in YAML
+- Fixed by adding explicit `api.allowlist` to `dev.yaml`, `staging.yaml`, `prod.yaml`
+- `jsonplaceholder.typicode.com` added to staging allowlist — unblocks the smoke test that failed 5 consecutive CI runs
+- Fixed misleading comment in `ConfigLoader.ts` ("allow all" → "block all")
+
+### Tests — `tests/jira/jira.test.ts` (30 tests)
+
+| Suite | Tests |
+|---|---|
+| `JiraClient` | 6 — searchIssues, createIssue, HTTP 4xx, addComment, getTransitions, auth header |
+| `JiraAdapter — mock mode` | 5 — fetchStories, pushResults (pass/fail/mock) |
+| `JiraAdapter — real client` | 11 — fetchStories priority, pushResults create/skip/dedup/partial-fail/ADF/labels/search-fallback |
+| `JiraClient — attachFile` | 2 — multipart headers, 50 MB size cap rejection |
+| `pushResults — screenshot attach` | 1 — attachment called after bug creation |
+| `AC extraction` | 4 — bulletList, heading-scoped, customfield_10016 plain text, no-list fallback |
+| `Sprint filter` | 2 — sprint clause present/absent in JQL |
+
+---
+
+## Platform Metrics — After EPIC-10
+
+| Metric | After EPIC-3/5/12 | Now (2026-05-19) |
+|---|---|---|
+| Tests passing | 572 | **582** |
+| Jira integration | Skeleton (mock only) | ✅ **Full** — AC extraction, screenshot attach, sprint filter, real bugs created |
+| CI pipeline | ❌ Failing (5 runs) | ✅ **Fixed** — SSRF allowlist unblocks smoke tests |
+| Jira project | AIQA (invalid) | **SCRUM** (verified — SCRUM-1 created live) |
+| Vision alignment | ~93% | **~95%** |

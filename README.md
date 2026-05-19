@@ -28,6 +28,7 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
 - **Chrome Extension** — test any app from the browser, no CLI or YAML needed
 - **Shell completion** — `aiqa completion bash|zsh` generates tab-completion scripts for your shell
+- **Jira integration** — auto-creates bugs for failed tests with screenshots attached; reads stories and converts them to test scenarios; filters by sprint; deduplicates: re-failures add comments rather than creating new issues
 
 ---
 
@@ -255,7 +256,37 @@ Options:
 - `--out <folder>` — project folder; reads `<folder>/exploration.json`, writes to `<folder>/tests/`
 - `--output <dir>` — explicit output directory
 - `--per-page` — one test file per discovered page instead of per flow
-- `--jira <projectKey>` — also pull mock Jira stories and generate scenarios
+- `--jira <projectKey>` — also pull Jira stories and generate scenarios (reads `JIRA_API_TOKEN` from env)
+- `--sprint <id>` — filter Jira stories by sprint ID or name (used with `--jira`)
+
+---
+
+### `aiqa jira-sync <results.json>` — Push failures to Jira
+
+Creates a Jira bug for every failed test. Deduplicates: if a bug with the same fingerprint already exists, adds a comment instead. Attaches the failure screenshot automatically.
+
+```bash
+npx aiqa jira-sync results/run-2026-05-19.json --project SCRUM
+npx aiqa jira-sync results/run-2026-05-19.json --project SCRUM --dry-run
+npx aiqa jira-sync results/run-2026-05-19.json --project SCRUM --xray SCRUM-99
+```
+
+Options:
+- `--project <key>` — Jira project key (overrides `jira.projectKey` in config)
+- `--dry-run` — preview what would be created without making any Jira calls
+- `--xray <executionKey>` — also sync pass/fail outcomes to an Xray test execution record
+
+Required env var: `JIRA_API_TOKEN` — your Atlassian API token (never commit it).
+
+Required config (`config/environments/<env>.yaml`):
+```yaml
+jira:
+  baseUrl:    https://yourorg.atlassian.net
+  projectKey: SCRUM
+  email:      you@example.com
+```
+
+`run-all` also accepts `--jira-defects` to create bugs inline during a run — no separate `jira-sync` step needed.
 
 ---
 
@@ -773,7 +804,8 @@ src/
     TestCaseTranslator.ts ← LLM-based translation to AIQA YAML
     ImportOrchestrator.ts ← Selects importer by file type, runs translation
   integrations/
-    JiraAdapter.ts        ← Jira story → flow converter
+    JiraClient.ts         ← Jira REST HTTP client (injectable transport for testing)
+    JiraAdapter.ts        ← AC extraction, story→flow, bug creation, screenshot attachment
   impact/
     GitDiffParser.ts      ← Parses `git diff --name-only` output into changed file list
     ImpactMapper.ts       ← Maps changed files → affected YAML tests (tag + path matching)

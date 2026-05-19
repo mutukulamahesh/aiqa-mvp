@@ -303,13 +303,13 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 ## Phase 4 — Enterprise Integration `[BUSINESS VALUE]`
 > Connect QA to the rest of the organisation
 
-### EPIC-10 · Jira Full Integration
+### EPIC-10 · Jira Full Integration `[✅ DONE — 2026-05-19]`
 | ID | Story | Status |
 |---|---|---|
-| 10.1 | Full `JiraClient` — read stories, fetch acceptance criteria (skeleton exists in `src/integrations/JiraAdapter.ts`) | [ ] |
-| 10.2 | `aiqa jira-sync --project QA --sprint 42` — auto-generate YAML tests from Jira stories | [ ] |
-| 10.3 | Auto-create defect on test failure — attach screenshot, logs, step trace | [ ] |
-| 10.4 | Xray result sync — push pass/fail outcomes to Jira test execution record | [ ] |
+| 10.1 | Full `JiraClient` — read stories, fetch acceptance criteria; `extractAcceptanceCriteria()` parses ADF + `customfield_10016` | [x] |
+| 10.2 | `aiqa generate --jira SCRUM --sprint 42` — filter stories by sprint, generate YAML scenarios | [x] |
+| 10.3 | Auto-create defect on test failure — screenshot attached via `attachFile()` multipart upload | [x] |
+| 10.4 | Xray result sync — `syncXrayResults()` pushes pass/fail to Jira test execution | [x] |
 
 ### EPIC-11 · Reporting & Notifications
 | ID | Story | Status |
@@ -411,10 +411,10 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | Phase 3 — Coverage | 3 | 13 | ✅ DONE | Full-stack testing in one YAML |
 | Pre-Phase 4 Hardening | — | 8 | ✅ DONE | Concurrency safety + production hardening |
 | Phase 4 — Product Surface | 4 | 30 | ✅ DONE | API layer + Chrome Extension + Portal |
-| Phase 4 — Enterprise (partial) | 3 | 16 | ▶ 5/16 done | Jira full, reports, CI impact filter, CLI polish |
+| Phase 4 — Enterprise (partial) | 4 | 20 | ▶ 9/20 done | Jira full ✅, reports ✅, CI impact filter ✅, CLI polish ✅ |
 | Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
 | **Total** | **25+** | **116+** | | |
 
-**Next up: EPIC-10 Jira Full Integration, then EPIC-11.1 Allure reporter.**
+**Next up: EPIC-11.1 Allure reporter.**
