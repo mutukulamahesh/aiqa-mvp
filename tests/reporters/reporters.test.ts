@@ -6,6 +6,7 @@ import { SlackNotifier, SlackRunSummary } from "../../src/reporters/SlackNotifie
 import { EmailNotifier, EmailRunSummary } from "../../src/reporters/EmailNotifier";
 import { AllureReporter } from "../../src/reporters/AllureReporter";
 import { TestResult } from "../../src/runner/TestRunner";
+import { DebugResult } from "../../src/agents/DebuggerAgent";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -378,6 +379,147 @@ describe("AllureReporter", () => {
     const dir = tmpDir();
     expect(() => new AllureReporter().generate([], dir)).not.toThrow();
     expect(fs.readdirSync(dir)).toHaveLength(0);
+  });
+
+  test("copies step screenshot into allure dir and attaches it to the step", () => {
+    const dir        = tmpDir();
+    const screensDir = tmpDir();
+    const imgPath    = path.join(screensDir, "step0.png");
+    fs.writeFileSync(imgPath, Buffer.from([0x89, 0x50, 0x4e, 0x47])); // PNG magic bytes
+
+    const result = makeResult({
+      stepResults: [
+        { index: 0, action: "navigate", passed: true, durationMs: 300, screenshotPath: imgPath },
+        { index: 1, action: "assert",   passed: true, durationMs: 100 },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    const step0 = content.steps[0];
+    expect(step0.attachments).toHaveLength(1);
+    expect(step0.attachments[0].type).toBe("image/png");
+    expect(step0.attachments[0].name).toBe("Screenshot");
+
+    const copied = path.join(dir, step0.attachments[0].source);
+    expect(fs.existsSync(copied)).toBe(true);
+  });
+
+  test("writes debug JSON attachment at test level when debugResult is present", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed:      false,
+      debugResult: { failure_class: "locator", root_cause: "button not found", suggestion: "try a different selector" } as unknown as DebugResult,
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.attachments).toHaveLength(1);
+    expect(content.attachments[0].name).toBe("Debug Analysis");
+    expect(content.attachments[0].type).toBe("application/json");
+
+    const debugFile = path.join(dir, content.attachments[0].source);
+    const debug     = JSON.parse(fs.readFileSync(debugFile, "utf-8"));
+    expect(debug.failure_class).toBe("locator");
+  });
+
+  test("failureClass label is added from debugResult.failure_class", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed:      false,
+      debugResult: { failure_class: "assertion", root_cause: "wrong text", suggestion: "" } as unknown as DebugResult,
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.labels).toContainEqual({ name: "failureClass", value: "assertion" });
+  });
+
+  test("failed step with AssertionError gets status 'failed', other errors get 'broken'", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed: false,
+      stepResults: [
+        { index: 0, action: "assert", passed: false, durationMs: 100, error: "Expected x", errorClass: "AssertionError" },
+        { index: 1, action: "click",  passed: false, durationMs: 50,  error: "Timeout",    errorClass: "TimeoutError"    },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.steps[0].status).toBe("failed");
+    expect(content.steps[1].status).toBe("broken");
+  });
+
+  test("errorClass is added as a step parameter", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed: false,
+      stepResults: [
+        { index: 0, action: "assert", passed: false, durationMs: 100, error: "mismatch", errorClass: "AssertionError" },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.steps[0].parameters).toContainEqual({ name: "errorClass", value: "AssertionError" });
+  });
+
+  test("historyId is deterministic for the same testId", () => {
+    const dir1 = tmpDir();
+    const dir2 = tmpDir();
+
+    new AllureReporter().generate([makeResult({ testId: "stable-id" })], dir1);
+    new AllureReporter().generate([makeResult({ testId: "stable-id" })], dir2);
+
+    const file1 = fs.readdirSync(dir1).find(f => f.endsWith("-result.json"))!;
+    const file2 = fs.readdirSync(dir2).find(f => f.endsWith("-result.json"))!;
+
+    const h1 = JSON.parse(fs.readFileSync(path.join(dir1, file1), "utf-8")).historyId;
+    const h2 = JSON.parse(fs.readFileSync(path.join(dir2, file2), "utf-8")).historyId;
+
+    expect(h1).toBe(h2);
+  });
+
+  test("step start/stop times are monotonically non-decreasing", () => {
+    const dir  = tmpDir();
+    new AllureReporter().generate([makeResult()], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    let prev = content.start;
+    for (const step of content.steps) {
+      expect(step.start).toBeGreaterThanOrEqual(prev);
+      expect(step.stop).toBeGreaterThanOrEqual(step.start);
+      prev = step.stop;
+    }
+    expect(content.stop).toBeGreaterThanOrEqual(prev);
+  });
+
+  test("zero-duration steps get at least 1ms to keep Allure timelines non-zero", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      stepResults: [
+        { index: 0, action: "navigate", passed: true, durationMs: 0 },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.steps[0].stop - content.steps[0].start).toBeGreaterThanOrEqual(1);
   });
 });
 

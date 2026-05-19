@@ -314,7 +314,7 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 ### EPIC-11 · Reporting & Notifications
 | ID | Story | Status |
 |---|---|---|
-| 11.1 | Allure reporter integration alongside existing HTML reporter | [ ] |
+| 11.1 | Allure reporter integration alongside existing HTML reporter | [x] |
 | 11.2 | Slack webhook — post run summary on complete or on failure, configurable channel | [x] |
 | 11.3 | Email notification — send HTML report on suite complete via nodemailer + SMTP | [x] |
 | 11.4 | Trend dashboard — pass rate over time, flakiness trends appended to `results/history.json` | [x] |
