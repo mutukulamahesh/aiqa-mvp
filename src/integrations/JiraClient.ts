@@ -23,11 +23,12 @@ export interface JiraIssue {
   id:   string;
   key:  string;
   fields: {
-    summary:   string;
-    status:    { name: string };
-    priority:  { name: string };
-    issuetype: { name: string };
-    description?: unknown;
+    summary:             string;
+    status:              { name: string };
+    priority:            { name: string };
+    issuetype:           { name: string };
+    description?:        unknown;
+    customfield_10016?:  unknown;  // Acceptance Criteria — common Jira custom field
   };
 }
 
@@ -111,6 +112,60 @@ export class JiraClient {
   /** Xray Cloud — import test execution results (requires Xray app installed). */
   async importXrayResults(execution: XrayTestExecution): Promise<void> {
     await this.request("POST", "/rest/raven/1.0/import/execution", execution);
+  }
+
+  /**
+   * Attach a local file to a Jira issue.
+   * Jira requires X-Atlassian-Token: no-check to prevent CSRF on the attachment endpoint.
+   */
+  async attachFile(issueKey: string, filePath: string): Promise<void> {
+    const fsSync  = await import("fs");
+    const pathMod = await import("path");
+
+    const fileContent = fsSync.readFileSync(filePath);
+    const filename    = pathMod.basename(filePath);
+    const boundary    = `----AIQABoundary${Date.now()}`;
+
+    const prefix  = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: application/octet-stream\r\n\r\n`,
+    );
+    const suffix  = Buffer.from(`\r\n--${boundary}--\r\n`);
+    const payload = Buffer.concat([prefix, fileContent, suffix]);
+
+    return new Promise((resolve, reject) => {
+      const url  = new URL(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/attachments`, this.base);
+      const opts = {
+        hostname: url.hostname,
+        port:     url.port ? parseInt(url.port, 10) : (url.protocol === "https:" ? 443 : 80),
+        path:     url.pathname,
+        method:   "POST",
+        headers: {
+          "Authorization":     `Basic ${this.auth}`,
+          "X-Atlassian-Token": "no-check",
+          "Content-Type":      `multipart/form-data; boundary=${boundary}`,
+          "Content-Length":    payload.length,
+        },
+      };
+
+      const req = this.transport(opts, res => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 400) {
+            const text = Buffer.concat(chunks).toString("utf-8").slice(0, 300);
+            reject(new Error(`Jira attachFile ${issueKey} → HTTP ${res.statusCode}: ${text}`));
+            return;
+          }
+          resolve();
+        });
+      });
+
+      req.on("error", reject);
+      req.write(payload);
+      req.end();
+    });
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────

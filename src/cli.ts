@@ -254,8 +254,9 @@ program
   .option("--out <folder>",    "Project folder — reads <folder>/exploration.json, writes to <folder>/tests/")
   .option("--output <dir>",    "Explicit output directory for generated YAML files")
   .option("--jira <projectKey>", "Also pull stories from Jira (mock) and generate scenarios")
+  .option("--sprint <id>",     "Filter Jira stories by sprint ID or name (used with --jira)")
   .option("--per-page",        "Generate one test file per discovered page instead of per flow")
-  .action(async (exploration: string | undefined, opts: { out?: string; output?: string; jira?: string; perPage?: boolean }) => {
+  .action(async (exploration: string | undefined, opts: { out?: string; output?: string; jira?: string; sprint?: string; perPage?: boolean }) => {
     const outRoot = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
     const explorationFile = exploration
@@ -297,9 +298,10 @@ program
       : await mapper.map(exploration_data);
 
     if (opts.jira) {
-      console.log(`   Pulling Jira stories for project: ${opts.jira}`);
+      const sprintLabel = opts.sprint ? ` sprint=${opts.sprint}` : "";
+      console.log(`   Pulling Jira stories for project: ${opts.jira}${sprintLabel}`);
       const jira      = new JiraAdapter({ useMock: true });
-      const stories   = await jira.fetchStories(opts.jira);
+      const stories   = await jira.fetchStories(opts.jira, opts.sprint);
       const jiraFlows = await jira.convertToFlows(stories);
       flows = [...flows, ...jiraFlows];
       console.log(`   Added ${jiraFlows.length} flow(s) from Jira\n`);
@@ -742,7 +744,7 @@ program
         });
         const failedResults = allResults
           .filter(r => !r.passed)
-          .map(r => ({ testName: r.testName, passed: false, error: r.error }));
+          .map(r => ({ testName: r.testName, passed: false, error: r.error, screenshotPath: r.screenshotPath }));
         if (failedResults.length === 0) {
           console.log(`   Jira  → no failures, nothing to create`);
         } else {
@@ -781,7 +783,7 @@ program
       process.exit(1);
     }
 
-    let allResults: { testName: string; passed: boolean; error?: string }[];
+    let allResults: { testName: string; passed: boolean; error?: string; screenshotPath?: string }[];
     try {
       allResults = JSON.parse(fs.readFileSync(resultsPath, "utf-8"));
     } catch (err) {
@@ -814,7 +816,8 @@ program
       console.log(`Would create ${failures.length} bug(s) in project "${projectKey}":`);
       failures.forEach((r, i) => {
         console.log(`  ${i + 1}. [AIQA] Test failed: ${r.testName}`);
-        if (r.error) console.log(`     Error: ${r.error.slice(0, 120)}`);
+        if (r.error)          console.log(`     Error:      ${r.error.slice(0, 120)}`);
+        if (r.screenshotPath) console.log(`     Screenshot: ${r.screenshotPath}`);
       });
       if (opts.xray) {
         console.log(`\nWould sync ${allResults.length} result(s) to Xray execution: ${opts.xray}`);

@@ -431,4 +431,213 @@ describe("JiraAdapter — real client (injectable transport)", () => {
     expect(summary.failed).toHaveLength(0);
     expect(createCount).toBe(1);
   });
+
+  test("attachFile — sends multipart/form-data to the attachments endpoint", async () => {
+    let capturedPath    = "";
+    let capturedHeaders: Record<string, string | number | string[]> = {};
+    const client = new JiraClient(
+      "https://test.atlassian.net",
+      "user@test.com",
+      "token123",
+      makeTransport((opts) => {
+        capturedPath    = opts.path ?? "";
+        capturedHeaders = (opts.headers ?? {}) as Record<string, string | number | string[]>;
+        return { status: 200, json: [{ id: "att-1", filename: "fail.png" }] };
+      }),
+    );
+
+    // Write a tiny temp PNG so attachFile can read a real file
+    const tmpFile = require("path").join(require("os").tmpdir(), `aiqa-test-${Date.now()}.png`);
+    require("fs").writeFileSync(tmpFile, Buffer.from([137, 80, 78, 71])); // PNG magic bytes
+    try {
+      await client.attachFile("AIQA-1", tmpFile);
+    } finally {
+      require("fs").unlinkSync(tmpFile);
+    }
+
+    expect(capturedPath).toContain("/attachments");
+    expect(String(capturedHeaders["X-Atlassian-Token"])).toBe("no-check");
+    expect(String(capturedHeaders["Content-Type"])).toContain("multipart/form-data");
+  });
+
+  test("pushResults attaches screenshot to new bug when screenshotPath provided", async () => {
+    let attachCalled = false;
+    let attachedPath = "";
+    const adapter = makeAdapterWithTransport((opts, _body) => {
+      if (opts.method === "GET")  return { status: 200, json: NO_DUPLICATES };
+      if (opts.path?.includes("/attachments")) {
+        attachCalled = true;
+        // Capture filename from Content-Type or path
+        attachedPath = opts.path;
+        return { status: 200, json: [{ id: "att-1" }] };
+      }
+      return { status: 201, json: { id: "10001", key: "AIQA-101" } };
+    });
+
+    const tmpFile = require("path").join(require("os").tmpdir(), `aiqa-ss-${Date.now()}.png`);
+    require("fs").writeFileSync(tmpFile, Buffer.from([137, 80, 78, 71]));
+    try {
+      const summary = await adapter.pushResults([
+        { testName: "Login smoke", passed: false, error: "Timeout", screenshotPath: tmpFile },
+      ]);
+      expect(summary.created).toHaveLength(1);
+      expect(attachCalled).toBe(true);
+      expect(attachedPath).toContain("/attachments");
+    } finally {
+      require("fs").unlinkSync(tmpFile);
+    }
+  });
+});
+
+// ── Acceptance criteria extraction ────────────────────────────────────────────
+
+describe("JiraAdapter — acceptance criteria extraction", () => {
+  test("extracts list items from ADF bulletList", async () => {
+    const adapter = makeAdapterWithTransport(() => ({
+      status: 200,
+      json: {
+        issues: [{
+          id: "1", key: "AIQA-1",
+          fields: {
+            summary:   "Login flow",
+            status:    { name: "To Do" },
+            priority:  { name: "High" },
+            issuetype: { name: "Story" },
+            description: {
+              type: "doc", version: 1,
+              content: [{
+                type: "bulletList",
+                content: [
+                  { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Login form is displayed" }] }] },
+                  { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Valid credentials grant access" }] }] },
+                ],
+              }],
+            },
+          },
+        }],
+        total: 1, maxResults: 50,
+      },
+    }));
+    const stories = await adapter.fetchStories();
+    expect(stories[0].acceptanceCriteria).toHaveLength(2);
+    expect(stories[0].acceptanceCriteria[0]).toBe("Login form is displayed");
+    expect(stories[0].acceptanceCriteria[1]).toBe("Valid credentials grant access");
+  });
+
+  test("extracts list items that follow an Acceptance Criteria heading", async () => {
+    const adapter = makeAdapterWithTransport(() => ({
+      status: 200,
+      json: {
+        issues: [{
+          id: "1", key: "AIQA-2",
+          fields: {
+            summary:   "Checkout flow",
+            status:    { name: "To Do" },
+            priority:  { name: "Medium" },
+            issuetype: { name: "Story" },
+            description: {
+              type: "doc", version: 1,
+              content: [
+                { type: "paragraph", content: [{ type: "text", text: "Background description here." }] },
+                { type: "heading",   attrs: { level: 2 }, content: [{ type: "text", text: "Acceptance Criteria" }] },
+                {
+                  type: "bulletList",
+                  content: [
+                    { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Cart shows item count" }] }] },
+                    { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Checkout button is enabled" }] }] },
+                  ],
+                },
+                { type: "heading",   attrs: { level: 2 }, content: [{ type: "text", text: "Notes" }] },
+                {
+                  type: "bulletList",
+                  content: [
+                    { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Should not be included" }] }] },
+                  ],
+                },
+              ],
+            },
+          },
+        }],
+        total: 1, maxResults: 50,
+      },
+    }));
+    const stories = await adapter.fetchStories();
+    expect(stories[0].acceptanceCriteria).toHaveLength(2);
+    expect(stories[0].acceptanceCriteria[0]).toBe("Cart shows item count");
+    // Items under the "Notes" heading must not bleed into AC
+    expect(stories[0].acceptanceCriteria).not.toContain("Should not be included");
+  });
+
+  test("extracts AC from plain-text customfield_10016 when present", async () => {
+    const adapter = makeAdapterWithTransport(() => ({
+      status: 200,
+      json: {
+        issues: [{
+          id: "1", key: "AIQA-3",
+          fields: {
+            summary:           "Profile page",
+            status:            { name: "To Do" },
+            priority:          { name: "Low" },
+            issuetype:         { name: "Story" },
+            description:       null,
+            customfield_10016: "- Profile loads\n- Name is displayed\n- Email is displayed",
+          },
+        }],
+        total: 1, maxResults: 50,
+      },
+    }));
+    const stories = await adapter.fetchStories();
+    expect(stories[0].acceptanceCriteria).toHaveLength(3);
+    expect(stories[0].acceptanceCriteria[0]).toBe("Profile loads");
+  });
+
+  test("returns empty AC when description has no lists and no custom field", async () => {
+    const adapter = makeAdapterWithTransport(() => ({
+      status: 200,
+      json: {
+        issues: [{
+          id: "1", key: "AIQA-4",
+          fields: {
+            summary:   "Simple story",
+            status:    { name: "To Do" },
+            priority:  { name: "Medium" },
+            issuetype: { name: "Story" },
+            description: {
+              type: "doc", version: 1,
+              content: [{ type: "paragraph", content: [{ type: "text", text: "No criteria here." }] }],
+            },
+          },
+        }],
+        total: 1, maxResults: 50,
+      },
+    }));
+    const stories = await adapter.fetchStories();
+    expect(stories[0].acceptanceCriteria).toHaveLength(0);
+  });
+});
+
+// ── Sprint filter ─────────────────────────────────────────────────────────────
+
+describe("JiraAdapter — sprint filter", () => {
+  test("fetchStories with sprintId adds sprint clause to JQL", async () => {
+    let capturedPath = "";
+    const adapter = makeAdapterWithTransport((opts) => {
+      capturedPath = opts.path ?? "";
+      return { status: 200, json: { issues: [], total: 0, maxResults: 50 } };
+    });
+
+    await adapter.fetchStories("AIQA", "42");
+    expect(decodeURIComponent(capturedPath)).toContain('sprint = "42"');
+  });
+
+  test("fetchStories without sprintId omits sprint clause", async () => {
+    let capturedPath = "";
+    const adapter = makeAdapterWithTransport((opts) => {
+      capturedPath = opts.path ?? "";
+      return { status: 200, json: { issues: [], total: 0, maxResults: 50 } };
+    });
+
+    await adapter.fetchStories("AIQA");
+    expect(decodeURIComponent(capturedPath)).not.toContain("sprint");
+  });
 });

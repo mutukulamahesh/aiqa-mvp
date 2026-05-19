@@ -24,11 +24,13 @@ export interface JiraConfig {
 }
 
 export interface PushResultItem {
-  testName: string;
-  passed:   boolean;
-  error?:   string;
+  testName:        string;
+  passed:          boolean;
+  error?:          string;
   /** Xray test issue key (e.g. AIQA-42) — populated if xraySyncEnabled */
-  testKey?: string;
+  testKey?:        string;
+  /** Absolute path to a failure screenshot — attached to the Jira bug if provided */
+  screenshotPath?: string;
 }
 
 export interface FailureRecord {
@@ -68,10 +70,12 @@ function buildDedupJql(projectKey: string, fingerprintLabel: string): string {
   );
 }
 
-/** Builds the JQL clause for fetching project stories. */
-function buildStoriesJql(projectKey: string): string {
+/** Builds the JQL clause for fetching project stories, optionally filtered by sprint. */
+function buildStoriesJql(projectKey: string, sprintId?: string): string {
+  const sprintClause = sprintId ? `AND sprint = ${jqlString(sprintId)} ` : "";
   return (
     `project = ${jqlString(projectKey)} ` +
+    sprintClause +
     `AND issuetype in (Story, Task) ` +
     `ORDER BY priority DESC`
   );
@@ -114,7 +118,7 @@ export class JiraAdapter {
 
   // ── Fetch stories ─────────────────────────────────────────────────────────
 
-  async fetchStories(projectKey?: string): Promise<JiraStory[]> {
+  async fetchStories(projectKey?: string, sprintId?: string): Promise<JiraStory[]> {
     const key = projectKey ?? this.config.projectKey ?? "DEMO";
 
     if (!this.client) {
@@ -122,8 +126,9 @@ export class JiraAdapter {
       return this.mockStories(key);
     }
 
-    const result = await this.client.searchIssues(buildStoriesJql(key), [
+    const result = await this.client.searchIssues(buildStoriesJql(key, sprintId), [
       "summary", "description", "priority", "issuetype",
+      "customfield_10016", // Acceptance Criteria — present in most Jira configurations
     ]);
     return result.issues.map(issue => this.parseIssue(issue));
   }
@@ -195,6 +200,17 @@ export class JiraAdapter {
           });
           created.push(issue.key);
           process.stderr.write(`[jira] created defect ${issue.key} for "${r.testName}"\n`);
+
+          if (r.screenshotPath) {
+            try {
+              await this.throttle();
+              await this.client.attachFile(issue.key, r.screenshotPath);
+              process.stderr.write(`[jira] attached screenshot to ${issue.key}\n`);
+            } catch (attachErr) {
+              // Non-fatal — the bug was already created; attachment failure is only a warning.
+              process.stderr.write(`[jira] screenshot attach failed for ${issue.key}: ${(attachErr as Error).message}\n`);
+            }
+          }
         }
       } catch (err) {
         const msg = (err as Error).message ?? String(err);
@@ -284,14 +300,80 @@ export class JiraAdapter {
       : rawType.includes("improve")   ? "improvement"
       : "feature";
 
+    // customfield_10016 is Jira's dedicated Acceptance Criteria field (plain text in some configs).
+    // Fall back to extracting list items from the ADF description.
+    const acFromCustomField = issue.fields.customfield_10016
+      ? this.extractAcceptanceCriteria(issue.fields.customfield_10016)
+      : [];
+    const acFromDescription = this.extractAcceptanceCriteria(issue.fields.description);
+    const acceptanceCriteria = acFromCustomField.length > 0 ? acFromCustomField : acFromDescription;
+
     return {
       id:                issue.key,
       title:             issue.fields.summary,
       description:       this.extractText(issue.fields.description) || issue.fields.summary,
-      acceptanceCriteria: [],
+      acceptanceCriteria,
       storyType,
       priority,
     };
+  }
+
+  /**
+   * Extract acceptance criteria text items from an ADF node.
+   * Looks for list items under an "Acceptance Criteria" heading first;
+   * falls back to all list items in the document if no such heading exists.
+   * Also handles plain-text AC fields (returns each non-empty line as an item).
+   */
+  private extractAcceptanceCriteria(adf: unknown): string[] {
+    if (!adf) return [];
+
+    // Plain-text custom field (some Jira configs store AC as a plain string)
+    if (typeof adf === "string") {
+      return adf.split("\n").map(l => l.replace(/^[-*•]\s*/, "").trim()).filter(Boolean);
+    }
+
+    if (typeof adf !== "object") return [];
+    const doc = adf as { type?: string; content?: unknown[] };
+    if (!Array.isArray(doc.content)) return [];
+
+    const isList = (n: unknown): boolean => {
+      const t = (n as { type?: string }).type;
+      return t === "bulletList" || t === "orderedList" || t === "taskList";
+    };
+
+    const isAcHeading = (n: unknown): boolean => {
+      const node = n as { type?: string };
+      if (node.type !== "heading") return false;
+      return /acceptance.crit|^ac[:\s]/i.test(this.extractText(node).trim());
+    };
+
+    const extractListText = (listNode: unknown): string[] => {
+      const l = listNode as { content?: unknown[] };
+      if (!Array.isArray(l.content)) return [];
+      return l.content
+        .map(item => this.extractText(item).trim())
+        .filter(s => s.length > 0);
+    };
+
+    // Prefer list items that follow an "Acceptance Criteria" heading
+    const nodes = doc.content;
+    for (let i = 0; i < nodes.length; i++) {
+      if (isAcHeading(nodes[i])) {
+        const result: string[] = [];
+        for (let j = i + 1; j < nodes.length; j++) {
+          if ((nodes[j] as { type?: string }).type === "heading") break;
+          if (isList(nodes[j])) result.push(...extractListText(nodes[j]));
+        }
+        if (result.length > 0) return result;
+      }
+    }
+
+    // Fall back: collect all list items from the document
+    const all: string[] = [];
+    for (const node of nodes) {
+      if (isList(node)) all.push(...extractListText(node));
+    }
+    return all;
   }
 
   private extractText(adf: unknown): string {
