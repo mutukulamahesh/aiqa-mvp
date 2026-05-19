@@ -40,6 +40,14 @@ llm:
   provider: mock
   fallback: []
 
+# SSRF guard — only these URL prefixes are permitted in api: steps.
+# Empty allowlist blocks all outbound API calls.
+api:
+  allowlist:
+    - "http://localhost"                      # local application API
+    - "https://jsonplaceholder.typicode.com"  # public test API used in smoke tests
+  denylist: []
+
 # Jira integration — API token stays in .env as JIRA_API_TOKEN (never commit it here).
 # Uncomment and fill in when connecting to a real Jira project.
 #

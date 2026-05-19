@@ -59,9 +59,9 @@ const EnvConfigSchema = z.object({
     maxArtifacts: z.number().int().positive().default(10),  // run artifact sets retained by --retain-runs
   }).default({ maxHistory: 200, maxArtifacts: 10 }),
 
-  // api security — empty allowlist means "allow all"; denylist is always evaluated first.
+  // api security — empty allowlist blocks ALL outbound api: calls; denylist is always checked first.
   api: z.object({
-    allowlist: z.array(z.string()).default([]),  // URL prefixes that are permitted (empty = allow all)
+    allowlist: z.array(z.string()).default([]),  // URL prefixes that are permitted (empty = block all)
     denylist:  z.array(z.string()).default([]),  // URL prefixes that are always blocked
   }).default({ allowlist: [], denylist: [] }),
 

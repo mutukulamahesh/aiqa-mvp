@@ -27,6 +27,15 @@ results:
 features:
   llmEnabled: true
 
+# SSRF guard — only these URL prefixes are permitted in api: steps.
+# Empty allowlist blocks all outbound API calls.
+api:
+  allowlist:
+    - "https://example.com"                   # production application API base
+  denylist:
+    - "http://169.254.169.254"                # block AWS/GCP instance metadata
+    - "http://metadata.google.internal"       # block GCP metadata endpoint
+
 storage:
   maxHistory:   200
   maxArtifacts: 10
