@@ -1,5 +1,8 @@
-import * as https from "https";
-import * as http  from "http";
+import * as https  from "https";
+import * as http   from "http";
+import * as fs     from "fs";
+import * as path   from "path";
+import * as crypto from "crypto";
 
 // ── Transport type (injectable for testing) ───────────────────────────────────
 
@@ -119,12 +122,21 @@ export class JiraClient {
    * Jira requires X-Atlassian-Token: no-check to prevent CSRF on the attachment endpoint.
    */
   async attachFile(issueKey: string, filePath: string): Promise<void> {
-    const fsSync  = await import("fs");
-    const pathMod = await import("path");
+    // M-2: Enforce a 50 MB size cap before loading into memory, consistent with
+    // the screenshots API route. Prevents unexpectedly large files from OOM-ing the process.
+    const MAX_BYTES = 50 * 1024 * 1024;
+    const stat = fs.statSync(filePath);
+    if (stat.size > MAX_BYTES) {
+      throw new Error(
+        `attachFile: ${filePath} is ${stat.size} bytes — exceeds 50 MB limit. Skipping attachment.`,
+      );
+    }
 
-    const fileContent = fsSync.readFileSync(filePath);
-    const filename    = pathMod.basename(filePath);
-    const boundary    = `----AIQABoundary${Date.now()}`;
+    const fileContent = fs.readFileSync(filePath);
+    // L-1: Strip double-quotes and CRLF sequences so they can't malform the Content-Disposition header.
+    const filename    = path.basename(filePath).replace(/["\r\n]/g, "_");
+    // L-2: Use cryptographically random boundary (RFC 2046 recommendation).
+    const boundary    = `----AIQABoundary${crypto.randomBytes(16).toString("hex")}`;
 
     const prefix  = Buffer.from(
       `--${boundary}\r\n` +
@@ -162,6 +174,9 @@ export class JiraClient {
         });
       });
 
+      // M-1: Apply the same 30 s request timeout used by request() so a stalled
+      // attachment upload doesn't hang pushResults silently.
+      req.setTimeout?.(30_000, () => req.destroy?.(new Error("Jira attachFile timed out after 30 s")));
       req.on("error", reject);
       req.write(payload);
       req.end();

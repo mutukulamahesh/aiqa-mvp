@@ -460,6 +460,29 @@ describe("JiraAdapter — real client (injectable transport)", () => {
     expect(String(capturedHeaders["Content-Type"])).toContain("multipart/form-data");
   });
 
+  test("attachFile — rejects files larger than 50 MB before reading them", async () => {
+    const client = new JiraClient(
+      "https://test.atlassian.net",
+      "user@test.com",
+      "token123",
+      makeTransport(() => ({ status: 200, json: [] })),
+    );
+
+    // Create a temp file then lie about its size via a spy on fs.statSync
+    const tmpFile = require("path").join(require("os").tmpdir(), `aiqa-big-${Date.now()}.png`);
+    require("fs").writeFileSync(tmpFile, Buffer.alloc(4));
+    const fsMod = require("fs");
+    const original = fsMod.statSync;
+    fsMod.statSync = () => ({ size: 51 * 1024 * 1024 });
+
+    try {
+      await expect(client.attachFile("AIQA-1", tmpFile)).rejects.toThrow(/50 MB limit/);
+    } finally {
+      fsMod.statSync = original;
+      require("fs").unlinkSync(tmpFile);
+    }
+  });
+
   test("pushResults attaches screenshot to new bug when screenshotPath provided", async () => {
     let attachCalled = false;
     let attachedPath = "";
