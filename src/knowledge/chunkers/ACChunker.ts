@@ -12,21 +12,33 @@ const naive = new NaiveChunker();
  * Splits text into one chunk per acceptance-criteria bullet so that semantic
  * search can match individual criteria rather than a merged blob.
  *
- * Detection: if ANY line matches AC_BULLET_RE, the entire text is treated as a
- * bulleted AC block and each non-empty bullet becomes a chunk.
- * Fallback: delegates to NaiveChunker when no bullet pattern is detected.
+ * Mixed documents (summary + prose + bullets):
+ *   - Non-bullet lines are joined and emitted as a single NaiveChunker chunk
+ *     so context (summary, description) is not silently discarded.
+ *   - Each bullet line becomes its own chunk.
+ *
+ * All-prose documents (no bullets detected): delegates entirely to NaiveChunker.
  */
 export class ACChunker implements Chunker {
   chunk(text: string, metadata: ChunkMetadata): KnowledgeChunk[] {
     const trimmed = text.trim();
     if (!trimmed) return [];
 
-    const lines   = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const lines      = trimmed.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const hasBullets = lines.some(l => AC_BULLET_RE.test(l));
 
     if (!hasBullets) return naive.chunk(trimmed, metadata);
 
-    return lines
+    const results: KnowledgeChunk[] = [];
+
+    // Emit non-bullet narrative as a NaiveChunker chunk so summary/description is indexed
+    const proseLines = lines.filter(l => !AC_BULLET_RE.test(l));
+    if (proseLines.length > 0) {
+      results.push(...naive.chunk(proseLines.join("\n"), metadata));
+    }
+
+    // Emit one chunk per AC bullet
+    const bulletChunks: KnowledgeChunk[] = lines
       .filter(l => AC_BULLET_RE.test(l))
       .map(l => l.replace(AC_BULLET_RE, "").trim())
       .filter(Boolean)
@@ -43,5 +55,8 @@ export class ACChunker implements Chunker {
         relations:       [],
         ingestedAt:      new Date().toISOString(),
       }));
+
+    results.push(...bulletChunks);
+    return results;
   }
 }

@@ -12,6 +12,7 @@ import { getConfig } from "../config/ConfigLoader";
 import { AssertionError, TransientError } from "../errors";
 import { SelectorHealer } from "../healer/SelectorHealer";
 import { MemoryStore, makeStepKey } from "../memory/MemoryStore";
+import { KnowledgeStore } from "../knowledge/KnowledgeStore";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -20,6 +21,7 @@ export interface RunnerOptions {
   screenshotsDir?: string;
   healer?:         SelectorHealer;
   memory?:         MemoryStore;
+  knowledgeStore?: KnowledgeStore;  // when set, sends pass/fail/flaky signals to the RAG feedback loop
 }
 
 export interface TestResult {
@@ -83,14 +85,16 @@ function stepTarget(step: StepAction): string | undefined {
 // ── TestRunner ───────────────────────────────────────────────────────────────
 
 export class TestRunner {
-  private readonly interpreter = new StepInterpreter();
-  private readonly debugger    = new DebuggerAgent();
-  private readonly healer:  SelectorHealer;
-  private readonly memory?: MemoryStore;
+  private readonly interpreter     = new StepInterpreter();
+  private readonly debugger        = new DebuggerAgent();
+  private readonly healer:         SelectorHealer;
+  private readonly memory?:        MemoryStore;
+  private readonly knowledgeStore?: KnowledgeStore;
 
   constructor(private readonly opts: RunnerOptions) {
-    this.healer = opts.healer ?? new SelectorHealer();
-    this.memory = opts.memory;
+    this.healer         = opts.healer ?? new SelectorHealer();
+    this.memory         = opts.memory;
+    this.knowledgeStore = opts.knowledgeStore;
   }
 
   /** Returns the healer's activity report for the current runner session. */
@@ -111,6 +115,16 @@ export class TestRunner {
 
     try {
       const result = await workerStorage.run(store, () => this._runWithRetry(test, testId));
+      // Feedback loop: signal RAG index with outcome for each source ID in the test definition.
+      // passed-on-retry → flaky, pure pass → pass, any failure → fail.
+      if (this.knowledgeStore && test.source?.length) {
+        const outcome = result.passed
+          ? (result.retryCount > 0 ? "flaky" : "pass")
+          : "fail";
+        for (const sourceId of test.source) {
+          this.knowledgeStore.feedback(sourceId, outcome).catch(() => { /* never block the run */ });
+        }
+      }
       return result;
     } finally {
       if (!onEvent && store.logs.length) {

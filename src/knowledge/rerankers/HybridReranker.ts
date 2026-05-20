@@ -63,10 +63,11 @@ export class HybridReranker implements Reranker {
     const severity      = SEVERITY_SCORE[c.severity ?? ""] ?? 0.5;
     const connectorWt   = Math.max(0, this.connectorWeights[c.sourceName] ?? 1.0);
 
-    return semanticWeight * semantic
-         + recencyWeight  * recency
-         + severityWeight * severity
-         + sourceWeight   * connectorWt;
+    const raw = semanticWeight * semantic
+              + recencyWeight  * recency
+              + severityWeight * severity
+              + sourceWeight   * connectorWt;
+    return Math.min(1, Math.max(0, raw));
   }
 
   private recencyScore(c: RetrievedChunk, now: number): number {

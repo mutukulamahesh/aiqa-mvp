@@ -364,6 +364,15 @@ describe("HybridReranker", () => {
   test("empty candidates returns empty array", () => {
     expect(new HybridReranker().rerank([])).toEqual([]);
   });
+
+  test("final score is clamped to [0,1] even with connectorWeight > 1.0", () => {
+    // connectorWeight = 3.0 would push raw score > 1.0 without clamping
+    const reranker = new HybridReranker({}, { jira: 3.0 });
+    const chunk = makeRC({ score: 1.0, severity: "critical", sourceName: "jira", ingestedAt: freshDate });
+    const [result] = reranker.rerank([chunk]);
+    expect(result.score).toBeLessThanOrEqual(1.0);
+    expect(result.score).toBeGreaterThanOrEqual(0.0);
+  });
 });
 
 // ── ACChunker ─────────────────────────────────────────────────────────────────
@@ -411,6 +420,23 @@ describe("ACChunker", () => {
     const text = "• Accept Google Pay\n* Accept Apple Pay";
     const chunks = chunker.chunk(text, meta);
     expect(chunks).toHaveLength(2);
+  });
+
+  test("mixed document preserves prose alongside AC bullets", () => {
+    // Simulates a real Jira issue: summary line + description + AC bullets
+    const text = [
+      "[SCRUM-10] User can apply coupon at checkout",
+      "Coupon validation flow is required by the spec.",
+      "- Coupon validated before loyalty points",
+      "- Expired coupon shows error",
+    ].join("\n");
+    const chunks = chunker.chunk(text, meta);
+    // At least 2 bullet chunks + 1 prose chunk
+    expect(chunks.length).toBeGreaterThanOrEqual(3);
+    const bulletTexts = chunks.map(c => c.text);
+    expect(bulletTexts.some(t => t.includes("Coupon validated before loyalty points"))).toBe(true);
+    // Prose (summary/description) must not be discarded
+    expect(bulletTexts.some(t => t.includes("SCRUM-10") || t.includes("Coupon validation flow"))).toBe(true);
   });
 });
 
