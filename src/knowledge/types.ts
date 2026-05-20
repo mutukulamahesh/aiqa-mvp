@@ -1,14 +1,15 @@
 export interface KnowledgeChunk {
-  text:       string;
-  sourceId:   string;                                        // e.g. "SCRUM-42"
-  sourceName: string;                                        // e.g. "jira"
-  type:       "story" | "defect" | "page" | "api" | "git";
-  tags:       string[];
-  severity?:  "critical" | "high" | "medium" | "low";
-  version?:   string;
-  confidence: number;                                        // 1.0 default; feedback loop updates
-  relations:  { type: string; targetId: string }[];          // Knowledge Graph — empty Phase 1
-  ingestedAt: string;                                        // ISO date
+  text:             string;
+  sourceId:         string;                                        // e.g. "SCRUM-42"
+  sourceName:       string;                                        // e.g. "jira"
+  type:             "story" | "defect" | "page" | "api" | "git";
+  tags:             string[];
+  severity?:        "critical" | "high" | "medium" | "low";
+  version?:         string;
+  confidence:       number;                                        // 1.0 default; feedback loop updates
+  relations:        { type: string; targetId: string }[];          // Knowledge Graph — empty Phase 1
+  ingestedAt:       string;                                        // ISO date
+  sourceUpdatedAt?: string;                                        // ISO date from source system; recency signal for HybridReranker
 }
 
 export interface RetrievedChunk extends KnowledgeChunk {
@@ -21,12 +22,14 @@ export interface KnowledgeConnectorConfig {
   acField?:     string;   // jira — custom field ID for Acceptance Criteria
   spaceKey?:    string;   // confluence
   url?:         string;   // openapi
+  weight?:      number;   // HybridReranker source weight (default 1.0)
 }
 
 export interface KnowledgeConfig {
   enabled:    boolean;
   indexPath:  string;
   topK:       number;
-  chunker:    "naive";                        // Phase 2: "ac-aware" | "semantic"
+  chunker:    "naive" | "ac-aware";
+  reranker:   "cosine" | "hybrid";
   connectors: KnowledgeConnectorConfig[];
 }

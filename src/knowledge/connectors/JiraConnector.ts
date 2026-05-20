@@ -2,6 +2,7 @@ import { JiraClient, JiraIssue, HttpTransport } from "../../integrations/JiraCli
 import { jqlString } from "../../integrations/JiraAdapter";
 import { KnowledgeChunk } from "../types";
 import { KnowledgeConnector } from "./KnowledgeConnector";
+import { Chunker } from "../chunkers/Chunker";
 import { NaiveChunker } from "../chunkers/NaiveChunker";
 
 const JIRA_SEVERITY: Record<string, KnowledgeChunk["severity"]> = {
@@ -19,7 +20,7 @@ export class JiraConnector implements KnowledgeConnector {
   private client:     JiraClient;
   private projectKey: string;
   private acField:    string;
-  private chunker:    NaiveChunker;
+  private chunker:    Chunker;
 
   constructor(opts: {
     baseUrl:    string;
@@ -27,18 +28,19 @@ export class JiraConnector implements KnowledgeConnector {
     apiToken:   string;
     projectKey: string;
     acField?:   string;   // Jira custom field ID for Acceptance Criteria (default: customfield_10016)
+    chunker?:   Chunker;  // injectable — defaults to NaiveChunker; pass ACChunker when chunker: "ac-aware"
     transport?: HttpTransport;
   }) {
     this.client     = new JiraClient(opts.baseUrl, opts.email, opts.apiToken, opts.transport);
     this.projectKey = opts.projectKey;
     this.acField    = opts.acField ?? "customfield_10016";
-    this.chunker    = new NaiveChunker();
+    this.chunker    = opts.chunker ?? new NaiveChunker();
   }
 
   async fetch(): Promise<KnowledgeChunk[]> {
     const chunks: KnowledgeChunk[] = [];
 
-    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", this.acField];
+    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", "updated", this.acField];
 
     // Fetch stories + tasks — paginated so large backlogs are fully ingested
     const storiesResult = await this.client.searchAllIssues(
@@ -82,12 +84,13 @@ export class JiraConnector implements KnowledgeConnector {
     if (!text) return [];
 
     return this.chunker.chunk(text, {
-      sourceId:   issue.key,
-      sourceName: this.name,
+      sourceId:        issue.key,
+      sourceName:      this.name,
       type,
-      tags:       labels,
-      severity:   JIRA_SEVERITY[priority],
-      version:    fixVer,
+      tags:            labels,
+      severity:        JIRA_SEVERITY[priority],
+      version:         fixVer,
+      sourceUpdatedAt: fields.updated,
     });
   }
 

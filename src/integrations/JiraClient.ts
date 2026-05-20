@@ -32,6 +32,7 @@ export interface JiraIssue {
     issuetype:           { name: string };
     labels?:             string[];
     fixVersions?:        Array<{ name: string }>;
+    updated?:            string;   // ISO date — last modified timestamp from Jira
     description?:        unknown;
     customfield_10016?:  unknown;  // Acceptance Criteria — common Jira custom field
   };

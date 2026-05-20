@@ -310,7 +310,15 @@ program
         } else if (health.status === "STALE") {
           console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
         }
-        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath });
+        // Build source weight map for HybridReranker: sourceName → weight
+        const sourceWeights: Record<string, number> = {};
+        for (const c of kCfg.connectors) {
+          if (c.weight !== undefined) sourceWeights[c.type] = c.weight;
+        }
+        const reranker = kCfg.reranker === "hybrid"
+          ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(sourceWeights)
+          : undefined; // undefined → KnowledgeStore uses CosineSimilarityReranker default
+        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath, reranker });
         const retriever = new KnowledgeRetriever(store, kCfg.topK);
         // Build query from page vocabulary; cap at 800 chars (≈256 tokens for all-MiniLM-L6-v2)
         const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
@@ -1465,9 +1473,25 @@ knowledgeCmd
     console.log(`   Index   : ${indexPath}`);
     console.log(`─────────────────────────────────────────\n`);
 
-    const store     = new KnowledgeStore({ indexPath });
-    const acField   = knowledgeCfg.connectors.find(c => c.type === "jira")?.acField;
-    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey!, acField });
+    // Build chunker based on config
+    const chunkerType = knowledgeCfg.chunker;
+    const chunker = chunkerType === "ac-aware"
+      ? new (await import("./knowledge/chunkers/ACChunker")).ACChunker()
+      : new (await import("./knowledge/chunkers/NaiveChunker")).NaiveChunker();
+
+    // Build reranker based on config
+    const ingestSourceWeights: Record<string, number> = {};
+    for (const c of knowledgeCfg.connectors) {
+      if (c.weight !== undefined) ingestSourceWeights[c.type] = c.weight;
+    }
+    const ingestReranker = knowledgeCfg.reranker === "hybrid"
+      ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(ingestSourceWeights)
+      : undefined;
+
+    const store     = new KnowledgeStore({ indexPath, reranker: ingestReranker });
+    const jiraConnCfg = knowledgeCfg.connectors.find(c => c.type === "jira");
+    const acField   = jiraConnCfg?.acField;
+    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey!, acField, chunker });
     const ingester  = new KnowledgeIngester({ store, metaPath, connectors: [connector] });
 
     const spin = new Spinner();

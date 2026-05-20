@@ -80,15 +80,17 @@ const EnvConfigSchema = z.object({
     enabled:   z.boolean().default(false),
     indexPath: z.string().default(".aiqa/knowledge"),
     topK:      z.number().int().min(1).default(5),
-    chunker:   z.enum(["naive"]).default("naive"),
+    chunker:  z.enum(["naive", "ac-aware"]).default("naive"),
+    reranker: z.enum(["cosine", "hybrid"]).default("cosine"),
     connectors: z.array(z.object({
       type:       z.string(),
       projectKey: z.string().optional(),
       acField:    z.string().optional(),
       spaceKey:   z.string().optional(),
       url:        z.string().optional(),
+      weight:     z.number().positive().optional(),
     })).default([]),
-  }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", connectors: [] }),
+  }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", reranker: "cosine", connectors: [] }),
 
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
