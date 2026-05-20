@@ -1,7 +1,8 @@
 # AIQA — Progress Report
 
 > Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-19
-> Platform alignment: **~95%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-10 + EPIC-12 + EPIC-3 + EPIC-5: **DONE**
+> Platform alignment: **~95%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-10 + EPIC-11 + EPIC-12 + EPIC-13: **DONE**
+> **Next:** EPIC-RAG — RAG Knowledge Layer (Phase 1: Jira connector · local embeddings · FlowMapper wiring)
 
 ---
 

@@ -149,12 +149,13 @@ The platform is production-ready across all core layers. ~95% of the full vision
 | Web Portal (Dashboard, Tests, Runs, RunDetail, Orchestrate) | ✅ Done |
 | Chrome Extension (zero-setup, CDP-based) | ✅ Done |
 | Jira integration (AC extraction, bug creation + screenshot, sprint filter, Xray sync) | ✅ Done |
-| Allure reporter | ⬜ Planned |
+| Allure reporter (`--allure [dir]`, step screenshots, debug JSON, tags, timing) | ✅ Done |
+| RAG Knowledge Layer (Jira → local embeddings → FlowMapper context injection) | 🔧 In progress (Phase 1) |
 | AI application testing (LLM eval, agentic workflows) | ⬜ Planned |
 | Desktop automation + vision | ⬜ Planned |
 | SaaS / multi-tenant | ⬜ Planned |
 
-**582 tests passing** · TypeScript strict · Zero known security issues
+**591 tests passing** · TypeScript strict · Zero known security issues
 
 ---
 

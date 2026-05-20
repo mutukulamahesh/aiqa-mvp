@@ -54,7 +54,7 @@ export interface PushResultSummary {
  * Jira JQL string literals are quoted with double-quotes; internal double-quotes
  * must be escaped as \".  We additionally strip characters Jira rejects in labels.
  */
-function jqlString(value: string): string {
+export function jqlString(value: string): string {
   // Escape backslashes first, then double-quotes
   const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   return `"${escaped}"`;

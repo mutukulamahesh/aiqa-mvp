@@ -293,9 +293,49 @@ program
     const mapper    = new FlowMapper();
     const generator = new ScenarioGenerator();
 
+    // RAG context — must happen BEFORE mapper.map() so FlowMapper gets knowledge context
+    let ragContext: string | undefined;
+    let ragSourceIds: string[] = [];
+    if (cfg().knowledge.enabled) {
+      try {
+        const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
+        const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
+        const { KnowledgeIngester }  = await import("./knowledge/KnowledgeIngester");
+        const { HealthScorer }       = await import("./knowledge/HealthScorer");
+        const kCfg    = cfg().knowledge;
+        const metaPath = path.join(kCfg.indexPath, "meta.json");
+        const health  = new HealthScorer().score(KnowledgeIngester.readMetaFrom(metaPath));
+        if (health.status === "WARN") {
+          console.warn(`   ⚠  RAG index is ${health.ageDays} days old — consider refreshing (aiqa knowledge ingest)`);
+        } else if (health.status === "STALE") {
+          console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
+        }
+        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath });
+        const retriever = new KnowledgeRetriever(store, kCfg.topK);
+        // Build query from page vocabulary; cap at 800 chars (≈256 tokens for all-MiniLM-L6-v2)
+        const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
+        const rawQuery = pages.length > 0
+          ? pages.map(p => [p.title ?? "", ...(p.headings ?? []).slice(0, 3)].join(" ")).join(" ").trim()
+          : (exploration_data.baseUrl ?? outDir);
+        const query = rawQuery.slice(0, 800);
+        const ragSpin = new Spinner();
+        ragSpin.start("Retrieving knowledge context (downloads model on first run)…");
+        const chunks = await retriever.retrieve(query);
+        ragSpin.stop();
+        if (chunks.length > 0) {
+          ragContext   = KnowledgeRetriever.formatContext(chunks);
+          ragSourceIds = [...new Set(chunks.map(c => c.sourceId))];
+          console.log(`   RAG: retrieved ${chunks.length} chunks (${ragSourceIds.join(", ")})`);
+        }
+      } catch (err) {
+        const msg = (err as Error).message ?? String(err);
+        console.warn(`   ⚠  RAG unavailable: ${msg} — continuing without knowledge context`);
+      }
+    }
+
     let flows = opts.perPage
       ? mapper.perPageFlows(exploration_data)
-      : await mapper.map(exploration_data);
+      : await mapper.map(exploration_data, ragContext);
 
     if (opts.jira) {
       const sprintLabel = opts.sprint ? ` sprint=${opts.sprint}` : "";
@@ -315,7 +355,7 @@ program
       console.log(`   Flows → ${flowsPath}`);
     }
 
-    const scenarios = await generator.generate(flows, exploration_data.baseUrl ?? "");
+    const scenarios = await generator.generate(flows, exploration_data.baseUrl ?? "", ragContext, ragSourceIds);
 
     ensureDir(outDir);
     let validCount = 0;
@@ -1388,6 +1428,89 @@ program
     if (result.status === "partial_failure") process.exit(2);
     if (result.summary.failed > 0) process.exit(1);
     process.exit(0);
+  });
+
+// ── knowledge ─────────────────────────────────────────────────────────────────
+
+const knowledgeCmd = program.command("knowledge").description("RAG Knowledge Layer — ingest and query organisational knowledge");
+
+knowledgeCmd
+  .command("ingest")
+  .description("Ingest Jira stories and defects into the local knowledge index")
+  .option("--jira <projectKey>", "Jira project key (overrides knowledge.connectors in config)")
+  .action(async (opts: { jira?: string }) => {
+    const config    = cfg();
+    const apiToken  = process.env.JIRA_API_TOKEN;
+    const jiraCfg   = config.jira;
+    const knowledgeCfg = config.knowledge;
+    const indexPath = knowledgeCfg.indexPath;
+    const metaPath  = path.join(indexPath, "meta.json");
+
+    if (!apiToken)        { console.error("❌ JIRA_API_TOKEN not set in .env"); process.exit(1); }
+    if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
+      console.error("❌ jira.baseUrl and jira.email must be set in config");
+      process.exit(1);
+    }
+
+    const projectKey = opts.jira ?? knowledgeCfg.connectors.find(c => c.type === "jira")?.projectKey ?? jiraCfg.projectKey;
+    if (!projectKey) { console.error("❌ No Jira project key — use --jira <key> or set knowledge.connectors in config"); process.exit(1); }
+
+    const { KnowledgeStore }    = await import("./knowledge/KnowledgeStore");
+    const { KnowledgeIngester } = await import("./knowledge/KnowledgeIngester");
+    const { JiraConnector }     = await import("./knowledge/connectors/JiraConnector");
+    const { HealthScorer }      = await import("./knowledge/HealthScorer");
+
+    console.log(`\n🧠 AIQA Knowledge Ingest  [env: ${config.environment}]`);
+    console.log(`   Project : ${projectKey}`);
+    console.log(`   Index   : ${indexPath}`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    const store     = new KnowledgeStore({ indexPath });
+    const acField   = knowledgeCfg.connectors.find(c => c.type === "jira")?.acField;
+    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey!, acField });
+    const ingester  = new KnowledgeIngester({ store, metaPath, connectors: [connector] });
+
+    const spin = new Spinner();
+    spin.start("Fetching from Jira and embedding chunks…");
+    try {
+      const meta   = await ingester.run();
+      spin.stop();
+      const health = new HealthScorer().score(meta);
+      console.log(`✅ Ingested ${meta.totalChunks} chunks from ${meta.sources.length} source(s)`);
+      meta.sources.forEach(s => console.log(`   ${s.name.padEnd(14)} ${s.chunks} chunks`));
+      console.log(`\n   Health : ${health.status}  —  ${health.message}`);
+      console.log(`   Index  → ${indexPath}\n`);
+    } catch (err) {
+      spin.stop();
+      console.error(`❌ Ingest failed: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  });
+
+knowledgeCmd
+  .command("status")
+  .description("Show knowledge index health, chunk count, and source breakdown")
+  .action(async () => {
+    const config   = cfg();
+    const metaPath = path.join(config.knowledge.indexPath, "meta.json");
+
+    const { KnowledgeIngester } = await import("./knowledge/KnowledgeIngester");
+    const { HealthScorer }      = await import("./knowledge/HealthScorer");
+
+    const meta = KnowledgeIngester.readMetaFrom(metaPath);
+    const health   = new HealthScorer().score(meta);
+
+    console.log(`\n🧠 AIQA Knowledge Status  [env: ${config.environment}]`);
+    console.log(`─────────────────────────────────────────`);
+    console.log(`   Status  : ${health.status}`);
+    console.log(`   Chunks  : ${health.totalChunks}`);
+    console.log(`   Age     : ${health.ageDays !== null ? `${health.ageDays} day(s)` : "—"}`);
+    if (health.sources.length > 0) {
+      console.log(`   Sources :`);
+      health.sources.forEach(s => console.log(`     ${s.name.padEnd(14)} ${s.chunks} chunks`));
+    }
+    console.log(`\n   ${health.message}`);
+    console.log(`─────────────────────────────────────────\n`);
   });
 
 // ── serve ─────────────────────────────────────────────────────────────────────

@@ -75,6 +75,21 @@ const EnvConfigSchema = z.object({
     testPlanKey:            z.string().optional(),   // Xray test plan issue key
   }).optional(),
 
+  // knowledge — RAG Knowledge Layer config (opt-in; disabled by default).
+  knowledge: z.object({
+    enabled:   z.boolean().default(false),
+    indexPath: z.string().default(".aiqa/knowledge"),
+    topK:      z.number().int().min(1).default(5),
+    chunker:   z.enum(["naive"]).default("naive"),
+    connectors: z.array(z.object({
+      type:       z.string(),
+      projectKey: z.string().optional(),
+      acField:    z.string().optional(),
+      spaceKey:   z.string().optional(),
+      url:        z.string().optional(),
+    })).default([]),
+  }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", connectors: [] }),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.
