@@ -310,13 +310,13 @@ program
         } else if (health.status === "STALE") {
           console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
         }
-        // Build source weight map for HybridReranker: sourceName → weight
-        const sourceWeights: Record<string, number> = {};
+        // Build connector weight map: sourceName → weight (for HybridReranker)
+        const connectorWeights: Record<string, number> = {};
         for (const c of kCfg.connectors) {
-          if (c.weight !== undefined) sourceWeights[c.type] = c.weight;
+          if (c.weight !== undefined) connectorWeights[c.type] = c.weight;
         }
-        const reranker = kCfg.reranker === "hybrid"
-          ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(sourceWeights)
+        const reranker = kCfg.reranker.strategy === "hybrid"
+          ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(kCfg.reranker, connectorWeights)
           : undefined; // undefined → KnowledgeStore uses CosineSimilarityReranker default
         const store     = new KnowledgeStore({ indexPath: kCfg.indexPath, reranker });
         const retriever = new KnowledgeRetriever(store, kCfg.topK);
@@ -1480,12 +1480,12 @@ knowledgeCmd
       : new (await import("./knowledge/chunkers/NaiveChunker")).NaiveChunker();
 
     // Build reranker based on config
-    const ingestSourceWeights: Record<string, number> = {};
+    const ingestConnectorWeights: Record<string, number> = {};
     for (const c of knowledgeCfg.connectors) {
-      if (c.weight !== undefined) ingestSourceWeights[c.type] = c.weight;
+      if (c.weight !== undefined) ingestConnectorWeights[c.type] = c.weight;
     }
-    const ingestReranker = knowledgeCfg.reranker === "hybrid"
-      ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(ingestSourceWeights)
+    const ingestReranker = knowledgeCfg.reranker.strategy === "hybrid"
+      ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(knowledgeCfg.reranker, ingestConnectorWeights)
       : undefined;
 
     const store     = new KnowledgeStore({ indexPath, reranker: ingestReranker });

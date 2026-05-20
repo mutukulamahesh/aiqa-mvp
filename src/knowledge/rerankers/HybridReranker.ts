@@ -1,7 +1,6 @@
 import { RetrievedChunk } from "../types";
 import { Reranker } from "./Reranker";
 
-// Normalised severity contribution: undefined/unknown → 0.5 (medium)
 const SEVERITY_SCORE: Record<string, number> = {
   critical: 1.00,
   high:     0.75,
@@ -9,21 +8,44 @@ const SEVERITY_SCORE: Record<string, number> = {
   low:      0.25,
 };
 
-// Recency window: chunks older than this score 0 for recency
+// Chunks older than this contribute 0 recency score
 const RECENCY_WINDOW_DAYS = 90;
+
+export interface HybridWeights {
+  semanticWeight: number;   // coefficient on cosine similarity (e.g. 0.6)
+  recencyWeight:  number;   // coefficient on recency decay     (e.g. 0.2)
+  severityWeight: number;   // coefficient on severity tier     (e.g. 0.1)
+  sourceWeight:   number;   // coefficient on connector weight  (e.g. 0.1)
+}
+
+const DEFAULT_WEIGHTS: HybridWeights = {
+  semanticWeight: 0.6,
+  recencyWeight:  0.2,
+  severityWeight: 0.1,
+  sourceWeight:   0.1,
+};
 
 /**
  * Hybrid reranker — Phase 2.
- * final = 0.6 × semantic + 0.2 × recency + 0.1 × severity + 0.1 × sourceWeight
  *
- * sourceWeights: map of sourceName → weight (default 1.0 if not provided).
- * Weights are not normalised — treat them as relative boosts (e.g. jira=1.0, confluence=0.8).
+ * final = semanticWeight×semantic + recencyWeight×recency
+ *       + severityWeight×severity + sourceWeight×connectorWeight
+ *
+ * All four coefficients are configurable in knowledge.reranker in the YAML config
+ * so that different verticals (healthcare, banking, e-commerce) can tune priorities.
+ *
+ * connectorWeights: per-sourceName multiplier from knowledge.connectors[].weight (default 1.0).
  */
 export class HybridReranker implements Reranker {
-  private sourceWeights: Record<string, number>;
+  private weights:          HybridWeights;
+  private connectorWeights: Record<string, number>;
 
-  constructor(sourceWeights: Record<string, number> = {}) {
-    this.sourceWeights = sourceWeights;
+  constructor(
+    weights:          Partial<HybridWeights>   = {},
+    connectorWeights: Record<string, number>   = {},
+  ) {
+    this.weights          = { ...DEFAULT_WEIGHTS, ...weights };
+    this.connectorWeights = connectorWeights;
   }
 
   rerank(candidates: RetrievedChunk[]): RetrievedChunk[] {
@@ -35,12 +57,16 @@ export class HybridReranker implements Reranker {
   }
 
   private hybridScore(c: RetrievedChunk, now: number): number {
-    const semantic   = Math.max(0, Math.min(1, c.score));
-    const recency    = this.recencyScore(c, now);
-    const severity   = SEVERITY_SCORE[c.severity ?? ""] ?? 0.5;
-    const sourceWt   = Math.max(0, this.sourceWeights[c.sourceName] ?? 1.0);
+    const { semanticWeight, recencyWeight, severityWeight, sourceWeight } = this.weights;
+    const semantic      = Math.max(0, Math.min(1, c.score));
+    const recency       = this.recencyScore(c, now);
+    const severity      = SEVERITY_SCORE[c.severity ?? ""] ?? 0.5;
+    const connectorWt   = Math.max(0, this.connectorWeights[c.sourceName] ?? 1.0);
 
-    return 0.6 * semantic + 0.2 * recency + 0.1 * severity + 0.1 * sourceWt;
+    return semanticWeight * semantic
+         + recencyWeight  * recency
+         + severityWeight * severity
+         + sourceWeight   * connectorWt;
   }
 
   private recencyScore(c: RetrievedChunk, now: number): number {

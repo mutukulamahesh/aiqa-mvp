@@ -25,11 +25,19 @@ export interface KnowledgeConnectorConfig {
   weight?:      number;   // HybridReranker source weight (default 1.0)
 }
 
+export interface RerankerConfig {
+  strategy:       "cosine" | "hybrid";
+  semanticWeight: number;   // coefficient on cosine similarity score (default 0.6)
+  recencyWeight:  number;   // coefficient on recency decay (default 0.2)
+  severityWeight: number;   // coefficient on severity tier (default 0.1)
+  sourceWeight:   number;   // coefficient on per-connector weight (default 0.1)
+}
+
 export interface KnowledgeConfig {
   enabled:    boolean;
   indexPath:  string;
   topK:       number;
   chunker:    "naive" | "ac-aware";
-  reranker:   "cosine" | "hybrid";
+  reranker:   RerankerConfig;
   connectors: KnowledgeConnectorConfig[];
 }

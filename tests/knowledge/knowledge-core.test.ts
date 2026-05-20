@@ -344,12 +344,21 @@ describe("HybridReranker", () => {
     expect(result[0].score).toBeLessThanOrEqual(1);
   });
 
-  test("sourceWeights boost higher-weighted source", () => {
-    const reranker = new HybridReranker({ jira: 2.0, confluence: 0.5 });
+  test("connectorWeights boost higher-weighted source", () => {
+    const reranker = new HybridReranker({}, { jira: 2.0, confluence: 0.5 });
     const jiraChunk = makeRC({ score: 0.5, sourceName: "jira",       ingestedAt: freshDate });
     const confChunk = makeRC({ score: 0.5, sourceName: "confluence", ingestedAt: freshDate });
     const [first] = reranker.rerank([confChunk, jiraChunk]);
     expect(first.sourceName).toBe("jira");
+  });
+
+  test("custom formula weights are applied", () => {
+    // Maximise severity contribution so it dominates ordering
+    const reranker = new HybridReranker({ semanticWeight: 0, recencyWeight: 0, severityWeight: 1, sourceWeight: 0 });
+    const critical = makeRC({ score: 0.1, severity: "critical" });
+    const low      = makeRC({ score: 0.9, severity: "low"      });
+    const [first] = reranker.rerank([low, critical]);
+    expect(first.severity).toBe("critical");
   });
 
   test("empty candidates returns empty array", () => {
