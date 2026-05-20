@@ -30,6 +30,15 @@ export class VectorIndex {
     }));
   }
 
+  async delete(sourceId: string): Promise<void> {
+    if (!await this.index.isIndexCreated()) return;
+    const all = await this.index.listItems();
+    const matches = all.filter(item => (item.metadata as unknown as KnowledgeChunk).sourceId === sourceId);
+    for (const item of matches) {
+      await this.index.deleteItem(item.id);
+    }
+  }
+
   async clear(): Promise<void> {
     if (await this.index.isIndexCreated()) {
       await this.index.deleteIndex();

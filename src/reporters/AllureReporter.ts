@@ -34,6 +34,13 @@ interface AllureAttachment {
   type:   string;
 }
 
+function splitError(raw: string | undefined): { message?: string; trace?: string } {
+  if (!raw) return {};
+  const nl = raw.indexOf("\n");
+  if (nl === -1) return { message: raw };
+  return { message: raw.slice(0, nl), trace: raw.slice(nl + 1).trim() || undefined };
+}
+
 export class AllureReporter {
   /**
    * Writes one Allure JSON result file per test into `outputDir`.
@@ -123,12 +130,19 @@ export class AllureReporter {
         labels.push({ name: "failureClass", value: result.debugResult.failure_class });
       }
 
+      // Derive test-level broken/failed: broken = all failures are non-assertion errors
+      const testStatus: AllureResult["status"] = result.passed
+        ? "passed"
+        : result.stepResults.some(s => !s.passed && s.errorClass === "AssertionError")
+          ? "failed"
+          : "broken";
+
       const allure: AllureResult = {
         uuid,
         historyId,
         name:          result.testName,
-        status:        result.passed ? "passed" : "failed",
-        statusDetails: result.error ? { message: result.error } : {},
+        status:        testStatus,
+        statusDetails: splitError(result.error),
         stage:         "finished",
         start,
         stop,

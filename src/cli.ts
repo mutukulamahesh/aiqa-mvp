@@ -322,7 +322,16 @@ program
       try {
         const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
         const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
+        const { KnowledgeIngester }  = await import("./knowledge/KnowledgeIngester");
+        const { HealthScorer }       = await import("./knowledge/HealthScorer");
         const kCfg = cfg().knowledge;
+        const metaPath = path.join(kCfg.indexPath, "meta.json");
+        const health = new HealthScorer().score(KnowledgeIngester.readMetaFrom(metaPath));
+        if (health.status === "WARN") {
+          console.warn(`   ⚠  RAG index is ${health.ageDays} days old — consider refreshing (aiqa knowledge ingest)`);
+        } else if (health.status === "STALE") {
+          console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
+        }
         const store = new KnowledgeStore({ indexPath: kCfg.indexPath });
         const retriever = new KnowledgeRetriever(store, kCfg.topK);
         const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];

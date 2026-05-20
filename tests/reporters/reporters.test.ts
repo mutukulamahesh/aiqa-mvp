@@ -341,7 +341,7 @@ describe("AllureReporter", () => {
       error:  "Element not found",
       stepResults: [
         { index: 0, action: "navigate", passed: true,  durationMs: 300 },
-        { index: 1, action: "assert",   passed: false, durationMs: 100, error: "Element not found" },
+        { index: 1, action: "assert",   passed: false, durationMs: 100, error: "Element not found", errorClass: "AssertionError" },
       ],
     });
     new AllureReporter().generate([result], dir);
@@ -505,6 +505,58 @@ describe("AllureReporter", () => {
       prev = step.stop;
     }
     expect(content.stop).toBeGreaterThanOrEqual(prev);
+  });
+
+  test("test-level status is 'broken' when all failing steps are non-assertion errors", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed: false,
+      error: "Navigation timeout",
+      stepResults: [
+        { index: 0, action: "navigate", passed: false, durationMs: 100, error: "Navigation timeout", errorClass: "TimeoutError" },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.status).toBe("broken");
+  });
+
+  test("test-level status is 'failed' when at least one failing step is an AssertionError", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed: false,
+      stepResults: [
+        { index: 0, action: "navigate", passed: false, durationMs: 50,  error: "Timeout",    errorClass: "TimeoutError"    },
+        { index: 1, action: "assert",   passed: false, durationMs: 100, error: "Expected x", errorClass: "AssertionError" },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.status).toBe("failed");
+  });
+
+  test("statusDetails.trace is populated when error contains a newline", () => {
+    const dir    = tmpDir();
+    const result = makeResult({
+      passed: false,
+      error: "Expected 'foo'\nat AssertionError (runner.ts:42)",
+      stepResults: [
+        { index: 0, action: "assert", passed: false, durationMs: 100, error: "Expected 'foo'", errorClass: "AssertionError" },
+      ],
+    });
+    new AllureReporter().generate([result], dir);
+
+    const file    = fs.readdirSync(dir).find(f => f.endsWith("-result.json"))!;
+    const content = JSON.parse(fs.readFileSync(path.join(dir, file), "utf-8"));
+
+    expect(content.statusDetails.message).toBe("Expected 'foo'");
+    expect(content.statusDetails.trace).toBe("at AssertionError (runner.ts:42)");
   });
 
   test("zero-duration steps get at least 1ms to keep Allure timelines non-zero", () => {
