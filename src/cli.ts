@@ -1466,7 +1466,8 @@ knowledgeCmd
     console.log(`─────────────────────────────────────────\n`);
 
     const store     = new KnowledgeStore({ indexPath });
-    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey! });
+    const acField   = knowledgeCfg.connectors.find(c => c.type === "jira")?.acField;
+    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey!, acField });
     const ingester  = new KnowledgeIngester({ store, metaPath, connectors: [connector] });
 
     const spin = new Spinner();

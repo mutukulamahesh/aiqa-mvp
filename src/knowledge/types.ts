@@ -18,6 +18,7 @@ export interface RetrievedChunk extends KnowledgeChunk {
 export interface KnowledgeConnectorConfig {
   type:         string;
   projectKey?:  string;   // jira
+  acField?:     string;   // jira — custom field ID for Acceptance Criteria
   spaceKey?:    string;   // confluence
   url?:         string;   // openapi
 }

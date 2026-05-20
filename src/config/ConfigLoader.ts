@@ -84,6 +84,7 @@ const EnvConfigSchema = z.object({
     connectors: z.array(z.object({
       type:       z.string(),
       projectKey: z.string().optional(),
+      acField:    z.string().optional(),
       spaceKey:   z.string().optional(),
       url:        z.string().optional(),
     })).default([]),
