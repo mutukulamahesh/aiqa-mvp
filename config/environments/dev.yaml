@@ -59,6 +59,16 @@ jira:
   xraySyncEnabled:        false   # set true + testPlanKey to push results to Xray
   # testPlanKey:          "AIQA-1"
 
+# RAG Knowledge Layer — set enabled: true and run `aiqa knowledge ingest` to activate.
+knowledge:
+  enabled: false
+  indexPath: ".aiqa/knowledge"
+  topK: 5
+  chunker: naive
+  connectors:
+    - type: jira
+      projectKey: SCRUM
+
 # db_schema — route→table hints for FlowMapper DB suggestion.
 # Uncomment and extend when you want generated tests to include db: validation steps.
 # method: which HTTP verbs on this route write to the table (default: all mutating verbs).

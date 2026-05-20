@@ -16,16 +16,16 @@ export class ScenarioGenerator {
     this.llm = llm ?? createLLMProvider();
   }
 
-  async generate(flows: UserFlow[], baseUrl: string): Promise<GeneratedScenario[]> {
+  async generate(flows: UserFlow[], baseUrl: string, ragContext?: string, sourceIds?: string[]): Promise<GeneratedScenario[]> {
     const scenarios: GeneratedScenario[] = [];
 
     for (const flow of flows) {
       // Real LLM can suggest additional steps; mock uses flow steps directly
       const steps = this.llm.name !== "mock"
-        ? await this.llmSteps(flow)
+        ? await this.llmSteps(flow, ragContext)
         : flow.steps;
 
-      const yaml = this.buildYaml(flow, steps, baseUrl);
+      const yaml = this.buildYaml(flow, steps, baseUrl, sourceIds);
       let validated = true;
       let validationError: string | undefined;
       try {
@@ -49,12 +49,12 @@ export class ScenarioGenerator {
 
   // ── YAML builder ─────────────────────────────────────────────────────────
 
-  private buildYaml(flow: UserFlow, steps: FlowStep[], baseUrl: string): string {
-    const lines: string[] = [
-      `test:`,
-      `  name: "${flow.name}"`,
-      `  steps:`,
-    ];
+  private buildYaml(flow: UserFlow, steps: FlowStep[], baseUrl: string, sourceIds?: string[]): string {
+    const lines: string[] = [`test:`, `  name: "${flow.name}"`];
+    if (sourceIds && sourceIds.length > 0) {
+      lines.push(`  source: [${sourceIds.map(s => `"${s}"`).join(", ")}]`);
+    }
+    lines.push(`  steps:`);
 
     for (const step of steps) {
       lines.push(...this.stepToYaml(step, baseUrl));
@@ -109,11 +109,12 @@ export class ScenarioGenerator {
 
   // ── LLM enhancement ──────────────────────────────────────────────────────
 
-  private async llmSteps(flow: UserFlow): Promise<FlowStep[]> {
+  private async llmSteps(flow: UserFlow, ragContext?: string): Promise<FlowStep[]> {
     try {
+      const contextBlock = ragContext ? `${ragContext}\n\n` : "";
       const res = await this.llm.complete({
         system:      SYSTEM_PROMPT,
-        userMessage: `Flow: ${flow.name}\nType: ${flow.type}\nExisting steps (preserve selectors): ${JSON.stringify(flow.steps)}`,
+        userMessage: `${contextBlock}Flow: ${flow.name}\nType: ${flow.type}\nExisting steps (preserve selectors): ${JSON.stringify(flow.steps)}`,
         maxTokens:   512,
       });
       const parsed = JSON.parse(res.content) as { steps?: FlowStep[] };

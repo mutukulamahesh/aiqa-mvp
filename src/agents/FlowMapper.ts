@@ -66,12 +66,12 @@ export class FlowMapper {
     });
   }
 
-  async map(exploration: ExplorationResult): Promise<UserFlow[]> {
+  async map(exploration: ExplorationResult, ragContext?: string): Promise<UserFlow[]> {
     const heuristic = this.heuristicFlows(exploration);
 
     if (this.llm.name !== "mock") {
       try {
-        const enhanced = await this.llmEnhance(exploration, heuristic);
+        const enhanced = await this.llmEnhance(exploration, heuristic, ragContext);
         return enhanced;
       } catch {
         // Fall through to heuristic result
@@ -79,7 +79,7 @@ export class FlowMapper {
     } else {
       // Use mock provider for metadata enrichment
       try {
-        const summary = this.buildSummary(exploration);
+        const summary = this.buildSummary(exploration, ragContext);
         const res = await this.llm.complete({
           system:      SYSTEM_PROMPT,
           userMessage: summary,
@@ -249,13 +249,14 @@ export class FlowMapper {
     });
   }
 
-  private buildSummary(exploration: ExplorationResult): string {
+  private buildSummary(exploration: ExplorationResult, ragContext?: string): string {
     const pageInfo = exploration.pages.map(p =>
       `URL: ${p.url} | Title: ${p.title} | ` +
       `Inputs: ${p.inputs.map(i => i.type).join(",")} | ` +
       `Buttons: ${p.buttons.slice(0, 3).join(",")}`
     ).join("\n");
-    return `Application: ${exploration.baseUrl}\nPages:\n${pageInfo}`;
+    const base = `Application: ${exploration.baseUrl}\nPages:\n${pageInfo}`;
+    return ragContext ? `${ragContext}\n\n${base}` : base;
   }
 
   private mergeMetadata(
@@ -279,10 +280,10 @@ export class FlowMapper {
     }));
   }
 
-  private async llmEnhance(exploration: ExplorationResult, heuristic: UserFlow[]): Promise<UserFlow[]> {
+  private async llmEnhance(exploration: ExplorationResult, heuristic: UserFlow[], ragContext?: string): Promise<UserFlow[]> {
     const res = await this.llm.complete({
       system:      SYSTEM_PROMPT,
-      userMessage: this.buildSummary(exploration),
+      userMessage: this.buildSummary(exploration, ragContext),
       maxTokens:   1024,
     });
     const parsed = JSON.parse(res.content) as { flows: UserFlow[] };

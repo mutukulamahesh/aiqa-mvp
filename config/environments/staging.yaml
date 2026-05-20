@@ -54,6 +54,16 @@ jira:
   createDefectsOnFailure: true    # auto-create bugs on CI failures
   xraySyncEnabled:        false
 
+# RAG Knowledge Layer
+knowledge:
+  enabled: false
+  indexPath: ".aiqa/knowledge"
+  topK: 5
+  chunker: naive
+  connectors:
+    - type: jira
+      projectKey: SCRUM
+
 # db_schema — route→table hints for FlowMapper DB suggestion.
 # Uncomment and extend when you want generated tests to include db: validation steps.
 #

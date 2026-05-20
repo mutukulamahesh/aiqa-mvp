@@ -42,6 +42,7 @@ interface RawTestFile {
     retries?:        number;
     variables?:      Record<string, string>;
     filesUnderTest?: string | string[];
+    source?:         string | string[];
     steps:           RawStep[];
   };
 }
@@ -60,15 +61,15 @@ export function parseTestFile(filePath: string): TestDefinition {
   return buildDefinition(raw, filePath);
 }
 
-function buildDefinition(raw: RawTestFile, source: string): TestDefinition {
+function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
   if (!raw?.test) {
-    throw new Error(`Invalid test (${source}): missing top-level "test:" key`);
+    throw new Error(`Invalid test (${location}): missing top-level "test:" key`);
   }
   if (!raw.test.name) {
-    throw new Error(`Invalid test (${source}): missing "test.name"`);
+    throw new Error(`Invalid test (${location}): missing "test.name"`);
   }
   if (!Array.isArray(raw.test.steps) || raw.test.steps.length === 0) {
-    throw new Error(`Invalid test (${source}): "test.steps" must be a non-empty array`);
+    throw new Error(`Invalid test (${location}): "test.steps" must be a non-empty array`);
   }
 
   const steps: StepAction[] = raw.test.steps.map((rawStep, idx) =>
@@ -89,12 +90,18 @@ function buildDefinition(raw: RawTestFile, source: string): TestDefinition {
     ? (Array.isArray(rawFut) ? rawFut : [rawFut]).map(f => String(f).trim()).filter(Boolean)
     : [];
 
+  const rawSource = raw.test.source;
+  const source: string[] = rawSource
+    ? (Array.isArray(rawSource) ? rawSource : [rawSource]).map(s => String(s).trim()).filter(Boolean)
+    : [];
+
   return {
     name:      raw.test.name,
     tags,
     retries,
     variables: raw.test.variables ?? {},
     ...(filesUnderTest.length ? { filesUnderTest } : {}),
+    ...(source.length          ? { source }          : {}),
     steps,
   };
 }

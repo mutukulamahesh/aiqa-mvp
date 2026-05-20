@@ -48,5 +48,6 @@ export interface TestDefinition {
   retries?:        number;   // max retry attempts on transient failures (timeout/locator)
   variables?:      Record<string, string>;
   filesUnderTest?: string[]; // explicit file paths this test covers (used by --impact-only)
+  source?:         string[]; // RAG provenance — Jira/Confluence IDs that informed this test
   steps:           StepAction[];
 }
