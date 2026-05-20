@@ -18,6 +18,7 @@ export class JiraConnector implements KnowledgeConnector {
 
   private client:     JiraClient;
   private projectKey: string;
+  private acField:    string;
   private chunker:    NaiveChunker;
 
   constructor(opts: {
@@ -25,20 +26,22 @@ export class JiraConnector implements KnowledgeConnector {
     email:      string;
     apiToken:   string;
     projectKey: string;
+    acField?:   string;   // Jira custom field ID for Acceptance Criteria (default: customfield_10016)
     transport?: HttpTransport;
   }) {
     this.client     = new JiraClient(opts.baseUrl, opts.email, opts.apiToken, opts.transport);
     this.projectKey = opts.projectKey;
+    this.acField    = opts.acField ?? "customfield_10016";
     this.chunker    = new NaiveChunker();
   }
 
   async fetch(): Promise<KnowledgeChunk[]> {
     const chunks: KnowledgeChunk[] = [];
 
-    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", "customfield_10016"];
+    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", this.acField];
 
-    // Fetch stories + tasks
-    const storiesResult = await this.client.searchIssues(
+    // Fetch stories + tasks — paginated so large backlogs are fully ingested
+    const storiesResult = await this.client.searchAllIssues(
       `project = ${jqlString(this.projectKey)} AND issuetype in (Story, Task) ORDER BY priority DESC`,
       fields,
     );
@@ -46,8 +49,8 @@ export class JiraConnector implements KnowledgeConnector {
       chunks.push(...this.issueToChunks(issue, "story"));
     }
 
-    // Fetch defects
-    const defectsResult = await this.client.searchIssues(
+    // Fetch defects — paginated
+    const defectsResult = await this.client.searchAllIssues(
       `project = ${jqlString(this.projectKey)} AND issuetype = Bug ORDER BY priority DESC`,
       fields,
     );
@@ -71,8 +74,8 @@ export class JiraConnector implements KnowledgeConnector {
     const desc = fields.description;
     if (desc) parts.push(this.extractText(desc));
 
-    // Acceptance criteria custom field
-    const ac = fields.customfield_10016;
+    // Acceptance criteria — field ID is configurable (default: customfield_10016)
+    const ac = (fields as Record<string, unknown>)[this.acField];
     if (ac) parts.push(this.extractText(ac));
 
     const text = parts.filter(Boolean).join("\n\n").trim();

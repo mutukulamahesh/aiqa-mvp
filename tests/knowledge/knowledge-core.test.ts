@@ -162,14 +162,14 @@ describe("NaiveChunker", () => {
   const meta = { sourceId: "S-1", sourceName: "jira", type: "story" as const, tags: [] };
 
   test("short text produces one chunk", () => {
-    const chunks = chunker.chunk("Short text under 2000 chars", meta);
+    const chunks = chunker.chunk("Short text under 600 chars", meta);
     expect(chunks).toHaveLength(1);
     expect(chunks[0].sourceId).toBe("S-1");
     expect(chunks[0].confidence).toBe(1.0);
     expect(chunks[0].relations).toEqual([]);
   });
 
-  test("text longer than 2000 chars is split into multiple chunks", () => {
+  test("text longer than 600 chars is split into multiple chunks", () => {
     const long   = "a".repeat(5000);
     const chunks = chunker.chunk(long, meta);
     expect(chunks.length).toBeGreaterThanOrEqual(3);
@@ -277,5 +277,12 @@ describe("HealthScorer", () => {
 
   test("ageDays is null for EMPTY status", () => {
     expect(scorer.score(null).ageDays).toBeNull();
+  });
+
+  test("returns STALE with null ageDays for corrupt lastIngestedAt", () => {
+    const meta = { lastIngestedAt: "not-a-date", totalChunks: 50, sources: [] };
+    const result = scorer.score(meta);
+    expect(result.status).toBe("STALE");
+    expect(result.ageDays).toBeNull();
   });
 });

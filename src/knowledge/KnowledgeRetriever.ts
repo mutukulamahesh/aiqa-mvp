@@ -12,11 +12,14 @@ export class KnowledgeRetriever {
     this.topK  = topK;
   }
 
-  // Returns [] gracefully if index has not been built yet.
+  // Returns [] gracefully if index has not been built yet; logs unexpected errors.
   async retrieve(query: string, topK?: number): Promise<RetrievedChunk[]> {
     try {
       return await this.store.retrieve(query, topK ?? this.topK);
-    } catch {
+    } catch (err) {
+      const msg = (err as Error).message ?? String(err);
+      const isExpected = msg.includes("does not exist") || msg.includes("ENOENT");
+      if (!isExpected) process.stderr.write(`[knowledge] retrieve error: ${msg}\n`);
       return [];
     }
   }

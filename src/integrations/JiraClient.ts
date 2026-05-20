@@ -87,6 +87,29 @@ export class JiraClient {
     return this.request<JiraSearchResult>("GET", `/rest/api/3/search?${qs}`);
   }
 
+  // Paginates through all results — use this instead of searchIssues when the
+  // result set may exceed 50 items (e.g. bulk knowledge ingestion).
+  async searchAllIssues(
+    jql: string,
+    fields: string[] = ["summary", "status", "priority", "issuetype", "description"],
+  ): Promise<JiraSearchResult> {
+    const PAGE_SIZE = 50;
+    const allIssues: JiraIssue[] = [];
+    let startAt = 0;
+    let total   = Infinity;
+
+    while (startAt < total) {
+      const qs   = `jql=${encodeURIComponent(jql)}&fields=${fields.join(",")}&maxResults=${PAGE_SIZE}&startAt=${startAt}`;
+      const page = await this.request<JiraSearchResult>("GET", `/rest/api/3/search?${qs}`);
+      allIssues.push(...page.issues);
+      total    = page.total;
+      startAt += page.issues.length;
+      if (page.issues.length === 0) break; // safety guard
+    }
+
+    return { issues: allIssues, total: allIssues.length, maxResults: PAGE_SIZE };
+  }
+
   async createIssue(fields: JiraIssueFields): Promise<{ id: string; key: string }> {
     return this.request<{ id: string; key: string }>("POST", "/rest/api/3/issue", { fields });
   }

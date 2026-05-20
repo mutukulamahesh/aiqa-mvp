@@ -11,6 +11,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  unit-test:
+    name: Unit tests (Jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - run: npm ci
+
+      - name: Run Jest unit tests
+        run: npm test -- --no-coverage
+
   test:
     name: Run tests (${{ matrix.environment }})
     runs-on: ubuntu-latest
@@ -116,7 +140,7 @@ jobs:
     name: Smoke gate (tags=smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: test
+    needs: [unit-test, test]
     if: github.event_name == 'pull_request'
 
     env:

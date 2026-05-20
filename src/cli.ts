@@ -293,9 +293,49 @@ program
     const mapper    = new FlowMapper();
     const generator = new ScenarioGenerator();
 
+    // RAG context — must happen BEFORE mapper.map() so FlowMapper gets knowledge context
+    let ragContext: string | undefined;
+    let ragSourceIds: string[] = [];
+    if (cfg().knowledge.enabled) {
+      try {
+        const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
+        const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
+        const { KnowledgeIngester }  = await import("./knowledge/KnowledgeIngester");
+        const { HealthScorer }       = await import("./knowledge/HealthScorer");
+        const kCfg    = cfg().knowledge;
+        const metaPath = path.join(kCfg.indexPath, "meta.json");
+        const health  = new HealthScorer().score(KnowledgeIngester.readMetaFrom(metaPath));
+        if (health.status === "WARN") {
+          console.warn(`   ⚠  RAG index is ${health.ageDays} days old — consider refreshing (aiqa knowledge ingest)`);
+        } else if (health.status === "STALE") {
+          console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
+        }
+        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath });
+        const retriever = new KnowledgeRetriever(store, kCfg.topK);
+        // Build query from page vocabulary; cap at 800 chars (≈256 tokens for all-MiniLM-L6-v2)
+        const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
+        const rawQuery = pages.length > 0
+          ? pages.map(p => [p.title ?? "", ...(p.headings ?? []).slice(0, 3)].join(" ")).join(" ").trim()
+          : (exploration_data.baseUrl ?? outDir);
+        const query = rawQuery.slice(0, 800);
+        const ragSpin = new Spinner();
+        ragSpin.start("Retrieving knowledge context (downloads model on first run)…");
+        const chunks = await retriever.retrieve(query);
+        ragSpin.stop();
+        if (chunks.length > 0) {
+          ragContext   = KnowledgeRetriever.formatContext(chunks);
+          ragSourceIds = [...new Set(chunks.map(c => c.sourceId))];
+          console.log(`   RAG: retrieved ${chunks.length} chunks (${ragSourceIds.join(", ")})`);
+        }
+      } catch (err) {
+        const msg = (err as Error).message ?? String(err);
+        console.warn(`   ⚠  RAG unavailable: ${msg} — continuing without knowledge context`);
+      }
+    }
+
     let flows = opts.perPage
       ? mapper.perPageFlows(exploration_data)
-      : await mapper.map(exploration_data);
+      : await mapper.map(exploration_data, ragContext);
 
     if (opts.jira) {
       const sprintLabel = opts.sprint ? ` sprint=${opts.sprint}` : "";
@@ -313,41 +353,6 @@ program
       ensureDir(path.dirname(flowsPath));
       fs.writeFileSync(flowsPath, JSON.stringify(flows, null, 2));
       console.log(`   Flows → ${flowsPath}`);
-    }
-
-    // RAG context — retrieve relevant knowledge if index exists and knowledge is enabled
-    let ragContext: string | undefined;
-    let ragSourceIds: string[] = [];
-    if (cfg().knowledge.enabled) {
-      try {
-        const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
-        const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
-        const { KnowledgeIngester }  = await import("./knowledge/KnowledgeIngester");
-        const { HealthScorer }       = await import("./knowledge/HealthScorer");
-        const kCfg = cfg().knowledge;
-        const metaPath = path.join(kCfg.indexPath, "meta.json");
-        const health = new HealthScorer().score(KnowledgeIngester.readMetaFrom(metaPath));
-        if (health.status === "WARN") {
-          console.warn(`   ⚠  RAG index is ${health.ageDays} days old — consider refreshing (aiqa knowledge ingest)`);
-        } else if (health.status === "STALE") {
-          console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
-        }
-        const store = new KnowledgeStore({ indexPath: kCfg.indexPath });
-        const retriever = new KnowledgeRetriever(store, kCfg.topK);
-        const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
-        const query = pages.length > 0
-          ? pages.map(p => [p.title ?? "", ...(p.headings ?? []).slice(0, 3)].join(" ")).join(" ").trim()
-          : (exploration_data.baseUrl ?? outDir);
-        const ragSpin = new Spinner();
-        ragSpin.start("Loading knowledge index…");
-        const chunks = await retriever.retrieve(query);
-        ragSpin.stop();
-        if (chunks.length > 0) {
-          ragContext  = KnowledgeRetriever.formatContext(chunks);
-          ragSourceIds = [...new Set(chunks.map(c => c.sourceId))];
-          console.log(`   RAG: retrieved ${chunks.length} chunks (${ragSourceIds.join(", ")})`);
-        }
-      } catch { /* index not yet built — generate without RAG */ }
     }
 
     const scenarios = await generator.generate(flows, exploration_data.baseUrl ?? "", ragContext, ragSourceIds);
