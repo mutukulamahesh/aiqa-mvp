@@ -30,6 +30,8 @@ export interface JiraIssue {
     status:              { name: string };
     priority:            { name: string };
     issuetype:           { name: string };
+    labels?:             string[];
+    fixVersions?:        Array<{ name: string }>;
     description?:        unknown;
     customfield_10016?:  unknown;  // Acceptance Criteria — common Jira custom field
   };

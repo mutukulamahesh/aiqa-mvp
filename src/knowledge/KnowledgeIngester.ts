@@ -60,8 +60,12 @@ export class KnowledgeIngester {
   }
 
   readMeta(): IngestMeta | null {
+    return KnowledgeIngester.readMetaFrom(this.metaPath);
+  }
+
+  static readMetaFrom(metaPath: string): IngestMeta | null {
     try {
-      return JSON.parse(fs.readFileSync(this.metaPath, "utf-8")) as IngestMeta;
+      return JSON.parse(fs.readFileSync(metaPath, "utf-8")) as IngestMeta;
     } catch {
       return null;
     }

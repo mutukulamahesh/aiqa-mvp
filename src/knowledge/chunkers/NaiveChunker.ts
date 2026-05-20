@@ -1,7 +1,8 @@
 import { KnowledgeChunk } from "../types";
 import { Chunker, ChunkMetadata } from "./Chunker";
 
-const MAX_CHARS = 2000;
+// all-MiniLM-L6-v2 accepts 256 tokens ≈ 700–900 English chars; 600 leaves a safe margin.
+const MAX_CHARS = 600;
 
 export class NaiveChunker implements Chunker {
   chunk(text: string, metadata: ChunkMetadata): KnowledgeChunk[] {

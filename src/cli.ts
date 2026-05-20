@@ -325,8 +325,14 @@ program
         const kCfg = cfg().knowledge;
         const store = new KnowledgeStore({ indexPath: kCfg.indexPath });
         const retriever = new KnowledgeRetriever(store, kCfg.topK);
-        const query = exploration_data.baseUrl ?? outDir;
+        const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
+        const query = pages.length > 0
+          ? pages.map(p => [p.title ?? "", ...(p.headings ?? []).slice(0, 3)].join(" ")).join(" ").trim()
+          : (exploration_data.baseUrl ?? outDir);
+        const ragSpin = new Spinner();
+        ragSpin.start("Loading knowledge index…");
         const chunks = await retriever.retrieve(query);
+        ragSpin.stop();
         if (chunks.length > 0) {
           ragContext  = KnowledgeRetriever.formatContext(chunks);
           ragSourceIds = [...new Set(chunks.map(c => c.sourceId))];
@@ -1476,8 +1482,7 @@ knowledgeCmd
     const { KnowledgeIngester } = await import("./knowledge/KnowledgeIngester");
     const { HealthScorer }      = await import("./knowledge/HealthScorer");
 
-    const ingester = new KnowledgeIngester({ store: null as never, metaPath, connectors: [] });
-    const meta     = ingester.readMeta();
+    const meta = KnowledgeIngester.readMetaFrom(metaPath);
     const health   = new HealthScorer().score(meta);
 
     console.log(`\n🧠 AIQA Knowledge Status  [env: ${config.environment}]`);

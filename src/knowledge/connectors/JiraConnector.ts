@@ -1,4 +1,5 @@
-import { JiraClient, HttpTransport } from "../../integrations/JiraClient";
+import { JiraClient, JiraIssue, HttpTransport } from "../../integrations/JiraClient";
+import { jqlString } from "../../integrations/JiraAdapter";
 import { KnowledgeChunk } from "../types";
 import { KnowledgeConnector } from "./KnowledgeConnector";
 import { NaiveChunker } from "../chunkers/NaiveChunker";
@@ -38,7 +39,7 @@ export class JiraConnector implements KnowledgeConnector {
 
     // Fetch stories + tasks
     const storiesResult = await this.client.searchIssues(
-      `project = "${this.projectKey}" AND issuetype in (Story, Task) ORDER BY priority DESC`,
+      `project = ${jqlString(this.projectKey)} AND issuetype in (Story, Task) ORDER BY priority DESC`,
       fields,
     );
     for (const issue of storiesResult.issues) {
@@ -47,7 +48,7 @@ export class JiraConnector implements KnowledgeConnector {
 
     // Fetch defects
     const defectsResult = await this.client.searchIssues(
-      `project = "${this.projectKey}" AND issuetype = Bug ORDER BY priority DESC`,
+      `project = ${jqlString(this.projectKey)} AND issuetype = Bug ORDER BY priority DESC`,
       fields,
     );
     for (const issue of defectsResult.issues) {
@@ -57,12 +58,12 @@ export class JiraConnector implements KnowledgeConnector {
     return chunks;
   }
 
-  private issueToChunks(issue: { key: string; fields: Record<string, unknown> }, type: "story" | "defect"): KnowledgeChunk[] {
-    const fields   = issue.fields as Record<string, unknown>;
-    const summary  = (fields.summary as string | undefined) ?? "";
-    const priority = ((fields.priority as { name?: string } | undefined)?.name) ?? "Medium";
-    const labels   = (fields.labels as string[] | undefined) ?? [];
-    const fixVer   = ((fields.fixVersions as Array<{ name: string }> | undefined)?.[0]?.name);
+  private issueToChunks(issue: JiraIssue, type: "story" | "defect"): KnowledgeChunk[] {
+    const fields   = issue.fields;
+    const summary  = fields.summary ?? "";
+    const priority = fields.priority?.name ?? "Medium";
+    const labels   = fields.labels ?? [];
+    const fixVer   = fields.fixVersions?.[0]?.name;
 
     const parts: string[] = [`[${issue.key}] ${summary}`];
 

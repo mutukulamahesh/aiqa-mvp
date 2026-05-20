@@ -1,3 +1,5 @@
+import * as crypto from "crypto";
+
 export interface IEmbedder {
   embed(text: string): Promise<number[]>;
 }
@@ -18,11 +20,14 @@ export class Embedder implements IEmbedder {
   }
 }
 
-// Deterministic stub for tests and CI — same text always produces the same vector.
-// Never downloads any model.
+// Deterministic stub for tests and CI — never downloads any model.
+// Spreads SHA-256(text) bytes across 384 float dimensions then L2-normalizes,
+// producing near-orthogonal vectors so retrieval ranking assertions are reliable.
 export class StubEmbedder implements IEmbedder {
   async embed(text: string): Promise<number[]> {
-    const seed = text.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    return Array.from({ length: 384 }, (_, i) => Math.sin(seed + i));
+    const hash = crypto.createHash("sha256").update(text).digest();
+    const vec  = Array.from({ length: 384 }, (_, i) => hash[i % hash.byteLength] / 128 - 1);
+    const norm = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+    return vec.map(v => v / norm);
   }
 }

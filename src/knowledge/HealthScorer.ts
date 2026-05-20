@@ -26,6 +26,13 @@ export class HealthScorer {
       (Date.now() - new Date(meta.lastIngestedAt).getTime()) / (1000 * 60 * 60 * 24),
     );
 
+    if (!Number.isFinite(ageDays)) {
+      return {
+        status: "STALE", totalChunks: meta.totalChunks, ageDays: null,
+        sources: meta.sources, message: "Index has an invalid date — re-ingest recommended (aiqa knowledge ingest)",
+      };
+    }
+
     let status: HealthStatus;
     let message: string;
 
