@@ -11,7 +11,8 @@ import { WaitHandler } from "../handlers/WaitHandler";
 import { StoreHandler } from "../handlers/StoreHandler";
 import { ConditionHandler } from "../handlers/ConditionHandler";
 import { LoopHandler } from "../handlers/LoopHandler";
-import { JudgeHandler } from "../handlers/JudgeHandler";
+import { JudgeHandler }   from "../handlers/JudgeHandler";
+import { LLMEvalHandler } from "../handlers/LLMEvalHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
@@ -56,7 +57,8 @@ export class StepInterpreter {
       .register(new StoreHandler())
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
-      .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever));
+      .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
+      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever));
   }
 
   async execute(

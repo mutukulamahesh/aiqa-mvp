@@ -40,6 +40,20 @@ export type StepAction =
       prompt:    string;
       pass_if:   string;
       store_as?: string;
+    }
+  | {
+      action:         "llm_eval";
+      target?:        string;    // named target from config.llm_targets (preferred)
+      provider?:      string;    // inline fallback when target is omitted
+      model?:         string;
+      system?:        string;
+      prompt:         string;
+      max_tokens?:    number;
+      assert_quality?: {
+        criteria: string;
+        pass_if:  string;
+      };
+      store_as?:      string;    // stores { response, score?, verdict?, reason? }
     };
 
 export interface TestDefinition {
