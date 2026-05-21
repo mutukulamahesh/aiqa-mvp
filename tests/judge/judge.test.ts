@@ -3,6 +3,8 @@ import { ExecutionContext }   from "../../src/execution/ExecutionContext";
 import { AdapterActions }     from "../../src/adapter/AdapterActions";
 import { LLMProvider, LLMRequest, LLMResponse } from "../../src/llm/LLMProvider";
 import { parseTestDefinition } from "../../src/dsl/DslParser";
+import { KnowledgeRetriever } from "../../src/knowledge/KnowledgeRetriever";
+import { RetrievedChunk }     from "../../src/knowledge/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -468,6 +470,139 @@ describe("JudgeHandler — pass_if robustness", () => {
     await expect(
       handler.execute({ action: "judge", value: "v", prompt: "p", pass_if: "Score   <=   .5" }, adapter, makeCtx())
     ).resolves.toBeUndefined();
+  });
+});
+
+// ── RAG2-08: KnowledgeRetriever integration ───────────────────────────────────
+
+/** Builds a stub KnowledgeRetriever that always returns the given chunks. */
+function makeStubRetriever(chunks: RetrievedChunk[]): KnowledgeRetriever {
+  return {
+    retrieve: async (_query: string, _topK?: number) => chunks,
+    // formatContext is not called by JudgeHandler (it uses its own formatter)
+  } as unknown as KnowledgeRetriever;
+}
+
+function makeACChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
+  return {
+    text:       "Coupon must be validated before loyalty points are applied",
+    sourceId:   "SCRUM-42",
+    sourceName: "jira",
+    type:       "story",
+    tags:       [],
+    confidence: 1.0,
+    relations:  [],
+    ingestedAt: new Date().toISOString(),
+    score:      0.91,
+    ...overrides,
+  };
+}
+
+describe("JudgeHandler — RAG2-08 KnowledgeRetriever", () => {
+  const adapter = makeAdapter();
+
+  test("AC chunks are appended to the LLM user message", async () => {
+    let capturedUser = "";
+    const llm: LLMProvider = {
+      name: "stub",
+      async complete(req): Promise<LLMResponse> {
+        capturedUser = req.userMessage;
+        return { content: JSON.stringify({ score: 0.9, reason: "ok" }), model: "stub" };
+      },
+    };
+    const retriever = makeStubRetriever([makeACChunk()]);
+    const handler   = new JudgeHandler(llm, retriever);
+    await handler.execute(
+      { action: "judge", value: "coupon applied", prompt: "Does it satisfy checkout AC?", pass_if: "score >= 0.5" },
+      adapter, makeCtx(),
+    );
+    expect(capturedUser).toContain("Acceptance criteria from organisational knowledge");
+    expect(capturedUser).toContain("SCRUM-42");
+    expect(capturedUser).toContain("Coupon must be validated");
+  });
+
+  test("system prompt mentions evaluating against AC when provided", async () => {
+    let capturedSystem = "";
+    const llm: LLMProvider = {
+      name: "stub",
+      async complete(req): Promise<LLMResponse> {
+        capturedSystem = req.system;
+        return { content: JSON.stringify({ score: 0.9, reason: "ok" }), model: "stub" };
+      },
+    };
+    await new JudgeHandler(llm, makeStubRetriever([makeACChunk()])).execute(
+      { action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.5" },
+      adapter, makeCtx(),
+    );
+    expect(capturedSystem).toContain("acceptance criteria");
+  });
+
+  test("no retriever = no AC section in LLM message", async () => {
+    let capturedUser = "";
+    const llm: LLMProvider = {
+      name: "stub",
+      async complete(req): Promise<LLMResponse> {
+        capturedUser = req.userMessage;
+        return { content: JSON.stringify({ score: 0.9, reason: "ok" }), model: "stub" };
+      },
+    };
+    await new JudgeHandler(llm).execute(
+      { action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.5" },
+      adapter, makeCtx(),
+    );
+    expect(capturedUser).not.toContain("Acceptance criteria");
+  });
+
+  test("empty retriever result = no AC section in LLM message", async () => {
+    let capturedUser = "";
+    const llm: LLMProvider = {
+      name: "stub",
+      async complete(req): Promise<LLMResponse> {
+        capturedUser = req.userMessage;
+        return { content: JSON.stringify({ score: 0.9, reason: "ok" }), model: "stub" };
+      },
+    };
+    const retriever = makeStubRetriever([]);
+    await new JudgeHandler(llm, retriever).execute(
+      { action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.5" },
+      adapter, makeCtx(),
+    );
+    expect(capturedUser).not.toContain("Acceptance criteria");
+  });
+
+  test("multiple AC chunks are all included", async () => {
+    let capturedUser = "";
+    const llm: LLMProvider = {
+      name: "stub",
+      async complete(req): Promise<LLMResponse> {
+        capturedUser = req.userMessage;
+        return { content: JSON.stringify({ score: 0.9, reason: "ok" }), model: "stub" };
+      },
+    };
+    const chunks = [
+      makeACChunk({ sourceId: "SCRUM-42", text: "Coupon validated before points" }),
+      makeACChunk({ sourceId: "SCRUM-43", text: "Expired coupon shows error" }),
+    ];
+    await new JudgeHandler(llm, makeStubRetriever(chunks)).execute(
+      { action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.5" },
+      adapter, makeCtx(),
+    );
+    expect(capturedUser).toContain("SCRUM-42");
+    expect(capturedUser).toContain("SCRUM-43");
+  });
+
+  test("judge step still passes and fails correctly when retriever is present", async () => {
+    const retriever = makeStubRetriever([makeACChunk()]);
+    const passing   = new JudgeHandler(makeJudgeLLM(0.9), retriever);
+    const failing   = new JudgeHandler(makeJudgeLLM(0.4), retriever);
+
+    await expect(
+      passing.execute({ action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.8" }, adapter, makeCtx())
+    ).resolves.toBeUndefined();
+
+    await expect(
+      failing.execute({ action: "judge", value: "v", prompt: "p", pass_if: "score >= 0.8" }, adapter, makeCtx())
+    ).rejects.toThrow("Judge failed");
   });
 });
 

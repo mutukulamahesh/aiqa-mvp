@@ -80,15 +80,24 @@ const EnvConfigSchema = z.object({
     enabled:   z.boolean().default(false),
     indexPath: z.string().default(".aiqa/knowledge"),
     topK:      z.number().int().min(1).default(5),
-    chunker:   z.enum(["naive"]).default("naive"),
+    chunker: z.enum(["naive", "ac-aware"]).default("naive"),
+    reranker: z.object({
+      strategy:       z.enum(["cosine", "hybrid"]).default("cosine"),
+      semanticWeight: z.number().min(0).max(1).default(0.6),
+      recencyWeight:  z.number().min(0).max(1).default(0.2),
+      severityWeight: z.number().min(0).max(1).default(0.1),
+      sourceWeight:   z.number().min(0).max(1).default(0.1),
+    }).default({ strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }),
     connectors: z.array(z.object({
-      type:       z.string(),
-      projectKey: z.string().optional(),
-      acField:    z.string().optional(),
-      spaceKey:   z.string().optional(),
-      url:        z.string().optional(),
+      type:         z.string(),
+      projectKey:   z.string().optional(),
+      acField:      z.string().optional(),
+      spaceKey:     z.string().optional(),
+      url:          z.string().optional(),
+      weight:       z.number().positive().optional(),
+      lookbackDays: z.number().int().positive().optional(),  // git connector
     })).default([]),
-  }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", connectors: [] }),
+  }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", reranker: { strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }, connectors: [] }),
 
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.

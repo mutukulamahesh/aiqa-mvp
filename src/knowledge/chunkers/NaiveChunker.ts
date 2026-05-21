@@ -15,16 +15,17 @@ export class NaiveChunker implements Chunker {
     while (offset < trimmed.length) {
       const slice = trimmed.slice(offset, offset + MAX_CHARS);
       chunks.push({
-        text:       slice,
-        sourceId:   metadata.sourceId,
-        sourceName: metadata.sourceName,
-        type:       metadata.type,
-        tags:       metadata.tags,
-        severity:   metadata.severity,
-        version:    metadata.version,
-        confidence: 1.0,
-        relations:  [],
-        ingestedAt: new Date().toISOString(),
+        text:            slice,
+        sourceId:        metadata.sourceId,
+        sourceName:      metadata.sourceName,
+        type:            metadata.type,
+        tags:            metadata.tags,
+        severity:        metadata.severity,
+        version:         metadata.version,
+        sourceUpdatedAt: metadata.sourceUpdatedAt,
+        confidence:      1.0,
+        relations:       [],
+        ingestedAt:      new Date().toISOString(),
       });
       offset += MAX_CHARS;
     }

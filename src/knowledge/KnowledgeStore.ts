@@ -32,10 +32,15 @@ export class KnowledgeStore {
     return this.reranker.rerank(candidates);
   }
 
-  // Phase 2: feedback loop — updates confidence score in the index.
-  // Stub in Phase 1: records outcome but does not yet update stored vectors.
-  async feedback(_sourceId: string, _outcome: "pass" | "fail" | "flaky"): Promise<void> {
-    // Phase 2 implementation: adjust chunk.confidence and re-index
+  // Feedback loop: adjusts stored confidence for all chunks belonging to sourceId.
+  // pass → +0.05, fail → -0.10, flaky → -0.03 (clamped to [0, 1]).
+  async feedback(sourceId: string, outcome: "pass" | "fail" | "flaky"): Promise<void> {
+    const DELTA: Record<string, number> = { pass: 0.05, fail: -0.10, flaky: -0.03 };
+    await this.index.updateConfidence(sourceId, DELTA[outcome]);
+  }
+
+  async listAll(): Promise<KnowledgeChunk[]> {
+    return this.index.listAll();
   }
 
   async clear(): Promise<void> {

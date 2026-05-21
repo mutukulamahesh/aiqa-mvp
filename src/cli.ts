@@ -152,10 +152,19 @@ program
       process.exit(1);
     }
 
+    let knowledgeStoreForRun: import("./knowledge/KnowledgeStore").KnowledgeStore | undefined;
+    if (config.knowledge.enabled) {
+      try {
+        const { KnowledgeStore } = await import("./knowledge/KnowledgeStore");
+        knowledgeStoreForRun = new KnowledgeStore({ indexPath: config.knowledge.indexPath });
+      } catch { /* non-fatal — feedback loop just won't fire */ }
+    }
+
     const runner = new TestRunner({
       headless,
       timeout:        config.timeouts.action,
       screenshotsDir: outRoot ? path.join(outRoot, "screenshots") : undefined,
+      knowledgeStore: knowledgeStoreForRun,
     });
     const result = await runner.run(testDef);
 
@@ -310,7 +319,15 @@ program
         } else if (health.status === "STALE") {
           console.warn(`   ⚠  RAG index is STALE (${health.ageDays} days old) — results may be outdated`);
         }
-        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath });
+        // Build connector weight map: sourceName → weight (for HybridReranker)
+        const connectorWeights: Record<string, number> = {};
+        for (const c of kCfg.connectors) {
+          if (c.weight !== undefined) connectorWeights[c.type] = c.weight;
+        }
+        const reranker = kCfg.reranker.strategy === "hybrid"
+          ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(kCfg.reranker, connectorWeights)
+          : undefined; // undefined → KnowledgeStore uses CosineSimilarityReranker default
+        const store     = new KnowledgeStore({ indexPath: kCfg.indexPath, reranker });
         const retriever = new KnowledgeRetriever(store, kCfg.topK);
         // Build query from page vocabulary; cap at 800 chars (≈256 tokens for all-MiniLM-L6-v2)
         const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
@@ -564,13 +581,25 @@ program
       ? new MemoryStore(memoryPath, path.basename(testsDir))
       : undefined;
 
-    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir, memory: sharedMemory };
+    // Knowledge store — shared across all workers for feedback loop + healer defect context
+    let sharedKnowledgeStore: import("./knowledge/KnowledgeStore").KnowledgeStore | undefined;
+    let sharedRetriever:      import("./knowledge/KnowledgeRetriever").KnowledgeRetriever | undefined;
+    if (config.knowledge.enabled) {
+      try {
+        const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
+        const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
+        sharedKnowledgeStore = new KnowledgeStore({ indexPath: config.knowledge.indexPath });
+        sharedRetriever      = new KnowledgeRetriever(sharedKnowledgeStore, config.knowledge.topK);
+      } catch { /* non-fatal */ }
+    }
+
+    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir, memory: sharedMemory, knowledgeStore: sharedKnowledgeStore };
 
     console.log(`   Circuit: stop after ${cbThreshold} consecutive failures`);
     console.log(`─────────────────────────────────────────\n`);
 
     // ── Concurrency-limited runner with circuit breaker ──────────────────────
-    const sharedHealer = new SelectorHealer();
+    const sharedHealer = new SelectorHealer(undefined, undefined, sharedRetriever);
     const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
     let cursor = 0;
 
@@ -1436,42 +1465,101 @@ const knowledgeCmd = program.command("knowledge").description("RAG Knowledge Lay
 
 knowledgeCmd
   .command("ingest")
-  .description("Ingest Jira stories and defects into the local knowledge index")
+  .description("Ingest knowledge from all configured connectors (Jira, Confluence, OpenAPI, Git)")
   .option("--jira <projectKey>", "Jira project key (overrides knowledge.connectors in config)")
-  .action(async (opts: { jira?: string }) => {
-    const config    = cfg();
-    const apiToken  = process.env.JIRA_API_TOKEN;
-    const jiraCfg   = config.jira;
+  .option("--only <type>",       "Ingest only this connector type (jira | confluence | openapi | git)")
+  .action(async (opts: { jira?: string; only?: string }) => {
+    const config       = cfg();
     const knowledgeCfg = config.knowledge;
-    const indexPath = knowledgeCfg.indexPath;
-    const metaPath  = path.join(indexPath, "meta.json");
-
-    if (!apiToken)        { console.error("❌ JIRA_API_TOKEN not set in .env"); process.exit(1); }
-    if (!jiraCfg?.baseUrl || !jiraCfg?.email) {
-      console.error("❌ jira.baseUrl and jira.email must be set in config");
-      process.exit(1);
-    }
-
-    const projectKey = opts.jira ?? knowledgeCfg.connectors.find(c => c.type === "jira")?.projectKey ?? jiraCfg.projectKey;
-    if (!projectKey) { console.error("❌ No Jira project key — use --jira <key> or set knowledge.connectors in config"); process.exit(1); }
+    const indexPath    = knowledgeCfg.indexPath;
+    const metaPath     = path.join(indexPath, "meta.json");
 
     const { KnowledgeStore }    = await import("./knowledge/KnowledgeStore");
     const { KnowledgeIngester } = await import("./knowledge/KnowledgeIngester");
-    const { JiraConnector }     = await import("./knowledge/connectors/JiraConnector");
     const { HealthScorer }      = await import("./knowledge/HealthScorer");
 
+    // Build chunker based on config
+    const chunker = knowledgeCfg.chunker === "ac-aware"
+      ? new (await import("./knowledge/chunkers/ACChunker")).ACChunker()
+      : new (await import("./knowledge/chunkers/NaiveChunker")).NaiveChunker();
+
+    // Build reranker based on config
+    const ingestConnectorWeights: Record<string, number> = {};
+    for (const c of knowledgeCfg.connectors) {
+      if (c.weight !== undefined) ingestConnectorWeights[c.type] = c.weight;
+    }
+    const ingestReranker = knowledgeCfg.reranker.strategy === "hybrid"
+      ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(knowledgeCfg.reranker, ingestConnectorWeights)
+      : undefined;
+
+    const store = new KnowledgeStore({ indexPath, reranker: ingestReranker });
+
+    // Build connectors from config
+    const connectors: import("./knowledge/connectors/KnowledgeConnector").KnowledgeConnector[] = [];
+
+    const connectorCfgs = knowledgeCfg.connectors.filter(c => !opts.only || c.type === opts.only);
+
+    for (const connCfg of connectorCfgs) {
+      if (connCfg.type === "jira") {
+        const apiToken = process.env.JIRA_API_TOKEN;
+        const jiraCfg  = config.jira;
+        if (!apiToken)                       { console.warn(`⚠  Skipping jira connector — JIRA_API_TOKEN not set`); continue; }
+        if (!jiraCfg?.baseUrl || !jiraCfg?.email) { console.warn(`⚠  Skipping jira connector — jira.baseUrl and jira.email must be set`); continue; }
+        const projectKey = opts.jira ?? connCfg.projectKey ?? jiraCfg.projectKey;
+        if (!projectKey) { console.warn(`⚠  Skipping jira connector — no project key (use --jira <key>)`); continue; }
+        const { JiraConnector } = await import("./knowledge/connectors/JiraConnector");
+        connectors.push(new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey, acField: connCfg.acField, chunker }));
+
+      } else if (connCfg.type === "confluence") {
+        const apiToken = process.env.JIRA_API_TOKEN; // shared Atlassian token
+        const jiraCfg  = config.jira;
+        if (!apiToken)                       { console.warn(`⚠  Skipping confluence connector — JIRA_API_TOKEN not set`); continue; }
+        if (!jiraCfg?.baseUrl || !jiraCfg?.email) { console.warn(`⚠  Skipping confluence connector — jira.baseUrl and jira.email must be set`); continue; }
+        if (!connCfg.spaceKey) { console.warn(`⚠  Skipping confluence connector — spaceKey missing in knowledge.connectors`); continue; }
+        const { ConfluenceConnector } = await import("./knowledge/connectors/ConfluenceConnector");
+        connectors.push(new ConfluenceConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, spaceKey: connCfg.spaceKey, chunker }));
+
+      } else if (connCfg.type === "openapi") {
+        if (!connCfg.url) { console.warn(`⚠  Skipping openapi connector — url missing in knowledge.connectors`); continue; }
+        const { OpenAPIConnector } = await import("./knowledge/connectors/OpenAPIConnector");
+        connectors.push(new OpenAPIConnector({ url: connCfg.url }));
+
+      } else if (connCfg.type === "git") {
+        const { GitConnector } = await import("./knowledge/connectors/GitConnector");
+        connectors.push(new GitConnector({ lookbackDays: connCfg.lookbackDays }));
+
+      } else {
+        console.warn(`⚠  Unknown connector type "${connCfg.type}" — skipping`);
+      }
+    }
+
+    // Fall back to --jira flag alone (no connectors in config)
+    if (connectors.length === 0 && opts.jira) {
+      const apiToken = process.env.JIRA_API_TOKEN;
+      const jiraCfg  = config.jira;
+      if (!apiToken || !jiraCfg?.baseUrl || !jiraCfg?.email) {
+        console.error("❌ JIRA_API_TOKEN, jira.baseUrl, and jira.email must be set for --jira flag");
+        process.exit(1);
+      }
+      const { JiraConnector } = await import("./knowledge/connectors/JiraConnector");
+      connectors.push(new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: opts.jira, chunker }));
+    }
+
+    if (connectors.length === 0) {
+      console.error("❌ No connectors configured — add entries under knowledge.connectors in config or use --jira <key>");
+      process.exit(1);
+    }
+
+    const types = connectors.map(c => c.name).join(", ");
     console.log(`\n🧠 AIQA Knowledge Ingest  [env: ${config.environment}]`);
-    console.log(`   Project : ${projectKey}`);
-    console.log(`   Index   : ${indexPath}`);
+    console.log(`   Connectors : ${types}`);
+    console.log(`   Index      : ${indexPath}`);
     console.log(`─────────────────────────────────────────\n`);
 
-    const store     = new KnowledgeStore({ indexPath });
-    const acField   = knowledgeCfg.connectors.find(c => c.type === "jira")?.acField;
-    const connector = new JiraConnector({ baseUrl: jiraCfg.baseUrl!, email: jiraCfg.email!, apiToken, projectKey: projectKey!, acField });
-    const ingester  = new KnowledgeIngester({ store, metaPath, connectors: [connector] });
+    const ingester = new KnowledgeIngester({ store, metaPath, connectors });
 
     const spin = new Spinner();
-    spin.start("Fetching from Jira and embedding chunks…");
+    spin.start(`Fetching from ${types} and embedding chunks…`);
     try {
       const meta   = await ingester.run();
       spin.stop();
@@ -1511,6 +1599,50 @@ knowledgeCmd
     }
     console.log(`\n   ${health.message}`);
     console.log(`─────────────────────────────────────────\n`);
+  });
+
+knowledgeCmd
+  .command("readiness")
+  .description("Score knowledge coverage for a feature tag — READY | PARTIAL | MISSING")
+  .requiredOption("--tag <tag>", "Feature tag to score (e.g. checkout, login, payments)")
+  .action(async (opts: { tag: string }) => {
+    const config    = cfg();
+    const kCfg      = config.knowledge;
+
+    if (!kCfg.enabled) {
+      console.error("❌ knowledge.enabled is false — enable it in config and run `aiqa knowledge ingest` first");
+      process.exit(1);
+    }
+
+    const { KnowledgeStore }   = await import("./knowledge/KnowledgeStore");
+    const { KnowledgeReadinessScorer: ReadinessScorer }  = await import("./knowledge/ReadinessScorer");
+
+    const store  = new KnowledgeStore({ indexPath: kCfg.indexPath });
+    const chunks = await store.listAll();
+
+    if (chunks.length === 0) {
+      console.error("❌ Knowledge index is empty — run `aiqa knowledge ingest` first");
+      process.exit(1);
+    }
+
+    const report = new ReadinessScorer().score(opts.tag, chunks);
+
+    const icon = report.status === "READY" ? "✅" : report.status === "PARTIAL" ? "⚠️ " : "❌";
+    console.log(`\n🧠 AIQA Knowledge Readiness  [env: ${config.environment}]`);
+    console.log(`─────────────────────────────────────────`);
+    console.log(`   Tag     : ${report.tag}`);
+    console.log(`   Status  : ${icon} ${report.status}`);
+    console.log(`   Stories : ${report.storyCount}`);
+    console.log(`   Defects : ${report.defectCount}`);
+    console.log(`   Chunks  : ${report.totalChunks}`);
+    console.log(`   Avg Conf: ${report.avgConfidence.toFixed(3)}`);
+    if (report.oldestChunkDays !== null) {
+      console.log(`   Oldest  : ${report.oldestChunkDays} day(s) ago`);
+    }
+    console.log(`\n   ${report.message}`);
+    console.log(`─────────────────────────────────────────\n`);
+
+    if (report.status === "MISSING") process.exit(2);
   });
 
 // ── serve ─────────────────────────────────────────────────────────────────────
