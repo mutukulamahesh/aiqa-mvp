@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AIQA — Strategic View: Market, Gaps & Future</title>
+<style>
+:root {
+  --blue:     #1a56db;
+  --blue-dk:  #1e3a8a;
+  --blue-lt:  #e8f0fe;
+  --blue-mid: #3b82f6;
+  --green:    #057a55;
+  --green-lt: #d3f9d8;
+  --purple:   #6c2bd9;
+  --purple-lt:#ede9fe;
+  --amber:    #b45309;
+  --amber-lt: #fef3c7;
+  --red:      #c81e1e;
+  --red-lt:   #fde8e8;
+  --teal:     #0e7490;
+  --teal-lt:  #cffafe;
+  --pink:     #9d174d;
+  --pink-lt:  #fce7f3;
+  --gray:     #374151;
+  --gray-lt:  #f3f4f6;
+  --border:   #e5e7eb;
+  --shadow:   0 4px 20px rgba(0,0,0,.10);
+  --shadow-lg:0 8px 32px rgba(0,0,0,.14);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+  background:#f8fafc;color:var(--gray);line-height:1.65;
+}
+/* ── NAV ── */
+nav{
+  background:linear-gradient(135deg,#1e3a8a 0%,#1a56db 100%);
+  color:white;padding:0 2rem;
+  display:flex;align-items:center;gap:1.5rem;
+  position:sticky;top:0;z-index:100;
+  box-shadow:0 2px 12px rgba(0,0,0,.25);
+}
+nav .brand{font-size:1.1rem;font-weight:800;padding:1rem 0;white-space:nowrap;letter-spacing:-.02em}
+nav .role-badge{
+  background:rgba(255,255,255,.15);
+  border:1px solid rgba(255,255,255,.3);
+  border-radius:999px;font-size:.7rem;font-weight:700;
+  padding:.2rem .7rem;white-space:nowrap;
+}
+nav a{color:rgba(255,255,255,.8);text-decoration:none;font-size:.82rem;padding:.3rem .5rem;border-radius:4px;transition:background .15s}
+nav a:hover{background:rgba(255,255,255,.15);color:white}
+
+/* ── SECTION ── */
+section{padding:4rem 2rem;max-width:1120px;margin:0 auto}
+section+section{border-top:1px solid var(--border)}
+h1{font-size:2.6rem;font-weight:900;letter-spacing:-.03em;margin-bottom:.4rem}
+h2{font-size:1.75rem;font-weight:800;margin-bottom:1.2rem;color:#111827}
+h3{font-size:1.05rem;font-weight:700;margin-bottom:.4rem}
+p{margin-bottom:1rem;color:#4b5563}
+code{background:#f1f5f9;border:1px solid var(--border);padding:.1rem .4rem;border-radius:4px;font-size:.85em}
+
+/* ── HERO ── */
+#hero{
+  background:linear-gradient(150deg,#1e3a8a 0%,#1a56db 50%,#6c2bd9 100%);
+  color:white;padding:5rem 2rem 4rem;text-align:center;
+  clip-path:polygon(0 0,100% 0,100% 92%,0 100%);
+  margin-bottom:-3rem;
+}
+#hero h1{color:white}
+#hero .sub{font-size:1.15rem;opacity:.85;max-width:700px;margin:.8rem auto 0}
+.role-pills{display:flex;gap:.7rem;justify-content:center;flex-wrap:wrap;margin:1.5rem 0}
+.role-pill{
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;padding:.35rem 1rem;font-size:.82rem;font-weight:700;
+}
+
+/* ── OPINION BOX ── */
+.opinion{
+  background:linear-gradient(135deg,#ede9fe 0%,#e0e7ff 100%);
+  border:2px solid #c4b5fd;border-radius:14px;
+  padding:1.6rem 1.8rem;margin:2rem 0;position:relative;
+}
+.opinion::before{
+  content:'"';font-size:5rem;color:#c4b5fd;line-height:1;
+  position:absolute;top:-1rem;left:1rem;
+}
+.opinion p{color:#3730a3;font-size:1rem;font-style:italic;margin:0}
+.opinion .attribution{
+  font-style:normal;font-weight:700;color:#4c1d95;
+  font-size:.8rem;margin-top:.8rem;display:block;
+}
+
+/* ── GRID CARDS ── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;margin-top:1.5rem}
+.card{background:white;border:1px solid var(--border);border-radius:12px;padding:1.4rem;box-shadow:var(--shadow)}
+.card .card-icon{font-size:1.8rem;margin-bottom:.6rem}
+.card h3{font-size:.95rem}
+.card p{font-size:.85rem;margin:0;color:#6b7280}
+.card.blue  {border-top:3px solid var(--blue)}
+.card.green {border-top:3px solid var(--green)}
+.card.purple{border-top:3px solid var(--purple)}
+.card.amber {border-top:3px solid var(--amber)}
+.card.red   {border-top:3px solid var(--red)}
+.card.teal  {border-top:3px solid var(--teal)}
+
+/* ── COMPETITION TABLE ── */
+.comp-wrap{overflow-x:auto;margin-top:1.5rem}
+table.comp{width:100%;border-collapse:collapse;font-size:.83rem}
+table.comp th{
+  background:#111827;color:white;padding:.7rem 1rem;
+  text-align:left;white-space:nowrap;font-weight:700;
+}
+table.comp th:first-child{border-radius:8px 0 0 0}
+table.comp th:last-child{border-radius:0 8px 0 0}
+table.comp td{padding:.65rem 1rem;border-bottom:1px solid var(--border);vertical-align:middle}
+table.comp tr:nth-child(even) td{background:#f9fafb}
+table.comp tr.aiqa-row td{background:var(--blue-lt);font-weight:700;color:var(--blue-dk)}
+.tick{color:#057a55;font-weight:800}
+.cross{color:#c81e1e;font-weight:800}
+.partial{color:#b45309;font-weight:800}
+
+/* ── GAP CARDS ── */
+.gap-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.3rem;margin-top:1.5rem}
+.gap-card{
+  border-radius:12px;padding:1.4rem;
+  border-left:4px solid transparent;
+}
+.gap-card.critical{background:#fff1f2;border-color:#f43f5e}
+.gap-card.high    {background:#fffbeb;border-color:#f59e0b}
+.gap-card.medium  {background:#f0fdf4;border-color:#22c55e}
+.gap-badge{
+  display:inline-block;font-size:.65rem;font-weight:800;
+  text-transform:uppercase;letter-spacing:.08em;
+  padding:.15rem .6rem;border-radius:999px;margin-bottom:.5rem;
+}
+.gap-card.critical .gap-badge{background:#fee2e2;color:#991b1b}
+.gap-card.high     .gap-badge{background:#fef3c7;color:#92400e}
+.gap-card.medium   .gap-badge{background:#dcfce7;color:#166534}
+.gap-card h3{font-size:.95rem}
+.gap-card p{font-size:.83rem;color:#4b5563;margin:.3rem 0 0}
+.gap-card .opportunity{
+  font-size:.78rem;font-weight:700;margin-top:.7rem;
+  padding:.4rem .7rem;border-radius:6px;
+  background:rgba(0,0,0,.05);
+}
+
+/* ── BLOCKER CARDS ── */
+.blocker-list{display:flex;flex-direction:column;gap:1rem;margin-top:1.5rem}
+.blocker{
+  background:white;border:1px solid var(--border);border-radius:12px;
+  padding:1.3rem 1.5rem;display:grid;
+  grid-template-columns:auto 1fr auto;align-items:start;gap:1rem;
+  box-shadow:var(--shadow);
+}
+.blocker-num{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--red-lt);color:var(--red);
+  font-weight:900;font-size:.95rem;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.blocker-title{font-weight:700;font-size:.95rem;margin-bottom:.3rem}
+.blocker-desc{font-size:.84rem;color:#6b7280}
+.blocker-fix{
+  background:var(--green-lt);border:1px solid #6ee7b7;
+  border-radius:8px;padding:.5rem .9rem;
+  font-size:.78rem;font-weight:700;color:var(--green);
+  white-space:nowrap;min-width:160px;text-align:center;
+  align-self:center;
+}
+
+/* ── FUTURE PHASES ── */
+.phase-list{display:flex;flex-direction:column;gap:1.5rem;margin-top:1.5rem}
+.phase{
+  background:white;border:1px solid var(--border);border-radius:14px;
+  overflow:hidden;box-shadow:var(--shadow);
+}
+.phase-header{
+  padding:1.1rem 1.5rem;display:flex;align-items:center;gap:1rem;
+}
+.phase-icon{font-size:1.8rem;flex-shrink:0}
+.phase-label{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.2rem}
+.phase-title{font-size:1.1rem;font-weight:800}
+.phase-body{padding:0 1.5rem 1.3rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:600px){.phase-body{grid-template-columns:1fr}}
+.phase-col h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;color:#9ca3af;font-weight:700;margin-bottom:.5rem}
+.phase-col ul{list-style:none;padding:0}
+.phase-col li{font-size:.85rem;padding:.2rem 0;color:#374151}
+.phase-col li::before{content:"→ ";color:#9ca3af}
+.phase-col li strong{color:#111827}
+.phase-status{
+  font-size:.72rem;font-weight:700;padding:.2rem .6rem;
+  border-radius:999px;margin-left:auto;flex-shrink:0;align-self:center;
+}
+.status-started{background:#fef3c7;color:#92400e}
+.status-planned{background:#e0e7ff;color:#3730a3}
+.status-future {background:#f3f4f6;color:#6b7280}
+.phase.p-llm   .phase-header{background:linear-gradient(135deg,#fef3c7,#fde68a)}
+.phase.p-vision.phase-header{background:linear-gradient(135deg,#e0e7ff,#c7d2fe)}
+.phase.p-desktop.phase-header{background:linear-gradient(135deg,#d1fae5,#a7f3d0)}
+.phase.p-saas  .phase-header{background:linear-gradient(135deg,#fce7f3,#fbcfe8)}
+.phase.p-rag   .phase-header{background:linear-gradient(135deg,#cffafe,#a5f3fc)}
+
+/* ── POSITIONING MAP ── */
+.pos-map{
+  position:relative;width:100%;max-width:700px;
+  height:440px;margin:2rem auto;
+  border:2px solid var(--border);border-radius:16px;
+  background:white;overflow:hidden;
+}
+.pos-axis-h,.pos-axis-v{position:absolute;background:#e5e7eb}
+.pos-axis-h{height:1px;width:100%;top:50%;left:0}
+.pos-axis-v{width:1px;height:100%;left:50%;top:0}
+.pos-label{position:absolute;font-size:.7rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.08em}
+.pos-dot{position:absolute;transform:translate(-50%,-50%);text-align:center;cursor:default}
+.pos-dot .dot{
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  margin:0 auto .2rem;font-size:.8rem;font-weight:800;color:white;
+}
+.pos-dot .lbl{font-size:.68rem;font-weight:700;white-space:nowrap;color:#374151}
+.pos-dot .sub-lbl{font-size:.6rem;color:#9ca3af;white-space:nowrap}
+/* quadrant shading */
+.pos-q{position:absolute;opacity:.04}
+.pos-q.q1{background:var(--green);top:0;right:0;width:50%;height:50%}
+.pos-q.q2{background:var(--blue);top:0;left:0;width:50%;height:50%}
+.pos-q.q3{background:var(--red);bottom:0;left:0;width:50%;height:50%}
+.pos-q.q4{background:var(--amber);bottom:0;right:0;width:50%;height:50%}
+
+/* ── STRATEGIC RECS ── */
+.rec-list{counter-reset:recs;display:flex;flex-direction:column;gap:1rem;margin-top:1.5rem}
+.rec{
+  background:white;border:1px solid var(--border);border-radius:12px;
+  padding:1.2rem 1.5rem;display:flex;gap:1.2rem;align-items:flex-start;
+  box-shadow:var(--shadow);position:relative;
+  border-left:4px solid var(--blue);
+}
+.rec::before{
+  counter-increment:recs;content:counter(recs);
+  width:32px;height:32px;border-radius:50%;
+  background:var(--blue-lt);color:var(--blue);font-weight:900;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem;
+}
+.rec-content h3{font-size:.95rem;font-weight:700;color:#111827;margin-bottom:.3rem}
+.rec-content p{font-size:.85rem;color:#6b7280;margin:0}
+.rec.urgent{border-left-color:var(--red)}
+.rec.urgent::before{background:var(--red-lt);color:var(--red)}
+.rec.growth{border-left-color:var(--green)}
+.rec.growth::before{background:var(--green-lt);color:var(--green)}
+
+/* ── TIMELINE ── */
+.timeline{position:relative;padding-left:2.5rem;margin-top:1.5rem}
+.timeline::before{content:'';position:absolute;left:.7rem;top:0;bottom:0;width:2px;background:var(--border)}
+.tl-item{position:relative;margin-bottom:1.4rem}
+.tl-item::before{
+  content:'';position:absolute;left:-2.1rem;top:.3rem;
+  width:12px;height:12px;border-radius:50%;border:2px solid white;
+}
+.tl-item.done::before{background:var(--green)}
+.tl-item.active::before{background:var(--blue);box-shadow:0 0 0 3px var(--blue-lt)}
+.tl-item.planned::before{background:#d1d5db}
+.tl-date{font-size:.72rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.07em}
+.tl-title{font-size:.95rem;font-weight:700;color:#111827}
+.tl-desc{font-size:.83rem;color:#6b7280;margin-top:.2rem}
+
+/* ── FOOTER ── */
+footer{background:#111827;color:#9ca3af;text-align:center;padding:1.5rem;font-size:.82rem}
+footer strong{color:white}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">⚡ AIQA</div>
+  <div class="role-badge">Principal BA · Architect · Startup Owner</div>
+  <a href="#perspective">My View</a>
+  <a href="#market">Market Map</a>
+  <a href="#gaps">Gaps</a>
+  <a href="#blockers">OSS Blockers</a>
+  <a href="#future">Future</a>
+  <a href="#recs">Strategy</a>
+</nav>
+
+<!-- ══════════ HERO ══════════ -->
+<div id="hero">
+  <div class="role-pills">
+    <div class="role-pill">🧠 Principal Business Analyst</div>
+    <div class="role-pill">🏗️ Platform Architect</div>
+    <div class="role-pill">🚀 Startup Owner</div>
+  </div>
+  <h1>AIQA — A Founder's Honest Assessment</h1>
+  <p class="sub">
+    How I see this platform, what the market is missing, what stops open-source adoption,
+    and where the real opportunity lies — written plainly, not as a pitch.
+  </p>
+</div>
+
+<!-- ══════════ MY PERSPECTIVE ══════════ -->
+<section id="perspective">
+  <h2>How I See AIQA</h2>
+
+  <div class="opinion">
+    <p>
+      AIQA is not a test runner with AI features bolted on. It is the first serious attempt to build
+      a <strong>unified QA execution engine where AI is the operating principle, not an add-on</strong>.
+      The gap it's attacking — fragmented toolchains, brittle selectors, zero intelligence between runs —
+      is real, expensive, and universally felt. The architecture is clean. The vision is honest.
+      The timing is right. What it needs now is ruthless prioritisation of the one capability
+      no one else has: <strong>testing AI systems themselves</strong>.
+    </p>
+    <span class="attribution">— Speaking as Principal BA + Architect + Startup Owner</span>
+  </div>
+
+  <div class="card-grid">
+    <div class="card blue">
+      <div class="card-icon">💎</div>
+      <h3>What AIQA does that nobody else does</h3>
+      <p>One YAML file tests UI + API + Database simultaneously. No other open-source tool unifies all three layers with AI-powered generation, healing, and diagnosis in a single pipeline.</p>
+    </div>
+    <div class="card green">
+      <div class="card-icon">🧬</div>
+      <h3>The architecture is the moat</h3>
+      <p>Core + Plugin + Adapter pattern means adding new testing layers (desktop, LLM, mobile) doesn't rewrite anything. This composability is rare — most tools are monoliths.</p>
+    </div>
+    <div class="card purple">
+      <div class="card-icon">⏱️</div>
+      <h3>The timing is exceptional</h3>
+      <p>Every software team is now shipping AI features (chatbots, copilots, recommendations). Nobody has a credible way to test them. AIQA's LLM eval capability arrives exactly when demand peaks.</p>
+    </div>
+    <div class="card amber">
+      <div class="card-icon">⚠️</div>
+      <h3>The honest challenge</h3>
+      <p>AIQA is 9,261 lines and ~95% of vision implemented — but "feature-complete" is not the same as "adopted". The gap between a working tool and a thriving open-source project is go-to-market, not engineering.</p>
+    </div>
+    <div class="card teal">
+      <div class="card-icon">🎯</div>
+      <h3>The real differentiator to double down on</h3>
+      <p>LLM Evaluation + Agentic Workflow Testing. This is a greenfield space. Playwright can't do it. LangSmith only does it. AIQA can do both — and test traditional and AI software in the same pipeline.</p>
+    </div>
+    <div class="card red">
+      <div class="card-icon">🚨</div>
+      <h3>The risk to watch</h3>
+      <p>Testim, Mabl, and Katalon are all raising money to add AI. They have sales teams. AIQA wins by being 10× more useful to developers before those enterprise tools catch up. Speed of adoption matters more than feature completeness.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ COMPETITIVE MAP ══════════ -->
+<section id="market">
+  <h2>The Market Today — Where AIQA Fits</h2>
+  <p>
+    The testing tool market is fragmented by design. Every tool is excellent at one layer and ignores the rest.
+    That fragmentation is AIQA's business case.
+  </p>
+
+  <!-- Positioning Map -->
+  <div class="pos-map">
+    <div class="pos-q q1"></div><div class="pos-q q2"></div>
+    <div class="pos-q q3"></div><div class="pos-q q4"></div>
+    <div class="pos-axis-h"></div>
+    <div class="pos-axis-v"></div>
+    <!-- axis labels -->
+    <div class="pos-label" style="bottom:.6rem;left:50%;transform:translateX(-50%)">← Single Layer</div>
+    <div class="pos-label" style="bottom:.6rem;right:1rem">Multi-Layer →</div>
+    <div class="pos-label" style="top:.6rem;left:.5rem">AI-Native ↑</div>
+    <div class="pos-label" style="bottom:2.5rem;left:.5rem">Manual Code ↓</div>
+
+    <!-- Tools plotted: x=multi-layer (0=single, 100=multi), y=AI-native (0=manual, 100=AI) -->
+    <!-- Playwright: x=10%, y=10% -->
+    <div class="pos-dot" style="left:12%;top:82%">
+      <div class="dot" style="width:36px;height:36px;background:#4b5563">PW</div>
+      <div class="lbl">Playwright</div><div class="sub-lbl">Web only, code</div>
+    </div>
+    <!-- Selenium: x=8%, y=5% -->
+    <div class="pos-dot" style="left:9%;top:90%">
+      <div class="dot" style="width:30px;height:30px;background:#6b7280">Se</div>
+      <div class="lbl">Selenium</div><div class="sub-lbl">Web only, code</div>
+    </div>
+    <!-- Postman: x=20%, y=12% -->
+    <div class="pos-dot" style="left:22%;top:78%">
+      <div class="dot" style="width:34px;height:34px;background:#ef4444">Po</div>
+      <div class="lbl">Postman</div><div class="sub-lbl">API only</div>
+    </div>
+    <!-- Appium: x=15%, y=12% -->
+    <div class="pos-dot" style="left:38%;top:84%">
+      <div class="dot" style="width:32px;height:32px;background:#8b5cf6">Ap</div>
+      <div class="lbl">Appium</div><div class="sub-lbl">Mobile/Desktop</div>
+    </div>
+    <!-- LangSmith: x=25%, y=72% -->
+    <div class="pos-dot" style="left:18%;top:18%">
+      <div class="dot" style="width:34px;height:34px;background:#f59e0b">LS</div>
+      <div class="lbl">LangSmith</div><div class="sub-lbl">LLM eval only</div>
+    </div>
+    <!-- Testim: x=50%, y=68% -->
+    <div class="pos-dot" style="left:52%;top:22%">
+      <div class="dot" style="width:36px;height:36px;background:#10b981">Tm</div>
+      <div class="lbl">Testim/Mabl</div><div class="sub-lbl">Web+AI, SaaS only</div>
+    </div>
+    <!-- Katalon: x=55%, y=40% -->
+    <div class="pos-dot" style="left:60%;top:55%">
+      <div class="dot" style="width:34px;height:34px;background:#3b82f6">Ka</div>
+      <div class="lbl">Katalon</div><div class="sub-lbl">Web+API, some AI</div>
+    </div>
+    <!-- AIQA: x=85%, y=82% -->
+    <div class="pos-dot" style="left:82%;top:12%">
+      <div class="dot" style="width:52px;height:52px;background:#1a56db;box-shadow:0 0 0 4px #bfdbfe">AIQA</div>
+      <div class="lbl" style="color:#1a56db;font-size:.8rem">AIQA</div>
+      <div class="sub-lbl" style="color:#3b82f6">All layers + AI-native</div>
+    </div>
+    <!-- Cursor/Copilot: x=35%, y=78% -->
+    <div class="pos-dot" style="left:33%;top:22%">
+      <div class="dot" style="width:30px;height:30px;background:#111827">Co</div>
+      <div class="lbl">Copilot/Cursor</div><div class="sub-lbl">Writes code tests</div>
+    </div>
+  </div>
+  <p style="text-align:center;font-size:.78rem;color:#9ca3af;margin-top:-.5rem">
+    Approximate positioning — Multi-Layer Coverage (x-axis) vs AI-Native Intelligence (y-axis)
+  </p>
+
+  <div class="comp-wrap">
+    <table class="comp">
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th>Web UI</th>
+          <th>API</th>
+          <th>Database</th>
+          <th>Desktop</th>
+          <th>LLM Eval</th>
+          <th>Auto-Generate</th>
+          <th>Self-Heal</th>
+          <th>Open Source</th>
+          <th>AI Memory</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Playwright</strong></td>
+          <td class="tick">✓</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>Cypress</strong></td>
+          <td class="tick">✓</td><td class="partial">~</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>Postman/Newman</strong></td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="partial">~</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>Appium</strong></td>
+          <td class="partial">~</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="tick">✓</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>Testim / Mabl</strong></td>
+          <td class="tick">✓</td><td class="partial">~</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="partial">~</td>
+          <td class="tick">✓</td><td class="cross">✗</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>Katalon</strong></td>
+          <td class="tick">✓</td><td class="tick">✓</td><td class="partial">~</td>
+          <td class="partial">~</td><td class="cross">✗</td><td class="partial">~</td>
+          <td class="partial">~</td><td class="partial">~</td><td class="cross">✗</td>
+        </tr>
+        <tr>
+          <td><strong>LangSmith / RAGAS</strong></td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="partial">~</td><td class="partial">~</td>
+        </tr>
+        <tr>
+          <td><strong>Cucumber/BDD</strong></td>
+          <td class="partial">~</td><td class="partial">~</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td>
+          <td class="cross">✗</td><td class="tick">✓</td><td class="cross">✗</td>
+        </tr>
+        <tr class="aiqa-row">
+          <td><strong>⚡ AIQA</strong></td>
+          <td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td>
+          <td class="partial">→</td><td class="partial">→</td><td class="tick">✓</td>
+          <td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:.78rem;color:#6b7280;margin-top:.5rem">
+    ✓ = full support &nbsp;·&nbsp; ~ = partial &nbsp;·&nbsp; ✗ = not supported &nbsp;·&nbsp; → = in development
+  </p>
+</section>
+
+<!-- ══════════ GAPS ══════════ -->
+<section id="gaps">
+  <h2>Market Gaps — What Nobody Is Solving Well</h2>
+  <p>
+    These are not feature requests. These are structural holes in the testing market that represent
+    genuine opportunity — ranked by urgency and market size.
+  </p>
+
+  <div class="gap-grid">
+    <div class="gap-card critical">
+      <div class="gap-badge">Critical — Immediate Opportunity</div>
+      <h3>🤖 Testing AI Systems (LLM + Agentic)</h3>
+      <p>
+        Every company is shipping chatbots, copilots, and AI agents. There is no credible open-source
+        tool to test them. LangSmith tests LLM outputs but can't simulate a user flow.
+        RAGAS tests RAG quality but can't test the UI wrapper around it.
+        Nobody tests the <em>end-to-end</em> AI user experience.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: One pipeline to test the React UI + the API + the LLM response + the DB state — simultaneously.</div>
+    </div>
+    <div class="gap-card critical">
+      <div class="gap-badge">Critical — Immediate Opportunity</div>
+      <h3>📋 Requirements-to-Test Traceability</h3>
+      <p>
+        Product managers write acceptance criteria in Jira. Developers write code. QA writes separate
+        tests. These three worlds never reliably connect. When a test fails, no one knows which
+        requirement is broken. When a requirement changes, no one knows which tests are stale.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: RAG layer + Jira integration creates live traceability — requirement → test → result → Jira bug, closed loop.</div>
+    </div>
+    <div class="gap-card critical">
+      <div class="gap-badge">Critical — Market Size</div>
+      <h3>🖥️ Desktop &amp; Legacy App Automation Without Code</h3>
+      <p>
+        Thousands of enterprises run Windows desktop apps, SAP GUIs, and legacy systems that have
+        no REST API and no DOM. WinAppDriver and Appium require coding expertise.
+        Vision-based testing (screenshot + AI) is theoretically possible but no tool makes it accessible.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: VisionAgent + DesktopAdapter + YAML DSL = zero-code automation for any screen, DOM or no DOM.</div>
+    </div>
+    <div class="gap-card high">
+      <div class="gap-badge">High — Developer Experience Gap</div>
+      <h3>⚡ Zero-Friction Local Setup for Developers</h3>
+      <p>
+        Most AI testing tools are SaaS-only or require complex cloud setup. Developers want to run
+        tests locally in 30 seconds. The friction of "install Node, configure Playwright, get an API key,
+        set up CI" is enough to stop adoption before a single test runs.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: <code>npx aiqa init</code> in one command. Chrome Extension for zero-install. Mock LLM for no-API-key start.</div>
+    </div>
+    <div class="gap-card high">
+      <div class="gap-badge">High — Enterprise Gap</div>
+      <h3>🧠 Cross-Run Institutional Memory</h3>
+      <p>
+        Every test run today starts from zero knowledge. Tools don't remember that this button is
+        always flaky on Tuesdays, that this API fails under load, or that this flow broke three times
+        last quarter. Each failure is diagnosed from scratch.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: Memory layer is already built — this is a story to tell, not a feature to build. Market it.</div>
+    </div>
+    <div class="gap-card high">
+      <div class="gap-badge">High — Emerging Need</div>
+      <h3>🎭 Prompt Regression &amp; Model Version Testing</h3>
+      <p>
+        Companies upgrading from GPT-3.5 to GPT-4o, or Claude 2 to Claude 3, have no way to
+        detect output regressions. Prompts that worked before silently change behaviour.
+        There is no "diff this model version against that one" tool.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: LLMEvalHandler + baseline storage = "git diff for model outputs". First mover advantage here is significant.</div>
+    </div>
+    <div class="gap-card medium">
+      <div class="gap-badge">Medium — Cost Reduction</div>
+      <h3>🔬 Synthetic Monitoring vs. Real User Monitoring</h3>
+      <p>
+        DataDog and New Relic do RUM (Real User Monitoring) but cost $$$. Synthetic monitoring
+        (scripted browser checks every 5 minutes) is achievable with AIQA at near-zero cost,
+        but no open-source tool makes it easy to schedule and alert.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: <code>aiqa run --schedule "*/5 * * * *"</code> + Slack alert = enterprise synthetic monitoring, free.</div>
+    </div>
+    <div class="gap-card medium">
+      <div class="gap-badge">Medium — Niche but Sticky</div>
+      <h3>📊 Visual Regression Without a Paid Service</h3>
+      <p>
+        Percy and Chromatic are excellent visual regression tools but charge per screenshot.
+        Teams want to catch "the button moved 3px" regressions without a monthly bill.
+        Open-source visual diffing exists but isn't integrated with a full test pipeline.
+      </p>
+      <div class="opportunity">💡 AIQA Opportunity: VisionAgent screenshot diff as a built-in step — no external service, no per-screenshot cost.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ OSS BLOCKERS ══════════ -->
+<section id="blockers">
+  <h2>Open Source Adoption — What Stops Teams from Adopting AIQA</h2>
+  <p>
+    I'm being ruthlessly honest here. These are the real friction points — not the ones
+    we want to believe exist, but the ones that actually cause developers to close the README
+    and go back to Playwright.
+  </p>
+
+  <div class="blocker-list">
+    <div class="blocker">
+      <div class="blocker-num">1</div>
+      <div>
+        <div class="blocker-title">🔑 "I need an API key to do anything useful"</div>
+        <div class="blocker-desc">
+          The LLM dependency is the biggest psychological blocker. A developer opens the README,
+          sees <code>ANTHROPIC_API_KEY</code>, and immediately thinks: "This costs money. I need approval.
+          This is a SaaS in disguise." Even if the mock provider exists, if it's not the first thing
+          they experience, they've already left.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: "No API key" hero demo. Mock-first README.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">2</div>
+      <div>
+        <div class="blocker-title">📦 "It's Node.js only — we're a Python / Java shop"</div>
+        <div class="blocker-desc">
+          The majority of enterprise backend teams work in Java or Python. Node.js is fine for frontend
+          teams, but a Java backend developer looking for API + DB testing will see <code>npm install</code>
+          and stop. The YAML DSL is language-agnostic — the runtime isn't. This creates a perception
+          barrier even if the actual test files are YAML.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: Python runner wrapper. Docker image. "YAML is language-agnostic" messaging.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">3</div>
+      <div>
+        <div class="blocker-title">🏗️ "How do I know this will still be maintained in 6 months?"</div>
+        <div class="blocker-desc">
+          Trust is the silent killer of open-source adoption. A team evaluating a testing platform
+          for production CI is making a 2-year commitment. A GitHub repo with one contributor,
+          no changelog, no roadmap, and no community signals "abandoned project risk."
+          The engineering quality here is excellent — but that quality is invisible until you dig in.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: Visible roadmap. CHANGELOG. Discord/Slack community. Contribution guide.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">4</div>
+      <div>
+        <div class="blocker-title">🌐 "Playwright downloads browsers — our CI is air-gapped"</div>
+        <div class="blocker-desc">
+          Enterprise CI/CD environments, especially in finance, healthcare, and government, often
+          block outbound downloads. Playwright's browser binaries (~300MB) downloading at test time
+          fail silently in restricted environments. Teams hit this once and abandon the tool.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: Official Docker image with browsers pre-installed. Air-gap installation guide.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">5</div>
+      <div>
+        <div class="blocker-title">📄 "The README shows the full feature list — I just want to test login"</div>
+        <div class="blocker-desc">
+          Feature-rich tools with comprehensive documentation paradoxically have lower adoption.
+          A developer who just wants to test their login flow is overwhelmed by Jira integration,
+          Xray sync, RAG knowledge layers, and Chrome extensions. They can't find the 5-minute
+          "hello world" version. They leave. Simplicity is a feature.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: "30-second quickstart" at the top of every docs page. Progressive disclosure.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">6</div>
+      <div>
+        <div class="blocker-title">🔒 "Our test data is sensitive — it can't go to an LLM API"</div>
+        <div class="blocker-desc">
+          Healthcare, finance, and legal teams have strict data governance. Any tool that sends
+          DOM content, test data, or application state to a third-party API (Anthropic, OpenAI)
+          is a non-starter without explicit compliance sign-off. Even if it's technically configurable,
+          if it's not the first thing the privacy/security team sees, the evaluation dies.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: Local-only mode messaging. Ollama/local LLM support. Data stays on-prem badge.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">7</div>
+      <div>
+        <div class="blocker-title">🔄 "I already have 400 Cypress tests — I'm not rewriting them"</div>
+        <div class="blocker-desc">
+          Migration cost is the most underestimated adoption blocker. Teams with existing Playwright,
+          Cypress, or TestNG suites won't adopt AIQA to replace them — they need a way to run
+          alongside existing tests, gradually migrating flows over time. An "import from Playwright"
+          story doesn't exist yet.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: "AIQA alongside Cypress" getting-started guide. Cypress-to-YAML importer.</div>
+    </div>
+    <div class="blocker">
+      <div class="blocker-num">8</div>
+      <div>
+        <div class="blocker-title">💸 "The SaaS version will eventually monetise my data"</div>
+        <div class="blocker-desc">
+          Open-source tools that later reveal a commercial path face community backlash (HashiCorp,
+          Elasticsearch, Redis). If the long-term plan is AIQA-as-a-Service, being explicit
+          about the open-core model <em>from day one</em> builds trust rather than destroying it when
+          the pricing page appears.
+        </div>
+      </div>
+      <div class="blocker-fix">Fix: Publish the business model upfront. "Open core" is respectable — hiding it isn't.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ FUTURE ══════════ -->
+<section id="future">
+  <h2>Future Enhancements — How I'd Prioritise Them</h2>
+  <p>
+    The roadmap is ambitious. Here's how I see each phase from a market and architecture perspective —
+    not just as features, but as strategic bets.
+  </p>
+
+  <div class="phase-list">
+
+    <!-- RAG -->
+    <div class="phase p-rag">
+      <div class="phase-header">
+        <div class="phase-icon">🧠</div>
+        <div>
+          <div class="phase-label">In Progress · Phase 4</div>
+          <div class="phase-title">RAG Knowledge Layer — Jira-Connected Memory</div>
+        </div>
+        <div class="phase-status status-started">▶ Active</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-col">
+          <h3>What It Does</h3>
+          <ul>
+            <li>Ingests Jira stories and defects into local vector index</li>
+            <li>Injects relevant requirements into test generation prompts</li>
+            <li>Generated tests carry <code>source: [SCRUM-42]</code> provenance</li>
+            <li>Zero external API cost — local embeddings only</li>
+          </ul>
+        </div>
+        <div class="phase-col">
+          <h3>Strategic Importance</h3>
+          <ul>
+            <li><strong>Closes the requirements→test gap</strong> nobody else closes</li>
+            <li>Makes test coverage provable to auditors and PMs</li>
+            <li>Future: Confluence, GitHub PRs, OpenAPI specs as sources</li>
+            <li><strong>This is the moat</strong> — harder to replicate than web automation</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Eval -->
+    <div class="phase p-llm">
+      <div class="phase-header">
+        <div class="phase-icon">🤖</div>
+        <div>
+          <div class="phase-label">Started (JudgeHandler exists) · Phase 5</div>
+          <div class="phase-title">LLM Evaluation &amp; Agentic Workflow Testing</div>
+        </div>
+        <div class="phase-status status-started">▶ Started</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-col">
+          <h3>What It Covers</h3>
+          <ul>
+            <li>Call any LLM endpoint and assert response quality via DSL</li>
+            <li>Prompt regression — detect output drift across model versions</li>
+            <li>Agentic testing — validate multi-step agent decision paths</li>
+            <li>Consistency testing — same prompt N times, assert variance</li>
+            <li>RAG validation — assert retrieved context relevance</li>
+          </ul>
+        </div>
+        <div class="phase-col">
+          <h3>Why This Is the Big Bet</h3>
+          <ul>
+            <li><strong>No credible open-source competitor exists yet</strong></li>
+            <li>Every company shipping AI features desperately needs this</li>
+            <li>JudgeHandler is already built — extension is incremental</li>
+            <li>Positions AIQA as "the tool for the AI era" not "another web tester"</li>
+            <li>LangSmith is the only comparison — and it can't test your UI</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vision -->
+    <div class="phase p-vision">
+      <div class="phase-header">
+        <div class="phase-icon">👁️</div>
+        <div>
+          <div class="phase-label">Planned · Phase 6</div>
+          <div class="phase-title">Vision Agent — Screenshot-Based Testing (DOM-Free)</div>
+        </div>
+        <div class="phase-status status-planned">⬜ Planned</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-col">
+          <h3>What It Covers</h3>
+          <ul>
+            <li>Screenshot → Claude Vision → detected elements + positions</li>
+            <li>OCR text extraction via Tesseract (no API cost)</li>
+            <li>Visual regression — pixel-diff across runs</li>
+            <li>Auto-maintained object repository per URL</li>
+            <li>Fallback for self-healing when DOM selector fails entirely</li>
+          </ul>
+        </div>
+        <div class="phase-col">
+          <h3>Market Context</h3>
+          <ul>
+            <li>Percy/Chromatic are paid visual regression services</li>
+            <li>Open-source alternative with AI interpretation = real gap</li>
+            <li><strong>Architecture-first</strong>: build VisionAgent as reusable service</li>
+            <li>Unlocks desktop automation as a downstream benefit</li>
+            <li>Key for testing apps with dynamic/canvas/WebGL UIs</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop -->
+    <div class="phase p-desktop">
+      <div class="phase-header">
+        <div class="phase-icon">🖥️</div>
+        <div>
+          <div class="phase-label">Planned · Phase 6</div>
+          <div class="phase-title">Desktop Automation — Native Apps, Legacy Systems, No DOM</div>
+        </div>
+        <div class="phase-status status-planned">⬜ Planned</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-col">
+          <h3>What It Covers</h3>
+          <ul>
+            <li>WinAppDriver adapter for Windows native apps (mirrors PlaywrightAdapter)</li>
+            <li>Vision fallback when WinAppDriver selectors fail</li>
+            <li>DSL steps: <code>desktop_click</code>, <code>desktop_fill</code>, <code>desktop_assert</code></li>
+            <li>Same YAML format — no new concepts for existing AIQA users</li>
+          </ul>
+        </div>
+        <div class="phase-col">
+          <h3>Business Context</h3>
+          <ul>
+            <li><strong>Enormous enterprise market</strong> — SAP, Oracle, ERP systems</li>
+            <li>Appium is the only serious OSS competitor — and it's code-heavy</li>
+            <li>Vision-based = works on apps with no automation API at all</li>
+            <li>High switching cost once adopted (sticky revenue for SaaS)</li>
+            <li>Requires VisionAgent first — correct sequencing in the roadmap</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SaaS -->
+    <div class="phase p-saas">
+      <div class="phase-header">
+        <div class="phase-icon">☁️</div>
+        <div>
+          <div class="phase-label">Future · Phase 7</div>
+          <div class="phase-title">AIQA Cloud — SaaS Platform &amp; Multi-Tenant</div>
+        </div>
+        <div class="phase-status status-future">⬜ Future</div>
+      </div>
+      <div class="phase-body">
+        <div class="phase-col">
+          <h3>What It Covers</h3>
+          <ul>
+            <li>Hosted execution — no local Playwright, no Node setup</li>
+            <li>Scheduled runs (synthetic monitoring)</li>
+            <li>Team management, API keys, usage billing</li>
+            <li>Multi-language support (Python, Java runners)</li>
+            <li>Plugin marketplace for community-built handlers</li>
+          </ul>
+        </div>
+        <div class="phase-col">
+          <h3>Business Model View</h3>
+          <ul>
+            <li>OSS free tier drives adoption → Cloud converts power users</li>
+            <li>Monetise: parallel workers, scheduled runs, storage, support</li>
+            <li>Keep core engine open — this is non-negotiable for trust</li>
+            <li>Comparable: Grafana (OSS) → Grafana Cloud (commercial)</li>
+            <li>Target: $500/mo for teams, $5k/mo for enterprise with SSO + SLA</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══════════ STRATEGIC RECS ══════════ -->
+<section id="recs">
+  <h2>Strategic Recommendations — If I Were Running This</h2>
+  <p>
+    Ranked by impact vs effort. These are the decisions that separate a great tool from a thriving platform.
+  </p>
+
+  <div class="rec-list">
+
+    <div class="rec urgent">
+      <div class="rec-content">
+        <h3>Ship the LLM Eval story before anyone else does</h3>
+        <p>
+          The JudgeHandler is already built. <code>LLMEvalHandler</code> is a 2-week extension.
+          The market window is open right now — 2026 is the year every team discovers their
+          AI feature is untestable. Be the answer to that question before Testim, Playwright,
+          or a well-funded startup gets there. Publish a blog post titled
+          "How to test your ChatGPT feature end-to-end" — make AIQA the answer.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec urgent">
+      <div class="rec-content">
+        <h3>Rewrite the README around a 90-second demo — no API key required</h3>
+        <p>
+          The first 30 lines of the README determine whether a developer continues or leaves.
+          Right now those lines describe features. They should be a working demo using the Mock LLM
+          provider: <code>npx aiqa@latest demo</code> — runs against a public app, generates one test,
+          shows a readiness score, zero configuration. If someone can see it working in their terminal
+          before they understand what it does, adoption doubles.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec growth">
+      <div class="rec-content">
+        <h3>Publish the open-core business model on day one</h3>
+        <p>
+          Hiding the commercialisation plan builds distrust. The healthiest open-source businesses
+          (Grafana, HashiCorp pre-BSL, Elastic pre-SSPL) were transparent about the open-core model
+          from the start. AIQA should publish: "Core engine: forever free and open.
+          AIQA Cloud: hosted execution for teams who don't want to run infra."
+          This actually increases OSS adoption because it signals long-term sustainability.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec growth">
+      <div class="rec-content">
+        <h3>Add local/Ollama LLM support to eliminate the API key blocker</h3>
+        <p>
+          One LLM adapter for Ollama (llama3, mistral, qwen) means AIQA works completely offline
+          with no API cost and no data leaving the user's machine. This unlocks the privacy-sensitive
+          enterprise market (healthcare, finance, government) that currently can't adopt anything
+          that calls Anthropic or OpenAI. The FallbackLLMProvider chain already exists —
+          adding an OllamaLLMProvider is a 3-day implementation.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec">
+      <div class="rec-content">
+        <h3>Build a "5-minute migration" from Playwright and Cypress</h3>
+        <p>
+          The biggest TAM expansion comes from the millions of developers who already use Playwright.
+          They don't need to replace their tests — they need AIQA to <em>add</em> what Playwright can't:
+          AI generation, healing, DB testing, and readiness scoring.
+          A guide titled "Add AIQA to your existing Playwright project" is more valuable than
+          any new feature, because it reframes AIQA as an enhancement, not a replacement.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec">
+      <div class="rec-content">
+        <h3>Sequence Vision before Desktop — build the foundation right</h3>
+        <p>
+          Vision Agent (Phase 6a) must come before Desktop Automation (Phase 6b).
+          The VisionAgent is the reusable service that makes desktop testing work without selectors.
+          Rushing to WinAppDriver without it creates a brittle desktop adapter that breaks exactly
+          the way Appium breaks today. Build the AI vision layer first; desktop becomes
+          the first customer of that layer, not a parallel track.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec">
+      <div class="rec-content">
+        <h3>Create a "AIQA vs. [tool]" comparison page for each competitor</h3>
+        <p>
+          Developers evaluating tools Google "AIQA vs Cypress" or "Playwright alternative with AI."
+          SEO-targeted comparison pages that honestly explain trade-offs (not just
+          "AIQA wins everything") build credibility and drive organic adoption.
+          The competitive differentiation is real — it just needs to be surfaced
+          in the places developers look when making tool decisions.
+        </p>
+      </div>
+    </div>
+
+    <div class="rec growth">
+      <div class="rec-content">
+        <h3>Make the Readiness Score the product — not just a feature</h3>
+        <p>
+          The 0–100 Readiness Score is the most business-friendly concept in the entire platform.
+          CTOs understand it. Investors understand it. It could be the headline metric on a
+          company dashboard — "Is our software ready to ship today?" Make it the product logo.
+          Make it shareable. Add a badge teams can put in their GitHub README:
+          <code>Readiness: 94/100</code>. That badge is growth marketing.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Timeline -->
+  <h3 style="margin-top:2.5rem;margin-bottom:.5rem">Recommended Execution Timeline</h3>
+  <p style="margin-bottom:1.5rem">As startup owner, this is how I'd sequence the next 18 months.</p>
+  <div class="timeline">
+    <div class="tl-item done">
+      <div class="tl-date">Done — May 2026</div>
+      <div class="tl-title">Core engine, self-healing, memory, Jira, portal, Chrome extension</div>
+      <div class="tl-desc">Foundation is production-grade. 591 tests passing. Architecture is clean.</div>
+    </div>
+    <div class="tl-item active">
+      <div class="tl-date">Now — June 2026</div>
+      <div class="tl-title">RAG Knowledge Layer + "no API key" quickstart demo</div>
+      <div class="tl-desc">Close the requirements→test gap. Rewrite README. Publish open-core model. Add Ollama support.</div>
+    </div>
+    <div class="tl-item planned">
+      <div class="tl-date">Q3 2026</div>
+      <div class="tl-title">LLMEvalHandler + Prompt Regression + Agentic Testing</div>
+      <div class="tl-desc">Ship the AI testing story. Blog, demo, comparison pages. First mover advantage window.</div>
+    </div>
+    <div class="tl-item planned">
+      <div class="tl-date">Q4 2026</div>
+      <div class="tl-title">VisionAgent + Visual Regression + AIQA Cloud beta</div>
+      <div class="tl-desc">Screenshot-based testing. First paying cloud users. Readiness Score as product identity.</div>
+    </div>
+    <div class="tl-item planned">
+      <div class="tl-date">Q1 2027</div>
+      <div class="tl-title">DesktopAdapter + Python runner + Enterprise tier</div>
+      <div class="tl-desc">Unlock SAP/ERP/legacy market. Python adapter expands TAM to backend teams. SSO + SLA for enterprise.</div>
+    </div>
+    <div class="tl-item planned">
+      <div class="tl-date">Q2 2027</div>
+      <div class="tl-title">Plugin marketplace + Multi-language + Series A</div>
+      <div class="tl-desc">Platform play. Community-built handlers. Java adapter. Usage data makes the fundraise story compelling.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ CLOSING ══════════ -->
+<section style="max-width:1120px;margin:0 auto">
+  <div class="opinion" style="background:linear-gradient(135deg,#e0f2fe,#e8f0fe);border-color:#93c5fd">
+    <p>
+      AIQA has the rarest combination in open source: a genuinely differentiated technical position,
+      a clean architecture that can grow, and a market that's actively looking for exactly this.
+      The engineering work is done. What separates a tool people find from a tool people adopt
+      is the story told in the first 90 seconds — the demo, the README, the quickstart.
+      Get that right, ship the LLM eval story before anyone else, and this becomes
+      <strong>the default testing platform for the AI era</strong>.
+    </p>
+    <span class="attribution" style="color:#1e3a8a">
+      — Principal Business Analyst · Platform Architect · Startup Owner<br/>
+      AIQA Strategic Assessment, May 2026
+    </span>
+  </div>
+</section>
+
+<footer>
+  <strong>AIQA</strong> — Enterprise AI Quality Assurance Platform &nbsp;|&nbsp;
+  Strategic Assessment by Principal BA + Architect + Startup Owner &nbsp;|&nbsp;
+  May 2026
+</footer>
+
+</body>
+</html>
