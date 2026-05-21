@@ -47,12 +47,13 @@ export class ACChunker implements Chunker {
         sourceId:        metadata.sourceId,
         sourceName:      metadata.sourceName,
         type:            metadata.type,
+        category:        metadata.category,
         tags:            metadata.tags,
         severity:        metadata.severity,
         version:         metadata.version,
         sourceUpdatedAt: metadata.sourceUpdatedAt,
         confidence:      1.0,
-        relations:       [],
+        relations:       metadata.relations ?? [],
         ingestedAt:      new Date().toISOString(),
       }));
 

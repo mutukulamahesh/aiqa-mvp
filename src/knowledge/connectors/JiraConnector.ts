@@ -14,6 +14,12 @@ const JIRA_SEVERITY: Record<string, KnowledgeChunk["severity"]> = {
   Lowest:  "low",
 };
 
+// Keywords that signal a selector/visual defect the healer can act on.
+// Intentionally narrow — generic terms (click, input, visible) also appear in functional bugs.
+const UI_KEYWORDS = /selector|css|locator|xpath|aria-|data-testid|playwright|data-cy|z-index|overlay|z-order|stale.?element|element.?not.?found|no.?such.?element|style|layout|render|tooltip|modal|dropdown/i;
+// Keywords that signal a regression (env / data / config introduced the failure)
+const REGRESSION_KEYWORDS = /regression|broke|after.*deploy|after.*release|after.*upgrade|introduced in/i;
+
 export class JiraConnector implements KnowledgeConnector {
   readonly name = "jira";
 
@@ -40,7 +46,7 @@ export class JiraConnector implements KnowledgeConnector {
   async fetch(): Promise<KnowledgeChunk[]> {
     const chunks: KnowledgeChunk[] = [];
 
-    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", "updated", this.acField];
+    const fields = ["summary", "description", "issuetype", "priority", "labels", "fixVersions", "updated", "issuelinks", this.acField];
 
     // Fetch stories + tasks — paginated so large backlogs are fully ingested
     const storiesResult = await this.client.searchAllIssues(
@@ -87,11 +93,40 @@ export class JiraConnector implements KnowledgeConnector {
       sourceId:        issue.key,
       sourceName:      this.name,
       type,
+      category:        type === "defect" ? this.inferDefectCategory(summary, labels) : undefined,
       tags:            labels,
       severity:        JIRA_SEVERITY[priority],
       version:         fixVer,
       sourceUpdatedAt: fields.updated,
+      relations:       this.extractRelations(issue, type),
     });
+  }
+
+  // Builds relations[] from Jira issuelinks — story↔defect, blocks/is-blocked-by.
+  private extractRelations(issue: JiraIssue, type: "story" | "defect"): { type: string; targetId: string }[] {
+    const links = issue.fields.issuelinks;
+    if (!Array.isArray(links)) return [];
+
+    return links
+      .map(link => {
+        const linked = link.inwardIssue ?? link.outwardIssue;
+        if (!linked?.key) return null;
+        // Relationship type from the perspective of this issue
+        const relType = type === "story" ? "relates_to_defect" : "relates_to_story";
+        return { type: relType, targetId: linked.key };
+      })
+      .filter((r): r is { type: string; targetId: string } => r !== null);
+  }
+
+  // Infers defect category from summary text and labels.
+  // ui     → selector/visual failures that healers can act on
+  // regression → failures introduced by a recent change (don't heal — investigate)
+  // functional → business logic failures (don't heal — real defect)
+  private inferDefectCategory(summary: string, labels: string[]): KnowledgeChunk["category"] {
+    const haystack = [summary, ...labels].join(" ");
+    if (REGRESSION_KEYWORDS.test(haystack)) return "regression";
+    if (UI_KEYWORDS.test(haystack))         return "ui";
+    return "functional";
   }
 
   // Recursively extract plain text from ADF or plain string
@@ -107,3 +142,4 @@ export class JiraConnector implements KnowledgeConnector {
     return "";
   }
 }
+

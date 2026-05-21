@@ -97,6 +97,11 @@ const EnvConfigSchema = z.object({
       weight:       z.number().positive().optional(),
       lookbackDays: z.number().int().positive().optional(),  // git connector
     })).default([]),
+    // RAG3-03: token-aware budget — prevents context explosion with large indexes
+    budget: z.object({
+      maxChunks:       z.number().int().min(1).default(20),
+      maxTokensApprox: z.number().int().min(1).default(4000),
+    }).optional(),
   }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", reranker: { strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }, connectors: [] }),
 
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.

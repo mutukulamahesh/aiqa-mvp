@@ -35,6 +35,10 @@ export interface JiraIssue {
     updated?:            string;   // ISO date — last modified timestamp from Jira
     description?:        unknown;
     customfield_10016?:  unknown;  // Acceptance Criteria — common Jira custom field
+    issuelinks?:         Array<{
+      inwardIssue?:  { key: string };
+      outwardIssue?: { key: string };
+    }>;
   };
 }
 

@@ -14,6 +14,7 @@ import { SelectorHealer } from "../healer/SelectorHealer";
 import { MemoryStore, makeStepKey } from "../memory/MemoryStore";
 import { KnowledgeStore } from "../knowledge/KnowledgeStore";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
+import { GraphEnricher } from "../knowledge/GraphEnricher";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -99,7 +100,7 @@ export class TestRunner {
 
     // Build a retriever for JudgeHandler (topK=3 — concise context for LLM prompts)
     const retriever = opts.knowledgeStore
-      ? new KnowledgeRetriever(opts.knowledgeStore, 3)
+      ? new KnowledgeRetriever(opts.knowledgeStore, 3, undefined, new GraphEnricher(opts.knowledgeStore))
       : undefined;
     this.interpreter = new StepInterpreter({ retriever });
   }
