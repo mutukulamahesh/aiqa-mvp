@@ -75,10 +75,15 @@ export class JudgeHandler implements StepHandler {
   }
 
   // Format retrieved chunks as a concise AC block for the LLM prompt.
+  // Includes scoreBreakdown when present so the log shows why each chunk was retrieved.
   private formatACContext(chunks: RetrievedChunk[]): string {
-    const lines = chunks.map(c =>
-      `- [${c.sourceId}] (${c.type}, relevance=${c.score.toFixed(2)}): ${c.text.slice(0, 400)}`,
-    );
+    const lines = chunks.map(c => {
+      const bd = c.scoreBreakdown;
+      const breakdown = bd
+        ? ` [sem=${bd.semantic.toFixed(2)} rec=${bd.recency.toFixed(2)} sev=${bd.severity.toFixed(2)} src=${bd.sourceWeight.toFixed(2)}]`
+        : "";
+      return `- [${c.sourceId}] (${c.type}, relevance=${c.score.toFixed(2)}${breakdown}): ${c.text.slice(0, 400)}`;
+    });
     return `Acceptance criteria from organisational knowledge:\n${lines.join("\n")}`;
   }
 
@@ -129,6 +134,13 @@ export class JudgeHandler implements StepHandler {
         ? ` + ${acChunks.length} AC chunk(s) from knowledge`
         : "";
       wwrite(`  ▶ judge      → evaluating via ${this.llm.name}${acLabel}`);
+      if (acChunks.length > 0 && process.env.AIQA_DEBUG_RAG) {
+        for (const c of acChunks) {
+          const bd = c.scoreBreakdown;
+          wlog(`      ↳ retrieved ${c.sourceId} score=${c.score.toFixed(3)}` +
+            (bd ? ` (sem=${bd.semantic.toFixed(2)} rec=${bd.recency.toFixed(2)} sev=${bd.severity.toFixed(2)} src=${bd.sourceWeight.toFixed(2)} via=${bd.connectorId})` : ""));
+        }
+      }
 
       // ── Compose user message — append AC context when available ──────────────
       const acSection = acContext ? `\n\n${acContext}` : "";

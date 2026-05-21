@@ -51,23 +51,33 @@ export class HybridReranker implements Reranker {
   rerank(candidates: RetrievedChunk[]): RetrievedChunk[] {
     const now = Date.now();
     return [...candidates]
-      .map(c  => ({ chunk: c, hybrid: this.hybridScore(c, now) }))
-      .sort((a, b) => b.hybrid - a.hybrid)
-      .map(({ chunk, hybrid }) => ({ ...chunk, score: hybrid }));
+      .map(c  => ({ chunk: c, result: this.hybridScore(c, now) }))
+      .sort((a, b) => b.result.score - a.result.score)
+      .map(({ chunk, result }) => ({ ...chunk, score: result.score, scoreBreakdown: result.breakdown }));
   }
 
-  private hybridScore(c: RetrievedChunk, now: number): number {
+  private hybridScore(c: RetrievedChunk, now: number): { score: number; breakdown: import("../types").ScoreBreakdown } {
     const { semanticWeight, recencyWeight, severityWeight, sourceWeight } = this.weights;
-    const semantic      = Math.max(0, Math.min(1, c.score));
-    const recency       = this.recencyScore(c, now);
-    const severity      = SEVERITY_SCORE[c.severity ?? ""] ?? 0.5;
-    const connectorWt   = Math.max(0, this.connectorWeights[c.sourceName] ?? 1.0);
+    const semantic    = Math.max(0, Math.min(1, c.score));
+    const recency     = this.recencyScore(c, now);
+    const severity    = SEVERITY_SCORE[c.severity ?? ""] ?? 0.5;
+    const connectorWt = Math.max(0, this.connectorWeights[c.sourceName] ?? 1.0);
 
     const raw = semanticWeight * semantic
               + recencyWeight  * recency
               + severityWeight * severity
               + sourceWeight   * connectorWt;
-    return Math.min(1, Math.max(0, raw));
+
+    return {
+      score: Math.min(1, Math.max(0, raw)),
+      breakdown: {
+        semantic:     Number(semantic.toFixed(4)),
+        recency:      Number(recency.toFixed(4)),
+        severity:     Number(severity.toFixed(4)),
+        sourceWeight: Number(connectorWt.toFixed(4)),
+        connectorId:  c.sourceName,
+      },
+    };
   }
 
   private recencyScore(c: RetrievedChunk, now: number): number {

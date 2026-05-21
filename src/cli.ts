@@ -328,7 +328,8 @@ program
           ? new (await import("./knowledge/rerankers/HybridReranker")).HybridReranker(kCfg.reranker, connectorWeights)
           : undefined; // undefined → KnowledgeStore uses CosineSimilarityReranker default
         const store     = new KnowledgeStore({ indexPath: kCfg.indexPath, reranker });
-        const retriever = new KnowledgeRetriever(store, kCfg.topK);
+        const { GraphEnricher: GE } = await import("./knowledge/GraphEnricher");
+        const retriever = new KnowledgeRetriever(store, kCfg.topK, kCfg.budget, new GE(store));
         // Build query from page vocabulary; cap at 800 chars (≈256 tokens for all-MiniLM-L6-v2)
         const pages: Array<{ title?: string; headings?: string[] }> = exploration_data.pages ?? [];
         const rawQuery = pages.length > 0
@@ -588,8 +589,12 @@ program
       try {
         const { KnowledgeStore }     = await import("./knowledge/KnowledgeStore");
         const { KnowledgeRetriever } = await import("./knowledge/KnowledgeRetriever");
+        const { GraphEnricher }      = await import("./knowledge/GraphEnricher");
         sharedKnowledgeStore = new KnowledgeStore({ indexPath: config.knowledge.indexPath });
-        sharedRetriever      = new KnowledgeRetriever(sharedKnowledgeStore, config.knowledge.topK);
+        sharedRetriever      = new KnowledgeRetriever(
+          sharedKnowledgeStore, config.knowledge.topK,
+          config.knowledge.budget, new GraphEnricher(sharedKnowledgeStore),
+        );
       } catch { /* non-fatal */ }
     }
 

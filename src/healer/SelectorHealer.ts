@@ -390,14 +390,23 @@ export class SelectorHealer {
   }
 
   // Retrieves defect chunks relevant to the failing descriptor + page host.
-  // Only "defect" type chunks are included — story/page chunks would add noise.
+  // Only "ui" category defects are healing fuel — functional/regression defects indicate
+  // real application problems and must not be used to mask failures via selector healing.
+  // Chunks without a category (pre-RAG3 ingests) are included for backward compat.
   private async fetchDefectContext(descriptor: string, pageUrl: string): Promise<string> {
     if (!this.retriever) return "";
     try {
-      const host   = (() => { try { return new URL(pageUrl).hostname; } catch { return ""; } })();
-      const query  = `${descriptor} ${host}`.trim();
-      const chunks = await this.retriever.retrieve(query, 3);
-      const defects = chunks.filter(c => c.type === "defect");
+      const host    = (() => { try { return new URL(pageUrl).hostname; } catch { return ""; } })();
+      const query   = `${descriptor} ${host}`.trim();
+      const chunks  = await this.retriever.retrieve(query, 3);
+      const defects = chunks.filter(c => c.type === "defect" && c.category !== "functional" && c.category !== "regression");
+      const masked  = chunks.filter(c => c.type === "defect" && (c.category === "functional" || c.category === "regression"));
+      if (masked.length) {
+        process.stderr.write(
+          `[healer] ${masked.length} defect(s) suppressed from healing context (non-ui): ` +
+          masked.map(c => `${c.sourceId}(${c.category})`).join(", ") + "\n",
+        );
+      }
       if (!defects.length) return "";
       return "Known defects related to this element:\n" +
         defects.map(c => `- [${c.sourceId}]: ${c.text.slice(0, 200)}`).join("\n");
