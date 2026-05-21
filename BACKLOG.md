@@ -417,16 +417,138 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 ---
 
 ## Phase 5 — GenAI Testing `[UNIQUE CAPABILITY]`
-> Test AI systems the same way we test web apps
+> Test AI systems the same way we test web apps — branch: `genaieval`
 
-### EPIC-13 · AI Application Testing
-| ID | Story | Status |
-|---|---|---|
-| 13.1 | `LLMEvalHandler` — call any LLM API and assert response quality via DSL | [ ] |
-| 13.2 | Prompt regression testing — detect output drift between model versions, store baseline | [ ] |
-| 13.3 | Agentic workflow testing — multi-step agent decision path validation, assert intermediate states | [ ] |
-| 13.4 | Consistency testing — same prompt N times, assert variance below threshold | [ ] |
-| 13.5 | RAG validation — assert retrieved context is relevant to query via vector similarity | [ ] |
+### EPIC-GEN · AI Application Testing
+
+**Implementation order:** GEN-01 → GEN-04 → GEN-05 → GEN-02 → GEN-03
+
+#### GEN-01 · LLMEvalHandler `[S]`
+New `llm_eval:` DSL step. Calls a configurable LLM (any provider/model) then judges the
+response quality using AIQA's internal judge LLM. Distinct from `api:` because it
+understands LLM-native concepts (system prompt, max_tokens, model selection).
+
+```yaml
+- llm_eval:
+    provider: anthropic            # provider to call (the system under test)
+    model: claude-haiku-4-5        # model to call
+    system: "You are a helpful assistant"
+    prompt: "Translate 'hello' to French"
+    max_tokens: 100
+    assert_quality:
+      criteria: "Response is a correct French translation"
+      pass_if: ">= 0.8"
+    store_as: evalResult           # { response, score, verdict, reason }
+```
+
+Files:
+- `src/handlers/LLMEvalHandler.ts` — new handler; reuses judge scoring via shared helper
+- `src/dsl/types.ts` — add `llm_eval` to `StepAction` union
+- Refactor `JudgeHandler` to expose `scoreValue(value, criteria, retriever?)` as a
+  standalone utility so `LLMEvalHandler` doesn't duplicate scoring logic
+
+#### GEN-04 · ConsistencyHandler `[M]`
+New `llm_consistency:` DSL step. Runs the same prompt N times, computes pairwise
+semantic variance using the existing `Embedder`, fails if max variance exceeds threshold.
+Optionally asserts quality on every response via judge.
+
+```yaml
+- llm_consistency:
+    provider: openai
+    model: gpt-4o-mini
+    prompt: "What is the capital of France?"
+    runs: 5
+    max_variance: 0.1              # max pairwise cosine distance allowed
+    assert_all_quality:
+      criteria: "Answer correctly names Paris"
+      pass_if: ">= 0.9"
+    store_as: consistencyResult    # { runs, max_variance, passed, responses[] }
+```
+
+Files:
+- `src/handlers/ConsistencyHandler.ts`
+- `src/ai-testing/VarianceComputer.ts` — pairwise cosine similarity via Embedder
+
+#### GEN-05 · RagAssertHandler `[S]`
+New `rag_assert:` DSL step. Thin wrapper over `KnowledgeRetriever` — asserts retrieval
+count, minimum relevance score, chunk types, and optionally specific source IDs.
+Useful for validating that knowledge index health matches test expectations.
+
+```yaml
+- rag_assert:
+    query: "user authentication acceptance criteria"
+    min_chunks: 2
+    min_relevance: 0.7
+    assert_contains_type: story
+    assert_contains_source: "SCRUM-42"   # optional — assert a specific chunk is retrieved
+    store_as: ragResult                  # { chunks[], passed }
+```
+
+Files:
+- `src/handlers/RagAssertHandler.ts`
+
+#### GEN-02 · PromptRegressionHandler `[M]`
+Extends `llm_eval` with a `baseline_key`. On first run stores the response as a baseline
+in `.aiqa/baselines/{key}.json`. On subsequent runs computes semantic drift via Embedder
+cosine distance and fails if drift exceeds `max_drift`.
+
+```yaml
+- llm_eval:
+    provider: anthropic
+    model: claude-sonnet-4-6
+    prompt: "Summarise our product in one sentence"
+    baseline_key: "product-summary-v1"   # auto-stores on first run, compares on subsequent
+    max_drift: 0.15
+    store_as: regressionResult           # { response, drift, baseline_response, passed }
+```
+
+Files:
+- `src/ai-testing/BaselineStore.ts` — JSON files in `.aiqa/baselines/`; read/write/delete
+- `LLMEvalHandler` extended: if `baseline_key` present, loads/stores baseline and
+  adds drift computation to result
+
+#### GEN-03 · AgentTraceHandler `[L]`
+New `agent_trace:` DSL step. Invokes an agent API endpoint, captures structured trace
+output (tool calls, intermediate steps), and asserts on both the decision path and final
+response quality.
+
+```yaml
+- agent_trace:
+    url: "http://localhost:3001/api/agent"
+    method: POST
+    body: { message: "Book me a flight to Paris" }
+    assert_steps:
+      - tool_called: "search_flights"
+      - tool_called: "present_options"
+    assert_final_response:
+      criteria: "Response presents flight options with prices"
+      pass_if: ">= 0.8"
+    store_as: agentTrace             # { steps[], final_response, passed }
+```
+
+Agent API must return structured trace (OpenAI Assistants format or custom schema):
+```json
+{
+  "steps": [
+    { "type": "tool_call", "name": "search_flights", "input": {...}, "output": {...} }
+  ],
+  "final_response": "Here are 3 flights to Paris..."
+}
+```
+
+Files:
+- `src/handlers/AgentTraceHandler.ts`
+- `src/ai-testing/TraceParser.ts` — normalises OpenAI Assistants + LangChain + custom formats
+
+---
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| GEN-01 | `llm_eval:` DSL step — call LLM + judge response quality | S | [ ] |
+| GEN-04 | `llm_consistency:` — N runs, semantic variance assertion | M | [ ] |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertion step | S | [ ] |
+| GEN-02 | Prompt regression — baseline store + drift via Embedder | M | [ ] |
+| GEN-03 | `agent_trace:` — multi-step agent workflow validation | L | [ ] |
 
 ---
 

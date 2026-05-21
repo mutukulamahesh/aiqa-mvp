@@ -146,21 +146,32 @@ jira:
 
 ## Current state (2026-05-21)
 
-- **Branch:** `main` at `e5bbd3e`
-- **Tests:** 701 passing, tsc clean
-- **EPIC-RAG Phase 1 + Phase 2:** complete and merged
-- **Next branch:** `rag3`
+- **Branch:** `genaieval` off `main` at `f0bcdf5`
+- **Tests:** 731 passing, tsc clean
+- **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
+- **Next:** Phase 5 — GenAI Testing on branch `genaieval`
 
-### RAG Phase 3 stories (next up)
+### Phase 5 stories (in order)
 
 | ID | Story | Size |
 |---|---|---|
-| RAG3-01 | `defect.category: "ui"\|"functional"\|"regression"` on `KnowledgeChunk`; SelectorHealer filters to `"ui"` only; functional defects become run-report warnings | S |
-| RAG3-02 | `scoreBreakdown` in `RetrievedChunk`; HybridReranker preserves sub-scores (semantic/recency/severity/sourceWeight); visible in judge output + `aiqa knowledge status` | M |
-| RAG3-03 | Retrieval budget: `knowledge.budget.maxChunks` + `maxTokensApprox` in config; enforced in `KnowledgeRetriever.retrieve()` | S |
-| RAG3-04 | `GraphEnricher` one-hop via `relations[]`; JiraConnector populates story↔defect relations during ingest | L |
+| GEN-01 | `llm_eval:` DSL step — call any LLM + assert response quality via internal judge | S |
+| GEN-04 | `llm_consistency:` — run same prompt N times, assert semantic variance ≤ threshold | M |
+| GEN-05 | `rag_assert:` — assert KnowledgeRetriever returns expected chunks/relevance | S |
+| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; auto-stores on first run, diffs on next | M |
+| GEN-03 | `agent_trace:` — invoke agent API, assert tool-call path + final response quality | L |
 
-**After RAG3:** Phase 5 — GenAI Testing (EPIC-13): `LLMEvalHandler`, prompt regression, agentic workflow validation.
+### Key new files for Phase 5
+
+| File | Role |
+|---|---|
+| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; calls target LLM then judges with internal LLM |
+| `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step; N runs + pairwise variance |
+| `src/handlers/RagAssertHandler.ts` | `rag_assert:` step; wraps KnowledgeRetriever assertions |
+| `src/handlers/AgentTraceHandler.ts` | `agent_trace:` step; structured trace assertions |
+| `src/ai-testing/BaselineStore.ts` | Reads/writes `.aiqa/baselines/{key}.json` |
+| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity using Embedder |
+| `src/ai-testing/TraceParser.ts` | Normalises OpenAI Assistants + LangChain + custom trace formats |
 
 ---
 
