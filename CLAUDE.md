@@ -155,23 +155,30 @@ jira:
 
 | ID | Story | Size |
 |---|---|---|
-| GEN-01 | `llm_eval:` DSL step — call any LLM + assert response quality via internal judge | S |
-| GEN-04 | `llm_consistency:` — run same prompt N times, assert semantic variance ≤ threshold | M |
-| GEN-05 | `rag_assert:` — assert KnowledgeRetriever returns expected chunks/relevance | S |
-| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; auto-stores on first run, diffs on next | M |
-| GEN-03 | `agent_trace:` — invoke agent API, assert tool-call path + final response quality | L |
+| GEN-01 | `llm_eval:` — named `target:` from `llm_targets` config, call LLM, judge quality | S |
+| GEN-04 | `llm_consistency:` — N runs sequential, max pairwise cosine distance, configurable to mean | M |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertions; wired same as JudgeHandler | S |
+| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; baselines in `tests/baselines/` (VCS) | M |
+| GEN-03 | `agent_trace:` — spike-gated; OpenAI Assistants + LangChain normalisation must prove clean | L |
+
+### Design decisions locked
+
+- **Target LLM:** `target: fast` resolves via `config.llm_targets` map — not inline `provider/model`
+- **BaselineStore path:** `tests/baselines/{key}.json` (committed to VCS); record mode via `AIQA_BASELINE_RECORD=true`
+- **Variance metric:** max pairwise cosine distance; configurable `variance_metric: max|mean`
+- **GEN-03:** gated behind spike — ships custom-schema only if OpenAI+LangChain normalisation is non-trivial
 
 ### Key new files for Phase 5
 
 | File | Role |
 |---|---|
-| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; calls target LLM then judges with internal LLM |
-| `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step; N runs + pairwise variance |
-| `src/handlers/RagAssertHandler.ts` | `rag_assert:` step; wraps KnowledgeRetriever assertions |
-| `src/handlers/AgentTraceHandler.ts` | `agent_trace:` step; structured trace assertions |
-| `src/ai-testing/BaselineStore.ts` | Reads/writes `.aiqa/baselines/{key}.json` |
-| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity using Embedder |
-| `src/ai-testing/TraceParser.ts` | Normalises OpenAI Assistants + LangChain + custom trace formats |
+| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; resolves target LLM, judges with AIQA internal |
+| `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step; N runs + max pairwise variance |
+| `src/handlers/RagAssertHandler.ts` | `rag_assert:` step; wraps KnowledgeRetriever |
+| `src/handlers/AgentTraceHandler.ts` | `agent_trace:` step (post-spike) |
+| `src/ai-testing/BaselineStore.ts` | Reads/writes `tests/baselines/{key}.json` |
+| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity via Embedder; max/mean |
+| `src/ai-testing/TraceParser.ts` | Normalises trace formats (post-spike) |
 
 ---
 
