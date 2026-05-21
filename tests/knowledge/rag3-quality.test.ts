@@ -199,22 +199,17 @@ describe("RAG3-02: scoreBreakdown", () => {
     expect(result[0].score).toBeLessThanOrEqual(1);
   });
 
-  test("CosineSimilarityReranker attaches scoreBreakdown", () => {
+  test("CosineSimilarityReranker omits scoreBreakdown (zeros would be misleading)", () => {
     const reranker = new CosineSimilarityReranker();
-    const input    = [makeRetrieved({}, 0.7)];
-    const result   = reranker.rerank(input);
-    expect(result[0].scoreBreakdown).toBeDefined();
-    const bd = result[0].scoreBreakdown!;
-    expect(bd.semantic).toBeCloseTo(0.7, 2);
-    expect(bd.recency).toBe(0);
-    expect(bd.severity).toBe(0);
-    expect(bd.sourceWeight).toBe(0);
+    const result   = reranker.rerank([makeRetrieved({}, 0.7)]);
+    expect(result[0].scoreBreakdown).toBeUndefined();
   });
 
-  test("scoreBreakdown connectorId matches sourceName", () => {
+  test("CosineSimilarityReranker sorts by score descending", () => {
     const reranker = new CosineSimilarityReranker();
-    const result   = reranker.rerank([makeRetrieved({ sourceName: "confluence" }, 0.5)]);
-    expect(result[0].scoreBreakdown!.connectorId).toBe("confluence");
+    const input    = [makeRetrieved({}, 0.3), makeRetrieved({ sourceId: "X" }, 0.9)];
+    const result   = reranker.rerank(input);
+    expect(result[0].score).toBeGreaterThan(result[1].score);
   });
 
   test("KnowledgeRetriever.formatContext includes scoreBreakdown", () => {

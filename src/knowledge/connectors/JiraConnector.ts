@@ -14,8 +14,9 @@ const JIRA_SEVERITY: Record<string, KnowledgeChunk["severity"]> = {
   Lowest:  "low",
 };
 
-// Keywords in summary/labels that signal a UI-layer defect (selector / visual / layout)
-const UI_KEYWORDS = /selector|css|element|button|link|dropdown|input|form|modal|tooltip|style|layout|render|display|visible|click|label/i;
+// Keywords that signal a selector/visual defect the healer can act on.
+// Intentionally narrow — generic terms (click, input, visible) also appear in functional bugs.
+const UI_KEYWORDS = /selector|css|locator|xpath|aria-|data-testid|playwright|data-cy|z-index|overlay|z-order|stale.?element|element.?not.?found|no.?such.?element|style|layout|render|tooltip|modal|dropdown/i;
 // Keywords that signal a regression (env / data / config introduced the failure)
 const REGRESSION_KEYWORDS = /regression|broke|after.*deploy|after.*release|after.*upgrade|introduced in/i;
 
@@ -103,7 +104,7 @@ export class JiraConnector implements KnowledgeConnector {
 
   // Builds relations[] from Jira issuelinks — story↔defect, blocks/is-blocked-by.
   private extractRelations(issue: JiraIssue, type: "story" | "defect"): { type: string; targetId: string }[] {
-    const links = (issue.fields as Record<string, unknown>)["issuelinks"] as JiraIssueLink[] | undefined;
+    const links = issue.fields.issuelinks;
     if (!Array.isArray(links)) return [];
 
     return links
@@ -142,8 +143,3 @@ export class JiraConnector implements KnowledgeConnector {
   }
 }
 
-interface JiraIssueLink {
-  type?:         { name?: string };
-  inwardIssue?:  { key: string };
-  outwardIssue?: { key: string };
-}
