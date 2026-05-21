@@ -89,12 +89,13 @@ const EnvConfigSchema = z.object({
       sourceWeight:   z.number().min(0).max(1).default(0.1),
     }).default({ strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }),
     connectors: z.array(z.object({
-      type:       z.string(),
-      projectKey: z.string().optional(),
-      acField:    z.string().optional(),
-      spaceKey:   z.string().optional(),
-      url:        z.string().optional(),
-      weight:     z.number().positive().optional(),
+      type:         z.string(),
+      projectKey:   z.string().optional(),
+      acField:      z.string().optional(),
+      spaceKey:     z.string().optional(),
+      url:          z.string().optional(),
+      weight:       z.number().positive().optional(),
+      lookbackDays: z.number().int().positive().optional(),  // git connector
     })).default([]),
   }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", reranker: { strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }, connectors: [] }),
 

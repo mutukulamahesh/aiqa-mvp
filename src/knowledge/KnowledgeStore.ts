@@ -39,6 +39,10 @@ export class KnowledgeStore {
     await this.index.updateConfidence(sourceId, DELTA[outcome]);
   }
 
+  async listAll(): Promise<KnowledgeChunk[]> {
+    return this.index.listAll();
+  }
+
   async clear(): Promise<void> {
     await this.index.clear();
   }

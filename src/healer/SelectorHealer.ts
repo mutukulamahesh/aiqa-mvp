@@ -2,6 +2,7 @@ import { Page }                           from "playwright";
 import { LLMProvider, createLLMProvider } from "../llm/LLMProvider";
 import { HealerCache }                    from "./HealerCache";
 import { contextHash, pageContextKey }    from "./contextKey";
+import { KnowledgeRetriever }             from "../knowledge/KnowledgeRetriever";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,13 +32,15 @@ export interface HealerEvent {
 // ── SelectorHealer ────────────────────────────────────────────────────────────
 
 export class SelectorHealer {
-  private readonly llm: LLMProvider;
-  readonly cache: HealerCache;
-  private readonly events: HealerEvent[] = [];
+  private readonly llm:       LLMProvider;
+  readonly cache:             HealerCache;
+  private readonly retriever?: KnowledgeRetriever;
+  private readonly events:    HealerEvent[] = [];
 
-  constructor(llm?: LLMProvider, cacheFile?: string) {
-    this.llm   = llm ?? createLLMProvider();
-    this.cache = new HealerCache(cacheFile);
+  constructor(llm?: LLMProvider, cacheFile?: string, retriever?: KnowledgeRetriever) {
+    this.llm       = llm ?? createLLMProvider();
+    this.cache     = new HealerCache(cacheFile);
+    this.retriever = retriever;
   }
 
   // ── Cache helpers ──────────────────────────────────────────────────────────
@@ -77,13 +80,14 @@ export class SelectorHealer {
       return null;
     }
 
-    const [candidates, pageTitle] = await Promise.all([
+    const [candidates, pageTitle, defectContext] = await Promise.all([
       this.extractCandidates(page),
       page.title().catch(() => ""),
+      this.fetchDefectContext(descriptor, pageUrl),
     ]);
     if (!candidates.length) return null;
 
-    const selector = await this.queryLLM(descriptor, pageUrl, candidates, pageTitle);
+    const selector = await this.queryLLM(descriptor, pageUrl, candidates, pageTitle, defectContext);
     if (!selector) {
       this.emit({ type: "rejected", descriptor, pageUrl, pageTitle });
       return null;
@@ -385,11 +389,29 @@ export class SelectorHealer {
     });
   }
 
+  // Retrieves defect chunks relevant to the failing descriptor + page host.
+  // Only "defect" type chunks are included — story/page chunks would add noise.
+  private async fetchDefectContext(descriptor: string, pageUrl: string): Promise<string> {
+    if (!this.retriever) return "";
+    try {
+      const host   = (() => { try { return new URL(pageUrl).hostname; } catch { return ""; } })();
+      const query  = `${descriptor} ${host}`.trim();
+      const chunks = await this.retriever.retrieve(query, 3);
+      const defects = chunks.filter(c => c.type === "defect");
+      if (!defects.length) return "";
+      return "Known defects related to this element:\n" +
+        defects.map(c => `- [${c.sourceId}]: ${c.text.slice(0, 200)}`).join("\n");
+    } catch {
+      return "";
+    }
+  }
+
   private async queryLLM(
-    descriptor: string,
-    url:        string,
-    candidates: CandidateElement[],
-    pageTitle:  string,
+    descriptor:    string,
+    url:           string,
+    candidates:    CandidateElement[],
+    pageTitle:     string,
+    defectContext: string,
   ): Promise<string | null> {
     const formatted = candidates.map((c, i) => {
       const parts = [
@@ -419,6 +441,7 @@ export class SelectorHealer {
           `Failed to locate: "${descriptor}"\n` +
           `Page: ${url}${pageTitle ? `  (title: "${pageTitle}")` : ""}\n\n` +
           `Interactive elements on page:\n${formatted}\n\n` +
+          (defectContext ? `${defectContext}\n\n` : "") +
           `Return only the CSS selector (e.g. [data-test="login-button"] or #submit), or null.`,
         maxTokens: 60,
       });

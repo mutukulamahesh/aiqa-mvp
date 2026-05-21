@@ -62,6 +62,12 @@ export class VectorIndex {
     }
   }
 
+  async listAll(): Promise<KnowledgeChunk[]> {
+    if (!await this.index.isIndexCreated()) return [];
+    const items = await this.index.listItems();
+    return items.map(item => item.metadata as unknown as KnowledgeChunk);
+  }
+
   async size(): Promise<number> {
     if (!await this.index.isIndexCreated()) return 0;
     const stats = await this.index.listItems();

@@ -17,12 +17,13 @@ export interface RetrievedChunk extends KnowledgeChunk {
 }
 
 export interface KnowledgeConnectorConfig {
-  type:         string;
-  projectKey?:  string;   // jira
-  acField?:     string;   // jira — custom field ID for Acceptance Criteria
-  spaceKey?:    string;   // confluence
-  url?:         string;   // openapi
-  weight?:      number;   // HybridReranker source weight (default 1.0)
+  type:          string;
+  projectKey?:   string;   // jira
+  acField?:      string;   // jira — custom field ID for Acceptance Criteria
+  spaceKey?:     string;   // confluence
+  url?:          string;   // openapi
+  weight?:       number;   // HybridReranker source weight (default 1.0)
+  lookbackDays?: number;   // git — commits to include (default 30)
 }
 
 export interface RerankerConfig {
