@@ -1615,7 +1615,7 @@ knowledgeCmd
     }
 
     const { KnowledgeStore }   = await import("./knowledge/KnowledgeStore");
-    const { ReadinessScorer }  = await import("./knowledge/ReadinessScorer");
+    const { KnowledgeReadinessScorer: ReadinessScorer }  = await import("./knowledge/ReadinessScorer");
 
     const store  = new KnowledgeStore({ indexPath: kCfg.indexPath });
     const chunks = await store.listAll();

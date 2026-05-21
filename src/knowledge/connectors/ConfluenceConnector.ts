@@ -68,9 +68,8 @@ export class ConfluenceConnector implements KnowledgeConnector {
     const chunks: KnowledgeChunk[] = [];
     const PAGE_SIZE = 50;
     let start = 0;
-    let total = Infinity;
 
-    while (start < total) {
+    for (;;) {
       const qs = new URLSearchParams({
         spaceKey: this.spaceKey,
         type:     "page",
@@ -95,9 +94,10 @@ export class ConfluenceConnector implements KnowledgeConnector {
         }));
       }
 
-      total  = page.size < PAGE_SIZE ? start + page.results.length : total === Infinity ? page.size : total;
       start += page.results.length;
-      if (page.results.length === 0) break;
+      // Terminate when: fewer results than requested (last page), no results,
+      // or no "next" link — whichever fires first.
+      if (page.results.length < PAGE_SIZE || !page._links?.next) break;
     }
 
     return chunks;

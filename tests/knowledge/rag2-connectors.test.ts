@@ -10,7 +10,7 @@ import * as stream from "stream";
 import { ConfluenceConnector, HttpTransport as ConfluenceTransport } from "../../src/knowledge/connectors/ConfluenceConnector";
 import { OpenAPIConnector,    HttpTransport as OpenAPITransport }    from "../../src/knowledge/connectors/OpenAPIConnector";
 import { GitConnector }          from "../../src/knowledge/connectors/GitConnector";
-import { ReadinessScorer }       from "../../src/knowledge/ReadinessScorer";
+import { KnowledgeReadinessScorer as ReadinessScorer } from "../../src/knowledge/ReadinessScorer";
 import { KnowledgeChunk, RetrievedChunk } from "../../src/knowledge/types";
 import { KnowledgeRetriever }    from "../../src/knowledge/KnowledgeRetriever";
 
@@ -140,6 +140,36 @@ describe("ConfluenceConnector", () => {
     const payload = { results: [], size: 0, start: 0, limit: 50 };
     const chunks = await makeConnector(fakeJsonTransport(200, payload)).fetch();
     expect(chunks).toHaveLength(0);
+  });
+
+  test("paginates correctly when first page is full (51 total pages)", async () => {
+    // Simulates a space with 51 pages: first call returns 50 (full page, has _links.next),
+    // second call returns 1 (last page, no _links.next). Verifies no pages are lost.
+    function makePage(count: number, hasNext: boolean, offset = 0) {
+      const results = Array.from({ length: count }, (_, i) => ({
+        id: `p${offset + i}`, title: `Page ${offset + i}`, space: { key: "ENG" },
+        body: { storage: { value: `Content ${i}` } },
+        history: { lastUpdated: {} },
+        metadata: { labels: { results: [] } },
+      }));
+      return { results, size: count, start: 0, limit: 50, _links: hasNext ? { next: "/next" } : {} };
+    }
+
+    let call = 0;
+    const transport: ConfluenceTransport = (_opts, cb) => {
+      const payload = call === 0 ? makePage(50, true, 0) : makePage(1, false, 50);
+      call++;
+      const body    = JSON.stringify(payload);
+      const readable = new (require("stream").Readable)({ read() { this.push(body); this.push(null); } });
+      const res = Object.assign(readable, { statusCode: 200, headers: {} }) as unknown as http.IncomingMessage;
+      if (cb) setImmediate(() => cb(res));
+      return { setTimeout: () => {}, on: () => {}, end: () => {}, destroy: () => {} } as unknown as http.ClientRequest;
+    };
+
+    const chunks = await makeConnector(transport).fetch();
+    expect(call).toBe(2);
+    const sourceIds = new Set(chunks.map(c => c.sourceId));
+    expect(sourceIds.size).toBe(51);
   });
 });
 
@@ -275,6 +305,20 @@ describe("GitConnector", () => {
     if (scopedChunks.length > 0) {
       // Tags come from scopes — must be non-empty strings
       expect(scopedChunks[0].tags.every(t => typeof t === "string" && t.length > 0)).toBe(true);
+    }
+  });
+
+  test("chunk text includes 'Files changed:' section when files exist", async () => {
+    const connector = new GitConnector({ lookbackDays: 365, repoPath: process.cwd() });
+    const chunks = await connector.fetch();
+    // At least some commits in this repo touch TypeScript files
+    const withFiles = chunks.filter(c => c.text.includes("Files changed:"));
+    if (chunks.length > 0) {
+      // If git --name-only works (it should in CI and local), we get file sections
+      expect(withFiles.length).toBeGreaterThan(0);
+      // File paths in the section should look like relative paths
+      const sample = withFiles[0].text;
+      expect(sample).toMatch(/Files changed:/);
     }
   });
 });

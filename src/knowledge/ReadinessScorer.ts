@@ -21,7 +21,7 @@ export interface ReadinessReport {
  * Designed for: `aiqa knowledge readiness --tag <tag>`
  * Future: release gates, deployment risk scoring, intelligent execution depth.
  */
-export class ReadinessScorer {
+export class KnowledgeReadinessScorer {
   score(tag: string, chunks: KnowledgeChunk[]): ReadinessReport {
     const tagged = chunks.filter(c => c.tags.includes(tag));
 
@@ -55,6 +55,8 @@ export class ReadinessScorer {
 
     const message = status === "READY"
       ? `"${tag}" is well-covered: ${stories.length} story chunk(s), ${defects.length} defect(s), confidence ${avgConf.toFixed(2)}`
+      : status === "MISSING"
+      ? `"${tag}" has chunks but no story or defect coverage — ingest Jira stories and defects for this area`
       : `"${tag}" has partial coverage — ${reasons.join(", ")}`;
 
     return {
