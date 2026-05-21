@@ -54,6 +54,21 @@ export type StepAction =
         pass_if:  string;
       };
       store_as?:      string;    // stores { response, score?, verdict?, reason? }
+    }
+  | {
+      action:           "llm_consistency";
+      target?:          string;
+      provider?:        string;
+      model?:           string;
+      system?:          string;
+      prompt:           string;
+      max_tokens?:      number;
+      runs?:            number;           // sequential runs; default 3
+      assert_variance?: {
+        max:     number;                  // max allowed pairwise cosine distance
+        metric?: "max" | "mean";          // default max
+      };
+      store_as?:        string;           // { responses[], variance, metric, verdict? }
     };
 
 export interface TestDefinition {

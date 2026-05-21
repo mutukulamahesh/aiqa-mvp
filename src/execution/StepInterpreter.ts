@@ -11,8 +11,9 @@ import { WaitHandler } from "../handlers/WaitHandler";
 import { StoreHandler } from "../handlers/StoreHandler";
 import { ConditionHandler } from "../handlers/ConditionHandler";
 import { LoopHandler } from "../handlers/LoopHandler";
-import { JudgeHandler }   from "../handlers/JudgeHandler";
-import { LLMEvalHandler } from "../handlers/LLMEvalHandler";
+import { JudgeHandler }        from "../handlers/JudgeHandler";
+import { LLMEvalHandler }       from "../handlers/LLMEvalHandler";
+import { ConsistencyHandler }   from "../handlers/ConsistencyHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
@@ -20,6 +21,7 @@ import { wrapWithDepthGuard } from "./DepthGuard";
 import { createLLMProvider } from "../llm/LLMProvider";
 import { getConfig } from "../config/ConfigLoader";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
+import { IEmbedder, Embedder } from "../knowledge/Embedder";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -31,7 +33,7 @@ export class StepInterpreter {
    * @param opts.retriever   KnowledgeRetriever passed to JudgeHandler for requirement-aware
    *                         evaluation. When omitted, JudgeHandler uses generic LLM scoring.
    */
-  constructor(opts: { registry?: HandlerRegistry; retriever?: KnowledgeRetriever } = {}) {
+  constructor(opts: { registry?: HandlerRegistry; retriever?: KnowledgeRetriever; embedder?: IEmbedder } = {}) {
     this.dbHandler = new DBActionHandler();
 
     if (opts.registry) {
@@ -58,7 +60,8 @@ export class StepInterpreter {
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
       .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
-      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever));
+      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever))
+      .register(new ConsistencyHandler(opts.embedder ?? new Embedder()));
   }
 
   async execute(
