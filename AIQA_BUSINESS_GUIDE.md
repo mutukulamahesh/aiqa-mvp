@@ -1,8 +1,8 @@
-# Lehman QA — Business & Non-Technical Guide
+# AIQA — Business & Non-Technical Guide
 
-## What Is Lehman QA?
+## What Is AIQA?
 
-Lehman QA (powered by the AIQA platform) is an **AI-driven quality assurance system** that automatically tests your software so your team can ship with confidence — without hiring large QA teams or writing thousands of manual test scripts.
+AIQA (powered by the AIQA platform) is an **AI-driven quality assurance system** that automatically tests your software so your team can ship with confidence — without hiring large QA teams or writing thousands of manual test scripts.
 
 Think of it as a **tireless digital QA engineer** that:
 - Learns your application by exploring it like a real user
@@ -20,7 +20,7 @@ Traditional QA is slow, expensive, and brittle:
 - Developers write test scripts that break every time the UI changes
 - Problems slip through because testing only covers what someone thought to test
 
-**Lehman QA flips this model entirely.**
+**AIQA flips this model entirely.**
 
 Instead of humans writing tests for machines to run, the AI:
 1. **Explores** your app autonomously (like a new employee clicking around on day one)
@@ -34,7 +34,7 @@ Instead of humans writing tests for machines to run, the AI:
 
 ## The Business Value
 
-| Business Problem | How Lehman QA Solves It |
+| Business Problem | How AIQA Solves It |
 |-----------------|------------------------|
 | QA slows down releases | Tests run in minutes, not days — parallel execution across 8+ workers |
 | Test scripts break when UI changes | Self-healing AI repairs broken selectors automatically |
@@ -141,13 +141,13 @@ This is one of the most important business features — it means **you don't pay
   Report shows "healed: 1 selector"
 ```
 
-In traditional testing, a single UI redesign can break hundreds of test scripts and require days of engineering work to fix. Lehman QA handles this automatically.
+In traditional testing, a single UI redesign can break hundreds of test scripts and require days of engineering work to fix. AIQA handles this automatically.
 
 ---
 
 ## What a Test Looks Like (Plain English Version)
 
-Behind the scenes, Lehman QA writes test scenarios in a simple YAML format. Here's what one looks like and what it means in plain English:
+Behind the scenes, AIQA writes test scenarios in a simple YAML format. Here's what one looks like and what it means in plain English:
 
 ```yaml
 # This is auto-generated — your team doesn't write this manually
@@ -182,7 +182,7 @@ Previously, each of these would require a separate tool, separate team, and sepa
 
 ---
 
-## Ways to Use Lehman QA
+## Ways to Use AIQA
 
 ### Option 1: Web Portal (No Technical Skills Required)
 
@@ -219,7 +219,7 @@ Install the browser extension → describe what you want tested in plain English
 
 ### Option 3: Automatic CI/CD (Fully Automated)
 
-Every time a developer pushes code, Lehman QA automatically:
+Every time a developer pushes code, AIQA automatically:
 1. Detects what changed
 2. Runs only the tests affected by that change (faster)
 3. Posts results to Slack / creates Jira bugs if something broke
@@ -229,7 +229,7 @@ Every time a developer pushes code, Lehman QA automatically:
 
 ### Option 4: Jira Integration (Requirements → Tests)
 
-Connect to Jira and Lehman QA will:
+Connect to Jira and AIQA will:
 - Read your user stories and acceptance criteria
 - Auto-generate tests for each story
 - Create Jira bugs (with screenshots) when tests fail
@@ -271,7 +271,7 @@ Every test run produces a **Readiness Score from 0 to 100**.
 
 ### Slack Notification
 ```
-Lehman QA — Run Complete
+AIQA — Run Complete
 ━━━━━━━━━━━━━━━━━━━━━━━
 ✅ Passed:  143
 ❌ Failed:    3
@@ -296,7 +296,7 @@ Full report → [link]
 
 ## Supported Environments
 
-Lehman QA works across your entire software delivery lifecycle:
+AIQA works across your entire software delivery lifecycle:
 
 ```
   Development      Staging         Production Monitoring
@@ -309,7 +309,7 @@ Lehman QA works across your entire software delivery lifecycle:
 
 ---
 
-## What Lehman QA Is NOT
+## What AIQA Is NOT
 
 To set correct expectations:
 
@@ -325,7 +325,7 @@ To set correct expectations:
 ### Step 1: Point it at your app
 ```bash
 # Install
-npm install -g @lehman/aiqa
+npm install -g aiqa
 
 # Configure your app URL
 aiqa init --url https://yourapp.com
@@ -346,7 +346,7 @@ From that point forward, tests run automatically on every code change.
 
 ## Total Cost of Ownership vs. Traditional QA
 
-| | Traditional QA | Lehman QA |
+| | Traditional QA | AIQA |
 |---|---|---|
 | **Setup time** | Weeks–months | Hours |
 | **Test authoring** | Manual by engineers | AI-generated |
