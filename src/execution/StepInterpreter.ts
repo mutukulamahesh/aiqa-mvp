@@ -18,21 +18,23 @@ import { AdapterActions } from "../adapter/AdapterActions";
 import { wrapWithDepthGuard } from "./DepthGuard";
 import { createLLMProvider } from "../llm/LLMProvider";
 import { getConfig } from "../config/ConfigLoader";
+import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
   private dbHandler: DBActionHandler;
 
   /**
-   * @param registry  Optional pre-built HandlerRegistry.  When provided, it is used
-   *                  as-is (useful for testing with mock handlers injected).
-   *                  When omitted, the default production registry is assembled.
+   * @param opts.registry    Pre-built HandlerRegistry (useful for tests with mock handlers).
+   *                         When omitted, the default production registry is assembled.
+   * @param opts.retriever   KnowledgeRetriever passed to JudgeHandler for requirement-aware
+   *                         evaluation. When omitted, JudgeHandler uses generic LLM scoring.
    */
-  constructor(registry?: HandlerRegistry) {
+  constructor(opts: { registry?: HandlerRegistry; retriever?: KnowledgeRetriever } = {}) {
     this.dbHandler = new DBActionHandler();
 
-    if (registry) {
-      this.registry = registry;
+    if (opts.registry) {
+      this.registry = opts.registry;
       return;
     }
 
@@ -54,7 +56,7 @@ export class StepInterpreter {
       .register(new StoreHandler())
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
-      .register(new JudgeHandler(createLLMProvider(llmConfig)));
+      .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever));
   }
 
   async execute(

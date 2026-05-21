@@ -13,6 +13,7 @@ import { AssertionError, TransientError } from "../errors";
 import { SelectorHealer } from "../healer/SelectorHealer";
 import { MemoryStore, makeStepKey } from "../memory/MemoryStore";
 import { KnowledgeStore } from "../knowledge/KnowledgeStore";
+import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 
 export interface RunnerOptions {
   headless:        boolean;
@@ -85,7 +86,7 @@ function stepTarget(step: StepAction): string | undefined {
 // ── TestRunner ───────────────────────────────────────────────────────────────
 
 export class TestRunner {
-  private readonly interpreter     = new StepInterpreter();
+  private readonly interpreter:     StepInterpreter;
   private readonly debugger        = new DebuggerAgent();
   private readonly healer:         SelectorHealer;
   private readonly memory?:        MemoryStore;
@@ -95,6 +96,12 @@ export class TestRunner {
     this.healer         = opts.healer ?? new SelectorHealer();
     this.memory         = opts.memory;
     this.knowledgeStore = opts.knowledgeStore;
+
+    // Build a retriever for JudgeHandler (topK=3 — concise context for LLM prompts)
+    const retriever = opts.knowledgeStore
+      ? new KnowledgeRetriever(opts.knowledgeStore, 3)
+      : undefined;
+    this.interpreter = new StepInterpreter({ retriever });
   }
 
   /** Returns the healer's activity report for the current runner session. */
