@@ -81,3 +81,10 @@ knowledge:
 #     table:  orders
 #     pk:     id
 #     method: [POST, DELETE]
+
+# llm_targets — named LLM targets for llm_eval / llm_consistency steps.
+# test YAML references "target: local" instead of hardcoding provider/model.
+# llm_targets:
+#   local:    { provider: ollama, model: llama3.2 }
+#   fast:     { provider: anthropic, model: claude-haiku-4-5-20251001 }
+#   powerful: { provider: anthropic, model: claude-sonnet-4-6 }

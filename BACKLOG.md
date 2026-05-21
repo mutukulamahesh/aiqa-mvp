@@ -583,6 +583,56 @@ Files (post-spike):
 
 ---
 
+---
+
+## Strategic Gap Plan `[OSS ADOPTION + MARKET GAPS]`
+> Addresses 8 market gaps and 8 OSS adoption blockers from strategic review (2026-05-21).
+> These run in parallel with product phases — not a replacement for them.
+
+### EPIC-DEX · Developer Experience & Adoption `[HIGH PRIORITY]`
+Fix the friction that kills adoption before a developer sees any value.
+
+| ID | Story | Blocker | Status |
+|---|---|---|---|
+| DEX-01 | `OllamaLLMProvider` — local LLM, no API key, data never leaves machine | #1 API key, #6 sensitive data | [x] |
+| DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [ ] |
+| DEX-03 | Official Docker image with Playwright browsers pre-installed | #2 Node.js only, #4 air-gapped CI | [ ] |
+| DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [ ] |
+| DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [ ] |
+| DEX-06 | Python subprocess wrapper — `pip install aiqa-runner` calls Node CLI under the hood | #2 Node.js only | [ ] |
+
+### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
+The engineering quality is invisible until you dig in. Make it visible upfront.
+
+| ID | Story | Blocker | Status |
+|---|---|---|---|
+| OSS-01 | `CHANGELOG.md` — semantic versioning, entry per release with migration notes | #3 one contributor | [ ] |
+| OSS-02 | `CONTRIBUTING.md` — local dev setup, test conventions, PR checklist | #3 one contributor | [ ] |
+| OSS-03 | Publish open-core business model in README — "Core: forever free. Cloud: hosted execution for teams" | #8 monetisation fear | [ ] |
+| OSS-04 | GitHub Discussions enabled + pinned "Roadmap & Q3 2026 goals" thread | #3 no community signals | [ ] |
+| OSS-05 | Readiness Score badge — `[![AIQA Readiness](badge-url)](report-url)` embeddable in repo READMEs | marketing | [ ] |
+
+### EPIC-LOCAL · Local-First & Privacy Mode `[HIGH PRIORITY]`
+Unlock enterprise teams that block external API calls.
+
+| ID | Story | Gap | Status |
+|---|---|---|---|
+| LOCAL-01 | `OllamaLLMProvider` — done above | #6 sensitive data | [x] |
+| LOCAL-02 | `aiqa doctor` Ollama check — detects running Ollama instance + pulled models | DX | [ ] |
+| LOCAL-03 | "Data stays on-prem" documentation section — explicit about what leaves the machine and when | #6 sensitive data | [ ] |
+| LOCAL-04 | Config: `privacy_mode: true` — blocks all outbound LLM calls, forces local-only | #6 sensitive data | [ ] |
+
+### EPIC-MON · Synthetic Monitoring `[MEDIUM PRIORITY]`
+DataDog alternative at near-zero cost.
+
+| ID | Story | Gap | Status |
+|---|---|---|---|
+| MON-01 | `aiqa schedule "*/5 * * * *" tests/smoke/` — cron-triggered recurring test runs | #7 synthetic monitoring | [ ] |
+| MON-02 | `--alert-webhook <url>` — POST JSON payload to Slack/Teams/PagerDuty on failure | #7 synthetic monitoring | [ ] |
+| MON-03 | Uptime history in `results/` — rolling 30-day pass/fail log per test file | #7 synthetic monitoring | [ ] |
+
+---
+
 ## Phase 6 — Vision & Desktop `[SELECTOR-FREE TESTING]`
 > Works on any UI with no DOM access
 
@@ -642,11 +692,15 @@ Files (post-spike):
 | Phase 4 — Enterprise | 4 | 20 | ✅ DONE | Jira full ✅, reports ✅, CI impact filter ✅, CLI polish ✅ |
 | Phase 4 — Knowledge Layer P1 | 1 | 23 | ✅ DONE | RAG Phase 1 — Jira, embeddings, FlowMapper wiring |
 | Phase 4 — Knowledge Layer P2 | 1 | 11 | ✅ DONE | RAG Phase 2 — hybrid reranker, all connectors, healer+judge wiring |
-| Phase 4 — Knowledge Layer P3 | 1 | 4 | ▶ NEXT | RAG Phase 3 — explainability, defect masking fix, retrieval budget |
-| Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
+| Phase 4 — Knowledge Layer P3 | 1 | 4 | ✅ DONE | RAG Phase 3 — explainability, defect masking fix, budget, graph |
+| Phase 5 — GenAI | 1 | 5 | ▶ ACTIVE | Test AI systems natively — branch: genaieval |
+| Strategic — DEX | 1 | 6 | ▶ ACTIVE | OSS adoption, Ollama (DEX-01 done), quickstart, Docker |
+| Strategic — OSS | 1 | 5 | ⬜ | Community, changelog, open-core model |
+| Strategic — LOCAL | 1 | 4 | ▶ ACTIVE | Privacy mode, Ollama doctor, local-only config |
+| Strategic — MON | 1 | 3 | ⬜ | Synthetic monitoring, alerts |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **27+** | **151+** | | |
+| **Total** | **31+** | **169+** | | |
 
-**Next up: RAG Phase 3 — Quality & Trust (4 stories: defect.category, scoreBreakdown, retrieval budget, Knowledge Graph foundations).**
-**After that: Phase 5 — GenAI Testing (EPIC-13).**
+**Active:** Phase 5 GenAI Testing (GEN-01 → GEN-04 → GEN-05 → GEN-02 → GEN-03) + Strategic DEX/LOCAL epics in parallel.
+**Next after GenAI:** EPIC-OSS community work + EPIC-MON synthetic monitoring + Phase 6 Vision.

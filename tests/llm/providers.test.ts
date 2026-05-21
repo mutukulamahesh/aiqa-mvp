@@ -2,6 +2,7 @@ import { LLMProvider, LLMRequest, LLMResponse, createLLMProvider } from "../../s
 import { OpenAILLMProvider }   from "../../src/llm/OpenAILLMProvider";
 import { GeminiLLMProvider }   from "../../src/llm/GeminiLLMProvider";
 import { FallbackLLMProvider } from "../../src/llm/FallbackLLMProvider";
+import { OllamaLLMProvider }   from "../../src/llm/OllamaLLMProvider";
 import { logger }              from "../../src/utils/logger";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -332,5 +333,84 @@ describe("createLLMProvider", () => {
     process.env.OPENAI_API_KEY = "sk-test";
     const p = createLLMProvider({ provider: "openai", fallback: ["mock"] });
     expect(p.name).toBe("openai+mock");
+  });
+
+  test("ollama provider resolves without API key", () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    const p = createLLMProvider({ provider: "ollama" });
+    expect(p.name).toBe("ollama");
+  });
+});
+
+// ── OllamaLLMProvider ────────────────────────────────────────────────────────
+
+describe("OllamaLLMProvider", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  test("name is ollama", () => {
+    expect(new OllamaLLMProvider().name).toBe("ollama");
+  });
+
+  test("uses default baseUrl and model from constructor defaults", async () => {
+    const spy = mockFetchOk({
+      choices: [{ message: { content: "Bonjour" } }],
+      model:   "llama3.2",
+    });
+    const provider = new OllamaLLMProvider();
+    await provider.complete({ system: "sys", userMessage: "hello" });
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining("localhost:11434"),
+      expect.any(Object),
+    );
+  });
+
+  test("uses custom baseUrl and model when provided", async () => {
+    const spy = mockFetchOk({
+      choices: [{ message: { content: "response" } }],
+      model:   "mistral",
+    });
+    const provider = new OllamaLLMProvider({ baseUrl: "http://ollama-server:11434", model: "mistral" });
+    const result   = await provider.complete({ system: "sys", userMessage: "hi" });
+    expect(spy).toHaveBeenCalledWith(
+      "http://ollama-server:11434/v1/chat/completions",
+      expect.any(Object),
+    );
+    expect(result.content).toBe("response");
+    expect(result.model).toBe("mistral");
+  });
+
+  test("reads OLLAMA_BASE_URL and OLLAMA_MODEL from env", async () => {
+    process.env.OLLAMA_BASE_URL = "http://custom:11434";
+    process.env.OLLAMA_MODEL    = "qwen2.5";
+    const spy = mockFetchOk({ choices: [{ message: { content: "ok" } }], model: "qwen2.5" });
+    await new OllamaLLMProvider().complete({ system: "s", userMessage: "u" });
+    expect(spy).toHaveBeenCalledWith(
+      "http://custom:11434/v1/chat/completions",
+      expect.any(Object),
+    );
+    delete process.env.OLLAMA_BASE_URL;
+    delete process.env.OLLAMA_MODEL;
+  });
+
+  test("sends no Authorization header (no API key)", async () => {
+    mockFetchOk({ choices: [{ message: { content: "ok" } }], model: "llama3.2" });
+    const provider = new OllamaLLMProvider();
+    await provider.complete({ system: "s", userMessage: "u" });
+    const [, opts] = (globalThis.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    const headers  = opts.headers as Record<string, string>;
+    expect(headers["Authorization"]).toBeUndefined();
+  });
+
+  test("throws with helpful message on HTTP error", async () => {
+    mockFetchError(404, "model not found");
+    await expect(new OllamaLLMProvider().complete({ system: "s", userMessage: "u" }))
+      .rejects.toThrow(/ollama.*404/i);
+  });
+
+  test("throws with pull hint on empty response", async () => {
+    mockFetchOk({ choices: [{ message: { content: "" } }], model: "llama3.2" });
+    await expect(new OllamaLLMProvider().complete({ system: "s", userMessage: "u" }))
+      .rejects.toThrow(/ollama pull/i);
   });
 });

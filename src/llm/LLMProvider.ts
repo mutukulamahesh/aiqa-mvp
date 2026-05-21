@@ -9,6 +9,7 @@ import type { OpenAILLMProvider   as _OpenAIType }    from "./OpenAILLMProvider"
 import type { GeminiLLMProvider   as _GeminiType }    from "./GeminiLLMProvider";
 import type { MockLLMProvider     as _MockType }      from "./MockLLMProvider";
 import type { FallbackLLMProvider as _FallbackType }  from "./FallbackLLMProvider";
+import type { OllamaLLMProvider   as _OllamaType }    from "./OllamaLLMProvider";
 import { getCircuitBreaker }                          from "../utils/circuitBreaker";
 
 /**
@@ -33,7 +34,7 @@ export interface LLMProvider {
   complete(request: LLMRequest): Promise<LLMResponse>;
 }
 
-export type ProviderName = "anthropic" | "openai" | "nvidia" | "gemini" | "mock";
+export type ProviderName = "anthropic" | "openai" | "nvidia" | "gemini" | "ollama" | "mock";
 
 export interface LLMConfig {
   provider:  ProviderName;
@@ -144,6 +145,10 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
       if (!key) throw new Error("GEMINI_API_KEY is not set");
       const { GeminiLLMProvider } = require("./GeminiLLMProvider") as { GeminiLLMProvider: typeof _GeminiType };
       return new GeminiLLMProvider(key, model);
+    }
+    case "ollama": {
+      const { OllamaLLMProvider } = require("./OllamaLLMProvider") as { OllamaLLMProvider: typeof _OllamaType };
+      return new OllamaLLMProvider({ model });
     }
     default: {
       const { MockLLMProvider } = require("./MockLLMProvider") as { MockLLMProvider: typeof _MockType };
