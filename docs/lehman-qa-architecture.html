@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lehman QA — Architecture & Business Overview</title>
+<style>
+  :root {
+    --blue:    #1a56db;
+    --blue-lt: #e8f0fe;
+    --green:   #057a55;
+    --green-lt:#d3f9d8;
+    --purple:  #6c2bd9;
+    --purple-lt:#ede9fe;
+    --amber:   #b45309;
+    --amber-lt:#fef3c7;
+    --red:     #c81e1e;
+    --red-lt:  #fde8e8;
+    --gray:    #374151;
+    --gray-lt: #f3f4f6;
+    --border:  #e5e7eb;
+    --white:   #ffffff;
+    --shadow:  0 4px 16px rgba(0,0,0,.10);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #f8fafc;
+    color: var(--gray);
+    line-height: 1.6;
+  }
+
+  /* ── NAV ── */
+  nav {
+    background: var(--blue);
+    color: white;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  nav .brand { font-size: 1.2rem; font-weight: 700; padding: 1rem 0; white-space: nowrap; }
+  nav a {
+    color: rgba(255,255,255,.8);
+    text-decoration: none;
+    font-size: .9rem;
+    padding: .3rem .6rem;
+    border-radius: 4px;
+    transition: background .15s;
+  }
+  nav a:hover { background: rgba(255,255,255,.15); color: white; }
+
+  /* ── SECTIONS ── */
+  section { padding: 4rem 2rem; max-width: 1100px; margin: 0 auto; }
+  section + section { border-top: 1px solid var(--border); }
+
+  h1 { font-size: 2.4rem; font-weight: 800; color: var(--blue); margin-bottom: .5rem; }
+  h2 { font-size: 1.7rem; font-weight: 700; margin-bottom: 1.2rem; color: #111827; }
+  h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; }
+  p  { margin-bottom: 1rem; color: #4b5563; }
+  .sub { font-size: 1.1rem; color: #6b7280; margin-bottom: 2rem; }
+
+  /* ── HERO ── */
+  #hero { text-align: center; padding-top: 5rem; }
+  .hero-badge {
+    display: inline-block;
+    background: var(--blue-lt);
+    color: var(--blue);
+    font-size: .8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    padding: .3rem .8rem;
+    border-radius: 999px;
+    margin-bottom: 1rem;
+  }
+  .hero-kpis {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    margin-top: 2.5rem;
+  }
+  .kpi {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 2rem;
+    min-width: 140px;
+    box-shadow: var(--shadow);
+  }
+  .kpi-num { font-size: 2rem; font-weight: 800; color: var(--blue); }
+  .kpi-label { font-size: .85rem; color: #6b7280; }
+
+  /* ── PROBLEM / SOLUTION ── */
+  .ps-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+  @media(max-width:700px){ .ps-grid { grid-template-columns: 1fr; } }
+  .ps-card {
+    border-radius: 12px;
+    padding: 1.4rem;
+  }
+  .ps-card.problem { background: var(--red-lt); border-left: 4px solid var(--red); }
+  .ps-card.solution { background: var(--green-lt); border-left: 4px solid var(--green); }
+  .ps-card h3 { font-size: 1rem; }
+  .ps-card.problem h3 { color: var(--red); }
+  .ps-card.solution h3 { color: var(--green); }
+  .ps-card p { font-size: .9rem; margin: 0; color: #374151; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  #arch { background: white; border-radius: 16px; padding: 2.5rem; box-shadow: var(--shadow); margin: 2rem auto; max-width: 1000px; }
+  .arch-title { text-align: center; font-size: 1.1rem; font-weight: 700; color: #6b7280; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2rem; }
+
+  /* layer rows */
+  .layer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 0;
+  }
+  .layer-label {
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: #9ca3af;
+    margin-bottom: .5rem;
+  }
+  .layer-row {
+    display: flex;
+    gap: .8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  /* arrow connector */
+  .connector {
+    display: flex;
+    justify-content: center;
+    margin: .6rem 0;
+    font-size: 1.4rem;
+    color: #9ca3af;
+  }
+
+  /* boxes */
+  .box {
+    border-radius: 10px;
+    padding: .8rem 1.1rem;
+    font-size: .85rem;
+    font-weight: 600;
+    text-align: center;
+    flex: 1;
+    min-width: 120px;
+    max-width: 200px;
+    border: 2px solid transparent;
+    transition: transform .15s, box-shadow .15s;
+    cursor: default;
+  }
+  .box:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.12); }
+  .box .icon { font-size: 1.4rem; display: block; margin-bottom: .3rem; }
+  .box .sub  { font-size: .72rem; font-weight: 400; opacity: .8; display: block; margin-top: .2rem; }
+
+  .box.blue   { background: var(--blue-lt);   border-color: #93c5fd; color: #1e3a8a; }
+  .box.green  { background: var(--green-lt);  border-color: #6ee7b7; color: #064e3b; }
+  .box.purple { background: var(--purple-lt); border-color: #c4b5fd; color: #3b0764; }
+  .box.amber  { background: var(--amber-lt);  border-color: #fcd34d; color: #78350f; }
+  .box.gray   { background: var(--gray-lt);   border-color: #d1d5db; color: #1f2937; }
+  .box.white  { background: white;            border-color: var(--border); color: #374151; }
+
+  /* wide banner box */
+  .box-wide {
+    border-radius: 10px;
+    padding: .9rem 1.5rem;
+    font-size: .9rem;
+    font-weight: 700;
+    text-align: center;
+    width: 100%;
+    border: 2px solid transparent;
+  }
+  .box-wide.blue   { background: var(--blue-lt);   border-color: #93c5fd; color: #1e3a8a; }
+  .box-wide.purple { background: var(--purple-lt); border-color: #c4b5fd; color: #3b0764; }
+  .box-wide.green  { background: var(--green-lt);  border-color: #6ee7b7; color: #064e3b; }
+  .box-wide.amber  { background: var(--amber-lt);  border-color: #fcd34d; color: #78350f; }
+
+  /* ── PIPELINE ── */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 2rem 0;
+    overflow-x: auto;
+  }
+  .pipe-step {
+    flex: 1;
+    min-width: 130px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+  .pipe-num {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: .85rem;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: .5rem;
+    flex-shrink: 0;
+  }
+  .pipe-box {
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: .9rem .7rem;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+  }
+  .pipe-icon { font-size: 1.6rem; }
+  .pipe-title { font-size: .85rem; font-weight: 700; margin: .3rem 0 .2rem; }
+  .pipe-desc  { font-size: .72rem; color: #6b7280; }
+  .pipe-arrow {
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    padding-top: 32px;
+  }
+  .s1 .pipe-num { background: var(--blue-lt);   color: var(--blue); }
+  .s2 .pipe-num { background: var(--purple-lt); color: var(--purple); }
+  .s3 .pipe-num { background: var(--amber-lt);  color: var(--amber); }
+  .s4 .pipe-num { background: var(--green-lt);  color: var(--green); }
+  .s5 .pipe-num { background: #ecfdf5;          color: #065f46; }
+  .s1 .pipe-box { border-color: #93c5fd; }
+  .s2 .pipe-box { border-color: #c4b5fd; }
+  .s3 .pipe-box { border-color: #fcd34d; }
+  .s4 .pipe-box { border-color: #6ee7b7; }
+  .s5 .pipe-box { border-color: #34d399; }
+
+  /* ── HEAL FLOW ── */
+  .heal-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 1.5rem 0;
+  }
+  .heal-step {
+    background: white;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: .8rem 1rem;
+    text-align: center;
+    min-width: 130px;
+    max-width: 160px;
+  }
+  .heal-icon { font-size: 1.4rem; }
+  .heal-title { font-size: .8rem; font-weight: 700; margin-top: .3rem; }
+  .heal-desc  { font-size: .7rem; color: #6b7280; }
+  .heal-arrow { font-size: 1.3rem; color: #9ca3af; padding: 0 .3rem; }
+  .heal-step.bad  { border-color: #f87171; background: var(--red-lt); }
+  .heal-step.ai   { border-color: #a78bfa; background: var(--purple-lt); }
+  .heal-step.good { border-color: #34d399; background: var(--green-lt); }
+
+  /* ── VALUE TABLE ── */
+  .val-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .9rem; }
+  .val-table th { background: var(--blue); color: white; padding: .7rem 1rem; text-align: left; }
+  .val-table td { padding: .7rem 1rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .val-table tr:nth-child(even) td { background: var(--gray-lt); }
+  .val-table .col-prob { color: var(--red); font-weight: 600; }
+  .val-table .col-sol  { color: var(--green); font-weight: 600; }
+
+  /* ── SCORE METER ── */
+  .score-wrap { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; margin: 1.5rem 0; }
+  .score-meter {
+    position: relative;
+    width: 160px; height: 160px;
+    flex-shrink: 0;
+  }
+  .score-meter svg { width: 100%; height: 100%; }
+  .score-center {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    text-align: center;
+  }
+  .score-num { font-size: 2.2rem; font-weight: 800; color: var(--green); }
+  .score-lbl { font-size: .75rem; color: #6b7280; }
+  .score-legend { flex: 1; min-width: 200px; }
+  .score-row { display: flex; align-items: center; gap: .7rem; margin-bottom: .5rem; font-size: .85rem; }
+  .score-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── USERS ── */
+  .user-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+  .user-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.3rem;
+    box-shadow: var(--shadow);
+  }
+  .user-avatar { font-size: 2.2rem; margin-bottom: .5rem; }
+  .user-role { font-size: 1rem; font-weight: 700; }
+  .user-how { font-size: .82rem; color: #6b7280; margin-top: .4rem; }
+  .tag {
+    display: inline-block;
+    font-size: .7rem;
+    font-weight: 700;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    margin: .2rem .1rem 0 0;
+  }
+  .tag.blue   { background: var(--blue-lt);   color: var(--blue); }
+  .tag.green  { background: var(--green-lt);  color: var(--green); }
+  .tag.purple { background: var(--purple-lt); color: var(--purple); }
+  .tag.amber  { background: var(--amber-lt);  color: var(--amber); }
+
+  /* ── QUOTE ── */
+  .quote-block {
+    background: var(--blue-lt);
+    border-left: 4px solid var(--blue);
+    border-radius: 0 10px 10px 0;
+    padding: 1.2rem 1.5rem;
+    margin: 1.5rem 0;
+    font-style: italic;
+    color: #1e3a8a;
+    font-size: 1rem;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    background: #111827;
+    color: #9ca3af;
+    text-align: center;
+    padding: 1.5rem;
+    font-size: .85rem;
+  }
+  footer strong { color: white; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="brand">⚡ Lehman QA</div>
+  <a href="#problem">The Problem</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#pipeline">How It Works</a>
+  <a href="#healing">Self-Healing</a>
+  <a href="#value">Business Value</a>
+  <a href="#users">Who Uses It</a>
+</nav>
+
+<!-- ══════════════ HERO ══════════════ -->
+<section id="hero">
+  <div class="hero-badge">Enterprise AI Quality Assurance</div>
+  <h1>Lehman QA</h1>
+  <p class="sub">Your software, tested automatically — before bugs reach your customers.</p>
+  <p style="max-width:640px;margin:0 auto 1rem;">
+    Lehman QA is an AI-powered platform that <strong>explores your application, writes its own tests,
+    runs them on every code change, and heals itself when your UI evolves</strong> — all without
+    your team lifting a finger.
+  </p>
+  <div class="hero-kpis">
+    <div class="kpi"><div class="kpi-num">0–100</div><div class="kpi-label">Readiness Score</div></div>
+    <div class="kpi"><div class="kpi-num">8×</div><div class="kpi-label">Parallel Workers</div></div>
+    <div class="kpi"><div class="kpi-num">40%+</div><div class="kpi-label">Faster CI Runs</div></div>
+    <div class="kpi"><div class="kpi-num">3-in-1</div><div class="kpi-label">UI + API + DB Testing</div></div>
+    <div class="kpi"><div class="kpi-num">Auto</div><div class="kpi-label">Bug Creation in Jira</div></div>
+  </div>
+</section>
+
+<!-- ══════════════ THE PROBLEM ══════════════ -->
+<section id="problem" style="max-width:1100px;margin:0 auto;">
+  <h2>The Problem Traditional QA Creates</h2>
+  <p>Every software team faces the same painful cycle. Lehman QA breaks it.</p>
+  <div class="ps-grid">
+    <div class="ps-card problem">
+      <h3>❌ Manual testing is slow</h3>
+      <p>Human testers click through screens repeatedly. A single release cycle can take days of manual QA, delaying your go-to-market.</p>
+    </div>
+    <div class="ps-card solution">
+      <h3>✅ Tests run in minutes, not days</h3>
+      <p>Lehman QA runs 8 parallel automated workers. A full regression that took 2 days now completes before your coffee gets cold.</p>
+    </div>
+    <div class="ps-card problem">
+      <h3>❌ Test scripts break after every UI change</h3>
+      <p>Engineers spend days repairing broken test scripts after a redesign. Tests become a liability, not an asset.</p>
+    </div>
+    <div class="ps-card solution">
+      <h3>✅ AI repairs broken tests automatically</h3>
+      <p>Self-healing detects changed UI elements and repairs them without human intervention. No maintenance overhead.</p>
+    </div>
+    <div class="ps-card problem">
+      <h3>❌ Five tools for five layers</h3>
+      <p>Selenium for UI. Postman for APIs. SQL scripts for DB. Jira manually. Slack manually. Four different dashboards, no unified view.</p>
+    </div>
+    <div class="ps-card solution">
+      <h3>✅ One platform, all layers</h3>
+      <p>A single test file covers UI clicks, API calls, and database validation simultaneously. One score. One dashboard.</p>
+    </div>
+    <div class="ps-card problem">
+      <h3>❌ You don't know what you haven't tested</h3>
+      <p>Humans only test what they think to test. Real users take paths no one planned for.</p>
+    </div>
+    <div class="ps-card solution">
+      <h3>✅ AI discovers paths humans miss</h3>
+      <p>The App Explorer crawls your entire application like a real user, finding flows your team never thought to test.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ ARCHITECTURE ══════════════ -->
+<section id="architecture" style="max-width:1100px;margin:0 auto;">
+  <h2>System Architecture</h2>
+  <p>Four layers work together seamlessly — from how you interact down to the results you act on.</p>
+
+  <div id="arch">
+    <div class="arch-title">Lehman QA — Full System Architecture</div>
+
+    <!-- Layer 1: Entry Points -->
+    <div class="layer">
+      <div class="layer-label">How You Interact</div>
+      <div class="layer-row">
+        <div class="box blue">
+          <span class="icon">🌐</span>
+          Web Portal
+          <span class="sub">Point-and-click<br/>dashboard & editor</span>
+        </div>
+        <div class="box blue">
+          <span class="icon">🔌</span>
+          Chrome Extension
+          <span class="sub">Zero install<br/>runs in your browser</span>
+        </div>
+        <div class="box blue">
+          <span class="icon">⌨️</span>
+          CLI / Terminal
+          <span class="sub">Developer & CI/CD<br/>command line</span>
+        </div>
+        <div class="box blue">
+          <span class="icon">🔗</span>
+          REST API
+          <span class="sub">Integrate with<br/>any system</span>
+        </div>
+        <div class="box blue">
+          <span class="icon">📋</span>
+          Jira Integration
+          <span class="sub">Auto-generate tests<br/>from user stories</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">▼</div>
+
+    <!-- Layer 2: AI Brain -->
+    <div class="layer">
+      <div class="layer-label">The AI Brain</div>
+      <div class="layer-row">
+        <div class="box purple">
+          <span class="icon">🔍</span>
+          App Explorer
+          <span class="sub">Crawls your app<br/>like a real user</span>
+        </div>
+        <div class="box purple">
+          <span class="icon">🗺️</span>
+          Flow Mapper
+          <span class="sub">Identifies important<br/>user journeys</span>
+        </div>
+        <div class="box purple">
+          <span class="icon">✍️</span>
+          Test Generator
+          <span class="sub">Writes test files<br/>automatically</span>
+        </div>
+        <div class="box purple">
+          <span class="icon">🔧</span>
+          Debugger Agent
+          <span class="sub">Diagnoses failures<br/>in plain English</span>
+        </div>
+        <div class="box purple">
+          <span class="icon">🧠</span>
+          Memory Layer
+          <span class="sub">Learns from past<br/>flaky test patterns</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LLM Row -->
+    <div style="margin:.8rem 0 0; padding:.7rem 1rem; background:#faf5ff; border:1px dashed #c4b5fd; border-radius:10px; text-align:center;">
+      <span style="font-size:.75rem;font-weight:700;color:#6c2bd9;text-transform:uppercase;letter-spacing:.08em;">Powered by — choose your AI model:</span>
+      <div style="display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin-top:.5rem;">
+        <span style="background:#ede9fe;color:#4c1d95;padding:.2rem .7rem;border-radius:999px;font-size:.78rem;font-weight:600;">Claude (Anthropic)</span>
+        <span style="background:#ede9fe;color:#4c1d95;padding:.2rem .7rem;border-radius:999px;font-size:.78rem;font-weight:600;">GPT-4 (OpenAI)</span>
+        <span style="background:#ede9fe;color:#4c1d95;padding:.2rem .7rem;border-radius:999px;font-size:.78rem;font-weight:600;">Gemini (Google)</span>
+        <span style="background:#ede9fe;color:#4c1d95;padding:.2rem .7rem;border-radius:999px;font-size:.78rem;font-weight:600;">Mock (no API key)</span>
+      </div>
+    </div>
+
+    <div class="connector">▼</div>
+
+    <!-- Layer 3: Test Engine -->
+    <div class="layer">
+      <div class="layer-label">The Test Engine</div>
+      <div class="layer-row">
+        <div class="box green">
+          <span class="icon">🖱️</span>
+          UI Testing
+          <span class="sub">Clicks, forms,<br/>screen assertions</span>
+        </div>
+        <div class="box green">
+          <span class="icon">⚡</span>
+          API Testing
+          <span class="sub">HTTP calls,<br/>response validation</span>
+        </div>
+        <div class="box green">
+          <span class="icon">🗄️</span>
+          Database Testing
+          <span class="sub">SQL queries,<br/>row validation</span>
+        </div>
+        <div class="box green">
+          <span class="icon">🤖</span>
+          AI Quality Judge
+          <span class="sub">Scores content<br/>quality with LLM</span>
+        </div>
+        <div class="box green">
+          <span class="icon">🩹</span>
+          Self-Healing
+          <span class="sub">Repairs broken<br/>selectors auto</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="connector">▼</div>
+
+    <!-- Layer 4: Outputs -->
+    <div class="layer">
+      <div class="layer-label">Results & Actions</div>
+      <div class="layer-row">
+        <div class="box amber">
+          <span class="icon">📊</span>
+          Readiness Score
+          <span class="sub">0–100 release<br/>confidence grade</span>
+        </div>
+        <div class="box amber">
+          <span class="icon">📄</span>
+          HTML Reports
+          <span class="sub">Trend charts,<br/>screenshots</span>
+        </div>
+        <div class="box amber">
+          <span class="icon">💬</span>
+          Slack / Email
+          <span class="sub">Instant failure<br/>notifications</span>
+        </div>
+        <div class="box amber">
+          <span class="icon">🐛</span>
+          Jira Bugs
+          <span class="sub">Auto-created with<br/>screenshots</span>
+        </div>
+        <div class="box amber">
+          <span class="icon">🔄</span>
+          CI/CD Gate
+          <span class="sub">Block deploy if<br/>score too low</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ PIPELINE ══════════════ -->
+<section id="pipeline" style="max-width:1100px;margin:0 auto;">
+  <h2>How It Works — The 5-Stage Pipeline</h2>
+  <p>Run one command. The AI handles everything else.</p>
+
+  <div class="pipeline">
+    <div class="pipe-step s1">
+      <div class="pipe-num">1</div>
+      <div class="pipe-box">
+        <div class="pipe-icon">🔍</div>
+        <div class="pipe-title">EXPLORE</div>
+        <div class="pipe-desc">AI browses your app like a new employee on day one — clicking every button, visiting every page, trying every form</div>
+      </div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step s2">
+      <div class="pipe-num">2</div>
+      <div class="pipe-box">
+        <div class="pipe-icon">🗺️</div>
+        <div class="pipe-title">MAP</div>
+        <div class="pipe-desc">Identifies the important user journeys — login, checkout, search, profile update, payment — the flows that matter to your business</div>
+      </div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step s3">
+      <div class="pipe-num">3</div>
+      <div class="pipe-box">
+        <div class="pipe-icon">✍️</div>
+        <div class="pipe-title">GENERATE</div>
+        <div class="pipe-desc">Writes a complete test suite covering every discovered flow. No engineer writes a single line of test code</div>
+      </div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step s4">
+      <div class="pipe-num">4</div>
+      <div class="pipe-box">
+        <div class="pipe-icon">▶️</div>
+        <div class="pipe-title">RUN</div>
+        <div class="pipe-desc">Executes all tests in parallel across 8 workers simultaneously. What took 2 days now finishes in minutes</div>
+      </div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step s5">
+      <div class="pipe-num">5</div>
+      <div class="pipe-box">
+        <div class="pipe-icon">📊</div>
+        <div class="pipe-title">SCORE</div>
+        <div class="pipe-desc">Outputs a 0–100 Readiness Score. Set a minimum threshold. Block the release if software isn't ready</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quote-block">
+    "One command: <code style="font-style:normal;background:rgba(0,0,0,.08);padding:.1rem .4rem;border-radius:4px;">aiqa orchestrate --env staging</code> &nbsp;—&nbsp;
+    thirty minutes later you have a complete test suite, a readiness score, and full visibility into your software's health."
+  </div>
+</section>
+
+<!-- ══════════════ SELF-HEALING ══════════════ -->
+<section id="healing" style="max-width:1100px;margin:0 auto;">
+  <h2>Self-Healing — The Feature That Saves Thousands in Maintenance</h2>
+  <p>
+    In traditional QA, every time a designer moves a button or renames a field, dozens of test scripts break.
+    An engineer has to find each one and repair it manually — often taking days after a major UI release.
+    <strong>Lehman QA eliminates this cost entirely.</strong>
+  </p>
+
+  <div class="heal-flow">
+    <div class="heal-step bad">
+      <div class="heal-icon">💥</div>
+      <div class="heal-title">UI Change Deployed</div>
+      <div class="heal-desc">Button moved, text renamed, or page restructured</div>
+    </div>
+    <div class="heal-arrow">→</div>
+    <div class="heal-step bad">
+      <div class="heal-icon">🔴</div>
+      <div class="heal-title">Test Detects Break</div>
+      <div class="heal-desc">"Submit Order" button no longer found at old location</div>
+    </div>
+    <div class="heal-arrow">→</div>
+    <div class="heal-step ai">
+      <div class="heal-icon">🤖</div>
+      <div class="heal-title">AI Scans the Page</div>
+      <div class="heal-desc">Analyzes current DOM structure and finds the new location</div>
+    </div>
+    <div class="heal-arrow">→</div>
+    <div class="heal-step ai">
+      <div class="heal-icon">💾</div>
+      <div class="heal-title">Fix Cached</div>
+      <div class="heal-desc">Repair stored permanently — future runs use the new location instantly</div>
+    </div>
+    <div class="heal-arrow">→</div>
+    <div class="heal-step good">
+      <div class="heal-icon">✅</div>
+      <div class="heal-title">Test Passes</div>
+      <div class="heal-desc">Report shows "1 selector healed" — zero human time spent</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:1.5rem;">
+    <div style="flex:1;min-width:220px;background:var(--red-lt);border:1px solid #f87171;border-radius:10px;padding:1.2rem;">
+      <strong style="color:var(--red);">Traditional QA after a UI redesign</strong>
+      <ul style="font-size:.88rem;margin-top:.5rem;padding-left:1.2rem;color:#374151;">
+        <li>150 broken test scripts</li>
+        <li>2–3 days of engineer time</li>
+        <li>Release delayed</li>
+        <li>Repeat every redesign</li>
+      </ul>
+    </div>
+    <div style="flex:1;min-width:220px;background:var(--green-lt);border:1px solid #6ee7b7;border-radius:10px;padding:1.2rem;">
+      <strong style="color:var(--green);">Lehman QA after the same redesign</strong>
+      <ul style="font-size:.88rem;margin-top:.5rem;padding-left:1.2rem;color:#374151;">
+        <li>AI repairs selectors automatically</li>
+        <li>0 hours of engineer time</li>
+        <li>Release on schedule</li>
+        <li>Cache means future runs are instant</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ READINESS SCORE ══════════════ -->
+<section id="score" style="max-width:1100px;margin:0 auto;">
+  <h2>The Readiness Score — Your Release Confidence Number</h2>
+  <p>Every test run produces a single, actionable number. No more "we think it's probably fine."</p>
+
+  <div class="score-wrap">
+    <div class="score-meter">
+      <svg viewBox="0 0 160 160">
+        <!-- background arc -->
+        <circle cx="80" cy="80" r="60" fill="none" stroke="#e5e7eb" stroke-width="16"/>
+        <!-- green arc (87%) — circumference = 2π×60 ≈ 377; 87% = 328 -->
+        <circle cx="80" cy="80" r="60" fill="none"
+          stroke="#057a55" stroke-width="16"
+          stroke-dasharray="328 377"
+          stroke-linecap="round"
+          transform="rotate(-90 80 80)"/>
+      </svg>
+      <div class="score-center">
+        <div class="score-num">87</div>
+        <div class="score-lbl">/ 100</div>
+      </div>
+    </div>
+
+    <div class="score-legend">
+      <div class="score-row"><div class="score-dot" style="background:#ef4444;"></div><strong>0–49</strong>&nbsp;— Not ready for release. Critical failures.</div>
+      <div class="score-row"><div class="score-dot" style="background:#f59e0b;"></div><strong>50–74</strong>&nbsp;— Caution. Review failures before shipping.</div>
+      <div class="score-row"><div class="score-dot" style="background:#10b981;"></div><strong>75–89</strong>&nbsp;— Good. Minor issues only. Proceed with sign-off.</div>
+      <div class="score-row"><div class="score-dot" style="background:#057a55;"></div><strong>90–100</strong>&nbsp;— Ship with confidence. All critical flows pass.</div>
+
+      <div style="margin-top:1rem;font-size:.85rem;">
+        <strong>Score is calculated from:</strong>
+        <ul style="padding-left:1.2rem;margin-top:.3rem;color:#4b5563;">
+          <li>Overall test pass rate</li>
+          <li>Critical user flow coverage</li>
+          <li>Flakiness penalty (unstable tests)</li>
+          <li>Trend direction (improving or degrading?)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:var(--blue-lt);border:1px solid #93c5fd;border-radius:10px;padding:1.2rem;font-size:.9rem;color:#1e3a8a;margin-top:1rem;">
+    <strong>Set a release gate:</strong> Configure a minimum score (e.g. 80). Your CI/CD pipeline will automatically block deployment if the score falls below it — removing human judgment from go/no-go decisions.
+  </div>
+</section>
+
+<!-- ══════════════ BUSINESS VALUE ══════════════ -->
+<section id="value" style="max-width:1100px;margin:0 auto;">
+  <h2>Business Value at a Glance</h2>
+  <table class="val-table">
+    <thead>
+      <tr><th>Business Challenge</th><th>What Lehman QA Delivers</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="col-prob">Releases are delayed by manual QA cycles</td>
+        <td class="col-sol">Full regression in minutes — 8 parallel workers run simultaneously</td>
+      </tr>
+      <tr>
+        <td class="col-prob">Engineers spend days fixing broken test scripts after UI changes</td>
+        <td class="col-sol">Self-healing AI repairs selectors automatically — zero maintenance overhead</td>
+      </tr>
+      <tr>
+        <td class="col-prob">Bugs reach production because testing coverage has gaps</td>
+        <td class="col-sol">AI explorer discovers user paths humans never thought to test</td>
+      </tr>
+      <tr>
+        <td class="col-prob">Five separate testing tools with no unified view</td>
+        <td class="col-sol">One platform: UI + API + Database testing in a single test file</td>
+      </tr>
+      <tr>
+        <td class="col-prob">No objective measure of software quality before release</td>
+        <td class="col-sol">0–100 Readiness Score gives leadership a single clear number</td>
+      </tr>
+      <tr>
+        <td class="col-prob">Jira stories and tests live in separate worlds</td>
+        <td class="col-sol">Auto-generate tests from acceptance criteria; auto-create bugs on failure</td>
+      </tr>
+      <tr>
+        <td class="col-prob">CI/CD pipeline takes too long and slows developers down</td>
+        <td class="col-sol">Impact filter runs only tests affected by the current code change (40%+ faster)</td>
+      </tr>
+      <tr>
+        <td class="col-prob">Non-technical stakeholders can't validate features themselves</td>
+        <td class="col-sol">Chrome Extension: describe a test in plain English, AI runs it for you</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ══════════════ WHO USES IT ══════════════ -->
+<section id="users" style="max-width:1100px;margin:0 auto;">
+  <h2>Who Uses Lehman QA &amp; How</h2>
+  <p>Lehman QA is built for every role on a modern product team.</p>
+
+  <div class="user-grid">
+    <div class="user-card">
+      <div class="user-avatar">👩‍💼</div>
+      <div class="user-role">Product Manager</div>
+      <div class="user-how">
+        Opens the Web Portal. Reviews the Readiness Score before every release.
+        Uses the Chrome Extension to validate new features in plain English without writing code.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag blue">Web Portal</span>
+        <span class="tag blue">Chrome Extension</span>
+        <span class="tag blue">Readiness Score</span>
+      </div>
+    </div>
+    <div class="user-card">
+      <div class="user-avatar">🧑‍💻</div>
+      <div class="user-role">Developer</div>
+      <div class="user-how">
+        Runs <code>aiqa orchestrate</code> after major feature work.
+        Gets Slack alerts when a test fails on their branch. Impact filter runs only relevant tests — CI stays fast.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag green">CLI</span>
+        <span class="tag green">CI/CD Integration</span>
+        <span class="tag green">Impact Filter</span>
+      </div>
+    </div>
+    <div class="user-card">
+      <div class="user-avatar">🔬</div>
+      <div class="user-role">QA Engineer</div>
+      <div class="user-how">
+        Reviews AI-generated test files, tunes edge cases, monitors the healer analytics dashboard. Focuses on strategy instead of script maintenance.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag purple">Test Editor</span>
+        <span class="tag purple">Healer Analytics</span>
+        <span class="tag purple">Report Trends</span>
+      </div>
+    </div>
+    <div class="user-card">
+      <div class="user-avatar">📋</div>
+      <div class="user-role">Business Analyst</div>
+      <div class="user-how">
+        Writes acceptance criteria in Jira as normal. Lehman QA auto-reads them and generates the corresponding tests. Bugs auto-appear in Jira on failure.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag amber">Jira Integration</span>
+        <span class="tag amber">AC → Tests</span>
+        <span class="tag amber">Auto Bug Creation</span>
+      </div>
+    </div>
+    <div class="user-card">
+      <div class="user-avatar">🏦</div>
+      <div class="user-role">CTO / VP Engineering</div>
+      <div class="user-how">
+        Views the trend dashboard — is quality improving sprint over sprint? Sets minimum release score. Sees ROI in reduced post-release incidents.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag blue">Trend Dashboard</span>
+        <span class="tag blue">Release Gate</span>
+        <span class="tag blue">ROI Visibility</span>
+      </div>
+    </div>
+    <div class="user-card">
+      <div class="user-avatar">⚙️</div>
+      <div class="user-role">DevOps / Platform</div>
+      <div class="user-how">
+        Integrates Lehman QA into GitHub Actions or Jenkins with two lines of config. WebSocket stream powers live dashboards. JUnit XML feeds existing reporting.
+      </div>
+      <div style="margin-top:.6rem;">
+        <span class="tag green">GitHub Actions</span>
+        <span class="tag green">Jenkins</span>
+        <span class="tag green">JUnit / Allure</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ GLOSSARY ══════════════ -->
+<section id="glossary" style="max-width:1100px;margin:0 auto;">
+  <h2>Plain-English Glossary</h2>
+  <p>No jargon required. Here's what the technical terms mean in plain business language.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.8rem;margin-top:1rem;">
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Selector</strong><br/><span style="font-size:.85rem;color:#6b7280;">The technical address of a button or field on a webpage. Like a GPS coordinate for a UI element.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Self-Healing</strong><br/><span style="font-size:.85rem;color:#6b7280;">When a UI element moves, the AI finds it at its new location and updates the test automatically. No human needed.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Orchestrate</strong><br/><span style="font-size:.85rem;color:#6b7280;">The one-click button that runs the entire pipeline: explore → map → generate → run → score.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>CI/CD</strong><br/><span style="font-size:.85rem;color:#6b7280;">The automated assembly line that builds and tests software every time a developer makes a change.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Flaky Test</strong><br/><span style="font-size:.85rem;color:#6b7280;">A test that sometimes passes and sometimes fails for no obvious reason. Lehman QA tracks and penalises flakiness in the score.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Impact Filter</strong><br/><span style="font-size:.85rem;color:#6b7280;">Only run the tests that are relevant to the code just changed. Makes CI 40%+ faster.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>LLM</strong><br/><span style="font-size:.85rem;color:#6b7280;">Large Language Model — the AI engine (Claude, GPT-4, Gemini) that generates tests and diagnoses failures.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Readiness Score</strong><br/><span style="font-size:.85rem;color:#6b7280;">The 0–100 grade that summarises your software's quality at this moment. Think of it as a report card before release.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Playwright</strong><br/><span style="font-size:.85rem;color:#6b7280;">The under-the-hood engine that controls a real browser. Think of it as a robot that physically drives the browser.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>Xray</strong><br/><span style="font-size:.85rem;color:#6b7280;">A Jira plugin for managing test results. Lehman QA automatically syncs pass/fail results to Xray test records.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>YAML Test File</strong><br/><span style="font-size:.85rem;color:#6b7280;">The simple recipe format Lehman QA uses to describe what to test. Auto-generated by the AI; humans rarely need to edit it.</span>
+    </div>
+    <div style="background:white;border:1px solid var(--border);border-radius:8px;padding:.9rem 1rem;">
+      <strong>RAG (Knowledge Layer)</strong><br/><span style="font-size:.85rem;color:#6b7280;">Retrieval-Augmented Generation — the AI reads your Jira tickets and uses them as context when writing tests. Tests stay aligned with requirements.</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <strong>Lehman QA</strong> — Enterprise AI Quality Assurance Platform &nbsp;|&nbsp;
+  Built on AIQA &nbsp;|&nbsp;
+  Powered by Claude, GPT-4, and Gemini
+</footer>
+
+</body>
+</html>
