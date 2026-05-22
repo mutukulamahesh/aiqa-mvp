@@ -509,6 +509,32 @@ Starts the REST + WebSocket API server and serves the compiled portal at the sam
 
 ---
 
+### `aiqa knowledge ingest` — Build the RAG knowledge index
+
+Pulls content from all configured connectors (Jira stories, Confluence pages, OpenAPI specs, git log) and builds the local vector index used by the judge, healer, and RAG assertion steps.
+
+```bash
+npx aiqa knowledge ingest            # ingest using dev config
+npx aiqa knowledge ingest --env staging
+```
+
+Requires `knowledge.enabled: true` in your environment config and at least one connector configured.
+
+---
+
+### `aiqa knowledge readiness [--tag <tag>]` — Check RAG coverage
+
+Reports whether the knowledge index has sufficient coverage for a given test tag.
+
+```bash
+npx aiqa knowledge readiness --tag login    # READY / PARTIAL / MISSING
+npx aiqa knowledge readiness               # overall index health
+```
+
+Exit codes: `0` = READY, `1` = PARTIAL or MISSING.
+
+---
+
 ## YAML Test Format
 
 ### Web automation
@@ -605,7 +631,7 @@ npm install knex pg   # only required for real DB connections
 | `wait_for_element: <selector>` | Wait for an element to appear |
 | `wait_ms: <n>` | Wait N milliseconds |
 | `wait_for_url: <pattern>` | Wait until URL matches |
-| `if: { variable, equals, steps }` | Conditional branching |
+| `if: { variable, operator, operand, steps }` | Conditional branching (`operator`: `equals`, `not_equals`, `contains`, `greater_than`, `less_than`) |
 | `for_each: { over, as, steps }` | Loop over an array (max 100 iterations) |
 | `store: { selector, as }` | Capture page text/attribute into a variable |
 
@@ -727,7 +753,7 @@ Three profiles are included: `dev.yaml`, `staging.yaml`, `prod.yaml`. All settin
 
 ## LLM Integration
 
-AIQA works out of the box without any API key and upgrades seamlessly when one is configured. Five providers are supported.
+AIQA works out of the box without any API key and upgrades seamlessly when one is configured. Six providers are supported.
 
 ### Supported providers
 
@@ -801,6 +827,11 @@ src/
     APIActionHandler.ts  ← api step execution
     DBActionHandler.ts   ← db step — query, assert_rows, assert_field, store_as
     JudgeHandler.ts      ← judge: LLM scoring with determinism cache
+    LLMEvalHandler.ts    ← llm_eval: target LLM call + quality judge + baseline compare
+    ConsistencyHandler.ts ← llm_consistency: N runs + pairwise variance assertion
+    RagAssertHandler.ts  ← rag_assert: retrieval quality assertion
+    AgentTraceHandler.ts ← agent_trace: OpenAI Assistants + LangChain trace assertion
+    judgeUtils.ts        ← shared scoreByCriteria, parsePassIf, formatACContext
     WaitHandler.ts       ← wait_for_element, wait_ms, wait_for_url
     ConditionHandler.ts  ← if: branching
     LoopHandler.ts       ← for_each: iteration with depth guard
@@ -833,7 +864,12 @@ src/
     AnthropicLLMProvider.ts
     OpenAILLMProvider.ts  ← Also used for NVIDIA (OpenAI-compatible)
     GeminiLLMProvider.ts
+    OllamaLLMProvider.ts  ← Local LLM via Ollama REST API; no API key required
     FallbackLLMProvider.ts ← Provider chain with retryable-error classification
+  ai-testing/
+    BaselineStore.ts      ← Reads/writes tests/baselines/{key}.json for prompt regression
+    VarianceComputer.ts   ← Pairwise cosine distance (max or mean) across N LLM responses
+    TraceParser.ts        ← Normalises OpenAI Assistants + LangChain traces to AgentTrace
   agents/
     OrchestratorAgent.ts  ← Full pipeline coordinator: Explorer → FlowMapper → Generator → Runner → Scorer
     DebuggerAgent.ts      ← Failure classification + fix suggestions (memory-backed)
@@ -886,6 +922,7 @@ src/
 
 tests/
   saucedemo/              ← End-to-end YAML examples (Sauce Demo app)
+  baselines/              ← VCS-committed prompt regression baselines (*.json, one per baseline_key)
   db/                     ← DB handler unit tests
   config/                 ← Config schema unit tests
   healer/                 ← Healer + analytics unit tests
@@ -895,6 +932,8 @@ tests/
   memory/                 ← Memory store unit tests
   flow-control/           ← wait/if/for_each/store handler tests
   judge/                  ← LLM judge handler tests
+  handlers/               ← LLMEvalHandler baseline regression tests
+  ai-testing/             ← TraceParser + VarianceComputer + BaselineStore unit tests
 ```
 
 ---
