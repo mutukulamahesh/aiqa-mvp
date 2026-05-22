@@ -74,8 +74,9 @@ interface LangChainRun {
 // ── OpenAI normaliser ─────────────────────────────────────────────────────────
 
 function openAIStepStatus(raw: OpenAIRunStep["status"]): TraceStepStatus {
-  if (raw === "completed")                    return "success";
+  if (raw === "completed")                      return "success";
   if (raw === "cancelled" || raw === "expired") return "cancelled";
+  // "failed" and "in_progress" (mid-run snapshot) both map to error
   return "error";
 }
 
@@ -133,7 +134,12 @@ function langChainDuration(run: LangChainRun): number | undefined {
   return new Date(run.end_time).getTime() - new Date(run.start_time).getTime();
 }
 
-function flattenLangChain(run: LangChainRun, out: TraceStep[]): void {
+const MAX_TRACE_DEPTH = 50;
+
+function flattenLangChain(run: LangChainRun, out: TraceStep[], depth = 0): void {
+  if (depth > MAX_TRACE_DEPTH) {
+    throw new Error(`TraceParser: LangChain run tree exceeds max depth (${MAX_TRACE_DEPTH})`);
+  }
   out.push({
     type:        langChainType(run.run_type),
     name:        run.name,
@@ -143,7 +149,7 @@ function flattenLangChain(run: LangChainRun, out: TraceStep[]): void {
     durationMs:  langChainDuration(run),
   });
   for (const child of run.child_runs) {
-    flattenLangChain(child, out);
+    flattenLangChain(child, out, depth + 1);
   }
 }
 

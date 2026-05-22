@@ -233,10 +233,15 @@ describe("normaliseLangChain", () => {
     expect(errStep.status).toBe("error");
   });
 
-  test("run with no outputs (but no error) mapped to status=error", () => {
-    // outputs: undefined and no error
-    const step = trace.steps[4];
-    expect(step.status).toBe("error");
+  test("run with no outputs and no error mapped to status=error", () => {
+    const noOutputRun = {
+      id: "run-no-out", name: "silent_tool", run_type: "tool",
+      inputs: {}, outputs: undefined, error: undefined,
+      start_time: "2024-01-01T00:00:08.000Z", end_time: "2024-01-01T00:00:09.000Z",
+      child_runs: [],
+    };
+    const { steps } = normaliseLangChain(noOutputRun as never);
+    expect(steps[0].status).toBe("error");
   });
 
   test("duration computed from ISO timestamps", () => {
@@ -252,6 +257,23 @@ describe("normaliseLangChain", () => {
 
   test("raw preserved on trace", () => {
     expect(trace.raw).toBe(langChainRun);
+  });
+});
+
+// ── depth guard ───────────────────────────────────────────────────────────────
+
+describe("normaliseLangChain — depth guard", () => {
+  test("throws when run tree exceeds MAX_TRACE_DEPTH", () => {
+    // Build a chain of 52 nested single-child runs
+    function makeDeepRun(depth: number): object {
+      return {
+        id: `run-${depth}`, name: `step-${depth}`, run_type: "chain",
+        inputs: {}, outputs: {}, error: undefined,
+        start_time: "2024-01-01T00:00:00.000Z", end_time: "2024-01-01T00:00:01.000Z",
+        child_runs: depth > 0 ? [makeDeepRun(depth - 1)] : [],
+      };
+    }
+    expect(() => normaliseLangChain(makeDeepRun(52) as never)).toThrow(/max depth/);
   });
 });
 
