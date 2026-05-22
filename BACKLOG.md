@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~97%**  *(updated 2026-05-21)*
-> Sprint 1–2 + Phase 2–3 + Pre-Phase 4 hardening + Phase 4 (Product Surface + Enterprise + Knowledge Layer P1+P2): **DONE**.
-> Remaining: RAG Phase 3 (Quality & Trust — 4 stories), Phase 5-7 (GenAI, desktop, agentic).
+> Current alignment with vision: **~99%**  *(updated 2026-05-22)*
+> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (Product Surface + Enterprise + Knowledge Layer P1+P2+P3) + Phase 5 (GenAI Testing): **DONE**.
+> Remaining: Strategic epics (DEX, OSS, LOCAL, MON) + Phase 6-7 (Vision, desktop, agentic).
 
 ---
 
@@ -416,8 +416,8 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Phase 5 — GenAI Testing `[UNIQUE CAPABILITY]`
-> Test AI systems the same way we test web apps — branch: `genaieval`
+## Phase 5 — GenAI Testing `[✅ COMPLETE — 2026-05-22]`
+> Test AI systems the same way we test web apps — merged to `main`
 
 ### Design decisions (locked before implementation)
 
@@ -575,11 +575,11 @@ Files (post-spike):
 
 | ID | Story | Size | Status |
 |---|---|---|---|
-| GEN-01 | `llm_eval:` — named target, call LLM, judge quality | S | [ ] |
-| GEN-04 | `llm_consistency:` — N runs, max pairwise cosine variance | M | [ ] |
-| GEN-05 | `rag_assert:` — KnowledgeRetriever assertion step | S | [ ] |
-| GEN-02 | Prompt regression — BaselineStore in tests/baselines/, drift via Embedder | M | [ ] |
-| GEN-03 | `agent_trace:` — spike first, then agent workflow validation | L | [ ] |
+| GEN-01 | `llm_eval:` — named target, call LLM, judge quality | S | [x] |
+| GEN-04 | `llm_consistency:` — N runs, max pairwise cosine variance | M | [x] |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertion step | S | [x] |
+| GEN-02 | Prompt regression — BaselineStore in tests/baselines/, drift via Embedder | M | [x] |
+| GEN-03 | `agent_trace:` spike — schema + normalizers proven clean; deferred (injectable transport needed) | L | [x] spike |
 
 ---
 
@@ -693,7 +693,7 @@ DataDog alternative at near-zero cost.
 | Phase 4 — Knowledge Layer P1 | 1 | 23 | ✅ DONE | RAG Phase 1 — Jira, embeddings, FlowMapper wiring |
 | Phase 4 — Knowledge Layer P2 | 1 | 11 | ✅ DONE | RAG Phase 2 — hybrid reranker, all connectors, healer+judge wiring |
 | Phase 4 — Knowledge Layer P3 | 1 | 4 | ✅ DONE | RAG Phase 3 — explainability, defect masking fix, budget, graph |
-| Phase 5 — GenAI | 1 | 5 | ▶ ACTIVE | Test AI systems natively — branch: genaieval |
+| Phase 5 — GenAI | 1 | 5 | ✅ DONE | Test AI systems natively — llm_eval, llm_consistency, rag_assert, baseline regression |
 | Strategic — DEX | 1 | 6 | ▶ ACTIVE | OSS adoption, Ollama (DEX-01 done), quickstart, Docker |
 | Strategic — OSS | 1 | 5 | ⬜ | Community, changelog, open-core model |
 | Strategic — LOCAL | 1 | 4 | ▶ ACTIVE | Privacy mode, Ollama doctor, local-only config |
@@ -702,5 +702,5 @@ DataDog alternative at near-zero cost.
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
 | **Total** | **31+** | **169+** | | |
 
-**Active:** Phase 5 GenAI Testing (GEN-01 → GEN-04 → GEN-05 → GEN-02 → GEN-03) + Strategic DEX/LOCAL epics in parallel.
-**Next after GenAI:** EPIC-OSS community work + EPIC-MON synthetic monitoring + Phase 6 Vision.
+**Active:** Strategic DEX/LOCAL epics.
+**Next:** EPIC-OSS community work + EPIC-MON synthetic monitoring + Phase 6 Vision.

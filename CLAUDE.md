@@ -40,7 +40,7 @@ npx ts-node src/cli.ts knowledge ingest                # ingest all configured c
 npx ts-node src/cli.ts knowledge readiness --tag login # READY/PARTIAL/MISSING for a tag
 npx ts-node src/cli.ts serve                           # start REST+WS API on port 7432
 npx tsc --noEmit                                       # type check (must be clean before commit)
-npx jest --no-coverage                                 # full test suite (701 tests, ~90s)
+npx jest --no-coverage                                 # full test suite (858 tests, ~90s)
 ```
 
 ---
@@ -144,41 +144,34 @@ jira:
 
 ---
 
-## Current state (2026-05-21)
+## Current state (2026-05-22)
 
-- **Branch:** `genaieval` off `main` at `f0bcdf5`
-- **Tests:** 731 passing, tsc clean
+- **Branch:** `main` (merged from `genaieval` — Phase 5 complete)
+- **Tests:** 858 passing, tsc clean
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
-- **Next:** Phase 5 — GenAI Testing on branch `genaieval`
+- **Phase 5 — GenAI Testing:** complete and merged to main
+- **Next:** EPIC-DEX (developer experience), EPIC-OSS (open-source community), EPIC-MON (synthetic monitoring)
 
-### Phase 5 stories (in order)
+### Phase 5 stories — ALL COMPLETE ✅
 
-| ID | Story | Size |
-|---|---|---|
-| GEN-01 | `llm_eval:` — named `target:` from `llm_targets` config, call LLM, judge quality | S |
-| GEN-04 | `llm_consistency:` — N runs sequential, max pairwise cosine distance, configurable to mean | M |
-| GEN-05 | `rag_assert:` — KnowledgeRetriever assertions; wired same as JudgeHandler | S |
-| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; baselines in `tests/baselines/` (VCS) | M |
-| GEN-03 | `agent_trace:` — spike-gated; OpenAI Assistants + LangChain normalisation must prove clean | L |
+| ID | Story | Size | Status |
+|---|---|---|---|
+| GEN-01 | `llm_eval:` — named `target:` from `llm_targets` config, call LLM, judge quality | S | ✅ |
+| GEN-04 | `llm_consistency:` — N runs sequential, max pairwise cosine distance, configurable to mean | M | ✅ |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertions; wired same as JudgeHandler | S | ✅ |
+| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; baselines in `tests/baselines/` (VCS) | M | ✅ |
+| GEN-03 | `agent_trace:` spike — schema + normalizers proven clean; deferred pending injectable transport | L | ✅ spike |
 
-### Design decisions locked
-
-- **Target LLM:** `target: fast` resolves via `config.llm_targets` map — not inline `provider/model`
-- **BaselineStore path:** `tests/baselines/{key}.json` (committed to VCS); record mode via `AIQA_BASELINE_RECORD=true`
-- **Variance metric:** max pairwise cosine distance; configurable `variance_metric: max|mean`
-- **GEN-03:** gated behind spike — ships custom-schema only if OpenAI+LangChain normalisation is non-trivial
-
-### Key new files for Phase 5
+### Key Phase 5 files
 
 | File | Role |
 |---|---|
-| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; resolves target LLM, judges with AIQA internal |
+| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; resolves target LLM, judges with AIQA internal; baseline regression |
 | `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step; N runs + max pairwise variance |
 | `src/handlers/RagAssertHandler.ts` | `rag_assert:` step; wraps KnowledgeRetriever |
-| `src/handlers/AgentTraceHandler.ts` | `agent_trace:` step (post-spike) |
-| `src/ai-testing/BaselineStore.ts` | Reads/writes `tests/baselines/{key}.json` |
-| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity via Embedder; max/mean |
-| `src/ai-testing/TraceParser.ts` | Normalises trace formats (post-spike) |
+| `src/ai-testing/BaselineStore.ts` | Reads/writes `tests/baselines/{key}.json`; path traversal guard; async I/O |
+| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity via Embedder; max/mean; exports `cosineDist` |
+| `src/ai-testing/TraceParser.ts` | GEN-03 spike: normalises OpenAI + LangChain traces; depth guard; deferred |
 
 ---
 
@@ -214,4 +207,26 @@ steps:
       query: "SELECT * FROM users WHERE id = ?"
       params: [1]
       assert_rows: 1
+  - llm_eval:
+      target: fast                          # resolves via config.llm_targets
+      prompt: "Translate 'hello' to French"
+      assert_quality:
+        criteria: "Response is a correct French translation"
+        pass_if: "score >= 0.8"
+      baseline_key: translate-hello         # optional drift regression
+      max_drift: 0.15
+      store_as: evalResult
+  - llm_consistency:
+      target: fast
+      prompt: "What is the capital of France?"
+      runs: 5
+      assert_variance:
+        max: 0.1
+        metric: max                         # max | mean
+      store_as: consistencyResult
+  - rag_assert:
+      query: "user authentication acceptance criteria"
+      min_chunks: 2
+      min_score: 0.7
+      store_as: ragResult
 ```
