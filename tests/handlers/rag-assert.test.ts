@@ -93,7 +93,7 @@ describe("RagAssertHandler — pass cases", () => {
     expect(stored[0].sourceId).toBe("SCRUM-1");
   });
 
-  test("stores empty array when all chunks pass and min_score=0", async () => {
+  test("stores all chunks when min_score=0 (every chunk passes)", async () => {
     const retriever = makeRetriever([makeChunk("SCRUM-1", 0.8), makeChunk("SCRUM-2", 0.6)]);
     const handler   = new RagAssertHandler(retriever);
     const step      = { action: "rag_assert" as const, query: "login", store_as: "chunks" };

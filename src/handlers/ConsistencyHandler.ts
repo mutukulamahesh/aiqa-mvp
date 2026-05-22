@@ -70,6 +70,7 @@ export class ConsistencyHandler implements StepHandler {
       return createLLMProvider({ provider: step.provider as ProviderName, model: step.model });
     }
 
+    wlog("      ↳ [warn] no target or provider specified — using mock LLM (responses are not real)");
     return createLLMProvider({ provider: "mock" });
   }
 }

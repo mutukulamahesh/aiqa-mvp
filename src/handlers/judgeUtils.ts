@@ -34,7 +34,7 @@ export function applyOp(op: string, score: number, threshold: number): boolean {
     case "<=": return score <= threshold;
     case ">":  return score >  threshold;
     case "<":  return score <  threshold;
-    default:   return false;
+    default:   throw new Error(`applyOp: unknown operator "${op}"`);
   }
 }
 
