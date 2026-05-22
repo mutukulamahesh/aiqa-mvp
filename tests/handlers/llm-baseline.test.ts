@@ -124,6 +124,21 @@ describe("LLMEvalHandler — baseline record mode", () => {
     expect(stored.baseline_recorded).toBe(true);
     expect(stored.response).toBeDefined();
   });
+
+  test("record mode writes baseline even when assert_quality would fail", async () => {
+    // judgeStub returns score=0.9 by default — use a stub that returns 0.1 to force failure
+    const failingJudge = new MockLLMProvider('{"score":0.1,"reason":"poor"}');
+    const store   = fakeStore({ record: true });
+    const handler = new LLMEvalHandler(failingJudge, undefined, {}, fixedEmbedder(), store);
+    const step    = {
+      action: "llm_eval" as const, provider: "mock", prompt: "hi",
+      baseline_key: "k1",
+      assert_quality: { criteria: "good response", pass_if: "score >= 0.8" },
+    };
+    // Must not throw — record mode captures unconditionally before quality runs
+    await expect(handler.execute(step, noAdapter, makeCtx())).resolves.not.toThrow();
+    expect(store.written).toBeDefined();
+  });
 });
 
 // ── LLMEvalHandler — compare mode ─────────────────────────────────────────────

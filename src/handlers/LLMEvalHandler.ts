@@ -44,6 +44,20 @@ export class LLMEvalHandler implements StepHandler {
 
     wlog(`      ↳ response (${response.length} chars): ${response.slice(0, 120)}${response.length > 120 ? "…" : ""}`);
 
+    // ── Baseline record mode — fires before quality assertion ─────────────────
+    // Capture intent is unconditional: record whatever the LLM actually said.
+    // Quality assertion is about the live run, not about what to store.
+    if (step.baseline_key && this.baselineStore?.recordMode) {
+      if (!this.embedder) {
+        throw new AssertionError("llm_eval: baseline_key requires an embedder — check StepInterpreter setup");
+      }
+      const embedding = await this.embedder.embed(response);
+      await this.baselineStore.write(step.baseline_key, { embedding, response, recordedAt: new Date().toISOString() });
+      wwrite(`  ▶ llm_eval   → baseline recorded: ${step.baseline_key}`);
+      if (step.store_as) ctx.set(step.store_as, { response, baseline_recorded: true });
+      return;
+    }
+
     // ── Quality assertion (optional) ──────────────────────────────────────────
     let score:   number | undefined;
     let verdict: string | undefined;
@@ -85,24 +99,14 @@ export class LLMEvalHandler implements StepHandler {
       if (step.store_as) ctx.set(step.store_as, { response });
     }
 
-    // ── Baseline regression (optional) ───────────────────────────────────────
+    // ── Baseline compare mode (optional) ─────────────────────────────────────
+    // Record mode is handled above and returns early; this block is compare-only.
     if (step.baseline_key) {
       if (!this.embedder || !this.baselineStore) {
         throw new AssertionError("llm_eval: baseline_key requires an embedder — check StepInterpreter setup");
       }
 
       const embedding = await this.embedder.embed(response);
-
-      if (this.baselineStore.recordMode) {
-        await this.baselineStore.write(step.baseline_key, { embedding, response, recordedAt: new Date().toISOString() });
-        wwrite(`  ▶ llm_eval   → baseline recorded: ${step.baseline_key}`);
-        if (step.store_as) {
-          const prev = ctx.get(step.store_as) as Record<string, unknown> | undefined ?? {};
-          ctx.set(step.store_as, { ...prev, baseline_recorded: true });
-        }
-        return;
-      }
-
       const baseline = await this.baselineStore.read(step.baseline_key);
       if (!baseline) {
         throw new AssertionError(

@@ -292,7 +292,7 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     if (typeof e.prompt !== "string") throw new Error(`Step[${idx}] llm_eval: missing "prompt"`);
     const aq = e.assert_quality as Record<string, unknown> | undefined;
     if (aq) {
-      if (typeof aq.criteria !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.criteria is required`);
+      if (typeof aq.criteria !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.criteria must be a string`);
       if (typeof aq.pass_if  !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.pass_if is required`);
     }
     if (e.max_drift !== undefined && (typeof e.max_drift !== "number" || e.max_drift < 0 || e.max_drift > 1)) {
