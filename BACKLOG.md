@@ -592,8 +592,8 @@ Files (post-spike):
 ### EPIC-DEX · Developer Experience & Adoption `[HIGH PRIORITY]`
 Fix the friction that kills adoption before a developer sees any value.
 
-**Language barrier elimination — agreed order (2026-05-22):**
-1. README messaging (done) → 2. Docker → 3. Shell script → 4. Python wrapper → 5. REST API wrappers (backlog last)
+**Agreed delivery order (2026-05-22):**
+1. README messaging ✅ → 2. DEX-03 Docker → 3. DEX-07 Shell script → 4. DEX-06 Python wrapper → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients (last)
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
