@@ -14,7 +14,7 @@ import { scoreByCriteria, parsePassIf, applyOp, formatACContext } from "./judgeU
 
 const MAX_AC_CHUNKS = 3;
 
-type LLMTargets = Record<string, { provider: ProviderName; model?: string }>;
+type LLMTargets = Record<string, { provider: ProviderName; model?: string; baseUrl?: string }>;
 
 export class LLMEvalHandler implements StepHandler {
   readonly handles = ["llm_eval"];
@@ -135,7 +135,7 @@ export class LLMEvalHandler implements StepHandler {
     if (step.target) {
       const cfg = this.llmTargets[step.target];
       if (!cfg) throw new AssertionError(`llm_eval: unknown target "${step.target}" — check config.llm_targets`);
-      return createLLMProvider({ provider: cfg.provider, model: cfg.model });
+      return createLLMProvider({ provider: cfg.provider, model: cfg.model, baseUrl: cfg.baseUrl });
     }
 
     if (step.provider) {

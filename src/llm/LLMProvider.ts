@@ -40,6 +40,7 @@ export interface LLMConfig {
   provider:  ProviderName;
   fallback?: ProviderName[];
   model?:    string;
+  baseUrl?:  string;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
 
   let primary: LLMProvider;
   try {
-    primary = buildSingle(resolved.provider, resolved.model);
+    primary = buildSingle(resolved.provider, resolved.model, resolved.baseUrl);
   } catch (err) {
     if (resolved.fallback?.length) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -116,7 +117,7 @@ function autoDetect(): ProviderName {
   return "mock";
 }
 
-function buildSingle(name: ProviderName, model?: string): LLMProvider {
+function buildSingle(name: ProviderName, model?: string, baseUrl?: string): LLMProvider {
   switch (name) {
     case "anthropic": {
       const key = process.env.ANTHROPIC_API_KEY;
@@ -148,7 +149,7 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
     }
     case "ollama": {
       const { OllamaLLMProvider } = require("./OllamaLLMProvider") as { OllamaLLMProvider: typeof _OllamaType };
-      return new OllamaLLMProvider({ model });
+      return new OllamaLLMProvider({ model, baseUrl });
     }
     default: {
       const { MockLLMProvider } = require("./MockLLMProvider") as { MockLLMProvider: typeof _MockType };

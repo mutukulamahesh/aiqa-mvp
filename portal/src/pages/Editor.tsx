@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useBlocker } from "react-router-dom";
 import { api } from "../api";
 import { EnvVarPanel, EnvVar, envVarsToRecord } from "../components/EnvVarPanel";
 
@@ -24,7 +24,14 @@ export default function Editor() {
   const [vars, setVars]         = useState<EnvVar[]>([]);
   const [running, setRunning]   = useState(false);
   const [error, setError]       = useState("");
+  const [edited, setEdited]     = useState(false);
   const navigate = useNavigate();
+
+  useBlocker(({ currentLocation, nextLocation }) =>
+    edited && currentLocation.pathname !== nextLocation.pathname
+      ? !window.confirm("You have unsaved changes. Leave anyway?")
+      : false
+  );
 
   const run = async () => {
     if (!yaml.trim()) return;
@@ -32,6 +39,7 @@ export default function Editor() {
     setRunning(true);
     try {
       const { runId } = await api.trigger.run(yaml, { headless, vars: envVarsToRecord(vars) });
+      setEdited(false);
       navigate(`/runs/${runId}`);
     } catch (e) {
       setError((e as Error).message);
@@ -61,7 +69,11 @@ export default function Editor() {
           Headless mode
         </label>
         <div style={{ flex: 1 }} />
-        <button onClick={() => { setYaml(SAMPLE); setFileName(null); }} style={secondaryBtn}>Reset sample</button>
+        {edited && <span style={{ fontSize: 11, color: "#d97706" }}>● unsaved</span>}
+        <button onClick={() => {
+          if (edited && !window.confirm("You have unsaved changes. Discard them?")) return;
+          setYaml(SAMPLE); setFileName(null); setEdited(false);
+        }} style={secondaryBtn}>Reset sample</button>
         <button onClick={run} disabled={running || !yaml.trim()} style={primaryBtn(running)}>
           {running ? "Starting…" : "▶ Run"}
         </button>
@@ -70,7 +82,7 @@ export default function Editor() {
       {/* Editor */}
       <textarea
         value={yaml}
-        onChange={e => setYaml(e.target.value)}
+        onChange={e => { setYaml(e.target.value); setEdited(true); }}
         spellCheck={false}
         style={{
           width: "100%", height: "calc(100vh - 360px)",

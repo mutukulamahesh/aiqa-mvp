@@ -52,7 +52,7 @@ export class StepInterpreter {
 
     const cfg        = (() => { try { return getConfig(); } catch { return undefined; } })();
     const llmConfig  = cfg?.llm;
-    const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string }>;
+    const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string; baseUrl?: string }>;
     const embedder   = opts.embedder ?? new Embedder();
 
     this.registry = new HandlerRegistry()

@@ -8,7 +8,7 @@ import { IEmbedder } from "../knowledge/Embedder";
 import { VarianceComputer } from "../ai-testing/VarianceComputer";
 import { wwrite, wlog } from "../execution/WorkerContext";
 
-type LLMTargets = Record<string, { provider: ProviderName; model?: string }>;
+type LLMTargets = Record<string, { provider: ProviderName; model?: string; baseUrl?: string }>;
 
 export class ConsistencyHandler implements StepHandler {
   readonly handles = ["llm_consistency"];
@@ -63,7 +63,7 @@ export class ConsistencyHandler implements StepHandler {
     if (step.target) {
       const cfg = this.llmTargets[step.target];
       if (!cfg) throw new AssertionError(`llm_consistency: unknown target "${step.target}" — check config.llm_targets`);
-      return createLLMProvider({ provider: cfg.provider, model: cfg.model });
+      return createLLMProvider({ provider: cfg.provider, model: cfg.model, baseUrl: cfg.baseUrl });
     }
 
     if (step.provider) {
