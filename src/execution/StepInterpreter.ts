@@ -18,7 +18,7 @@ import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
 import { wrapWithDepthGuard } from "./DepthGuard";
-import { createLLMProvider } from "../llm/LLMProvider";
+import { createLLMProvider, ProviderName } from "../llm/LLMProvider";
 import { getConfig } from "../config/ConfigLoader";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 import { IEmbedder, Embedder } from "../knowledge/Embedder";
@@ -48,7 +48,9 @@ export class StepInterpreter {
         this.execute(step, adapter, ctx)
     );
 
-    const llmConfig = (() => { try { return getConfig().llm; } catch { return undefined; } })();
+    const cfg        = (() => { try { return getConfig(); } catch { return undefined; } })();
+    const llmConfig  = cfg?.llm;
+    const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string }>;
 
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
@@ -60,8 +62,8 @@ export class StepInterpreter {
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
       .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
-      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever))
-      .register(new ConsistencyHandler(opts.embedder ?? new Embedder()));
+      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever, llmTargets))
+      .register(new ConsistencyHandler(opts.embedder ?? new Embedder(), llmTargets));
   }
 
   async execute(

@@ -291,6 +291,10 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     if (!e) throw new Error(`Step[${idx}] llm_eval: empty`);
     if (typeof e.prompt !== "string") throw new Error(`Step[${idx}] llm_eval: missing "prompt"`);
     const aq = e.assert_quality as Record<string, unknown> | undefined;
+    if (aq) {
+      if (typeof aq.criteria !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.criteria is required`);
+      if (typeof aq.pass_if  !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.pass_if is required`);
+    }
     return {
       action:     "llm_eval",
       ...(typeof e.target    === "string" ? { target:    e.target    } : {}),
@@ -299,9 +303,7 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
       ...(typeof e.system    === "string" ? { system:    e.system    } : {}),
       prompt:     e.prompt,
       ...(typeof e.max_tokens === "number" ? { max_tokens: e.max_tokens } : {}),
-      ...(aq && typeof aq.criteria === "string" && typeof aq.pass_if === "string"
-        ? { assert_quality: { criteria: aq.criteria, pass_if: aq.pass_if } }
-        : {}),
+      ...(aq ? { assert_quality: { criteria: aq.criteria as string, pass_if: aq.pass_if as string } } : {}),
       ...(typeof e.store_as  === "string" ? { store_as:  e.store_as  } : {}),
     };
   }
@@ -311,8 +313,8 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     const e = raw.llm_consistency as Record<string, unknown> | undefined;
     if (!e) throw new Error(`Step[${idx}] llm_consistency: empty`);
     if (typeof e.prompt !== "string") throw new Error(`Step[${idx}] llm_consistency: missing "prompt"`);
-    if (e.runs !== undefined && (typeof e.runs !== "number" || !Number.isInteger(e.runs) || e.runs < 1)) {
-      throw new Error(`Step[${idx}] llm_consistency: "runs" must be a positive integer`);
+    if (e.runs !== undefined && (typeof e.runs !== "number" || !Number.isInteger(e.runs) || e.runs < 1 || e.runs > 20)) {
+      throw new Error(`Step[${idx}] llm_consistency: "runs" must be a positive integer between 1 and 20`);
     }
     const av = e.assert_variance as Record<string, unknown> | undefined;
     return {

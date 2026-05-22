@@ -283,7 +283,7 @@ test:
 `)).toThrow(/prompt/);
   });
 
-  test("throws on invalid runs value", () => {
+  test("throws on runs < 1", () => {
     expect(() => parseTestDefinition(`
 test:
   name: test
@@ -291,6 +291,17 @@ test:
     - llm_consistency:
         prompt: "hi"
         runs: 0
+`)).toThrow(/runs/);
+  });
+
+  test("throws on runs > 20", () => {
+    expect(() => parseTestDefinition(`
+test:
+  name: test
+  steps:
+    - llm_consistency:
+        prompt: "hi"
+        runs: 21
 `)).toThrow(/runs/);
   });
 });

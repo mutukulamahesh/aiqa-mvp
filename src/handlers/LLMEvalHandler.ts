@@ -11,12 +11,15 @@ import { scoreByCriteria, parsePassIf, applyOp, formatACContext } from "./judgeU
 
 const MAX_AC_CHUNKS = 3;
 
+type LLMTargets = Record<string, { provider: ProviderName; model?: string }>;
+
 export class LLMEvalHandler implements StepHandler {
   readonly handles = ["llm_eval"];
 
   constructor(
-    private readonly judgeLlm:   LLMProvider,       // AIQA's internal judge — scores responses
-    private readonly retriever?: KnowledgeRetriever,
+    private readonly judgeLlm:    LLMProvider,
+    private readonly retriever?:  KnowledgeRetriever,
+    private readonly llmTargets:  LLMTargets = {},
   ) {}
 
   async execute(step: StepAction, _adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
@@ -78,17 +81,10 @@ export class LLMEvalHandler implements StepHandler {
     }
   }
 
-  // Resolves the target LLM provider.
-  // Priority: named target from config.llm_targets > inline provider/model > mock
+  // Priority: named target from llmTargets > inline provider/model > mock
   private resolveTarget(step: StepAction & { action: "llm_eval" }): LLMProvider {
     if (step.target) {
-      let targets: Record<string, { provider: ProviderName; model?: string }> = {};
-      try {
-        const { getConfig } = require("../config/ConfigLoader") as typeof import("../config/ConfigLoader");
-        targets = (getConfig().llm_targets ?? {}) as typeof targets;
-      } catch { /* config not loaded — fall through to mock */ }
-
-      const cfg = targets[step.target];
+      const cfg = this.llmTargets[step.target];
       if (!cfg) throw new AssertionError(`llm_eval: unknown target "${step.target}" — check config.llm_targets`);
       return createLLMProvider({ provider: cfg.provider, model: cfg.model });
     }
@@ -97,7 +93,6 @@ export class LLMEvalHandler implements StepHandler {
       return createLLMProvider({ provider: step.provider as ProviderName, model: step.model });
     }
 
-    // No target or provider — use mock (safe default, surfaces intent errors quickly)
     return createLLMProvider({ provider: "mock" });
   }
 }

@@ -4,21 +4,15 @@
 
 import { LLMEvalHandler }  from "../../src/handlers/LLMEvalHandler";
 import { MockLLMProvider }  from "../../src/llm/MockLLMProvider";
-import { HandlerRegistry }  from "../../src/execution/HandlerRegistry";
 import { StepInterpreter }  from "../../src/execution/StepInterpreter";
 import { ExecutionContext }  from "../../src/execution/ExecutionContext";
 import { AssertionError }   from "../../src/errors";
 import { loadConfig, resetConfig } from "../../src/config/ConfigLoader";
-import * as path from "path";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function stubJudgeLlm(score: number, reason = "ok") {
   return new MockLLMProvider(`{"score":${score},"reason":"${reason}"}`);
-}
-
-function stubTargetLlm(response: string) {
-  return new MockLLMProvider(response);
 }
 
 function makeCtx(vars: Record<string, string> = {}): ExecutionContext {
@@ -94,12 +88,8 @@ describe("judgeUtils — scoreByCriteria", () => {
 
 describe("LLMEvalHandler — no assert_quality", () => {
   test("stores raw response when no assert_quality", async () => {
-    const target = stubTargetLlm("Bonjour");
     const judge  = stubJudgeLlm(0.9);
     const handler = new LLMEvalHandler(judge);
-
-    // Override resolveTarget by using inline provider resolved to target stub
-    // We test via full handler with mock provider
     const ctx = makeCtx();
     const step = {
       action:   "llm_eval" as const,
@@ -249,14 +239,14 @@ test:
         max_tokens: 50
         assert_quality:
           criteria: "Is correct French"
-          pass_if: ">= 0.8"
+          pass_if: "score >= 0.8"
         store_as: result
 `);
     const step = def.steps[0] as Record<string, unknown>;
     expect(step.action).toBe("llm_eval");
     expect(step.target).toBe("fast");
     expect(step.max_tokens).toBe(50);
-    expect((step.assert_quality as Record<string, string>).pass_if).toBe(">= 0.8");
+    expect((step.assert_quality as Record<string, string>).pass_if).toBe("score >= 0.8");
     expect(step.store_as).toBe("result");
   });
 
@@ -268,5 +258,18 @@ test:
     - llm_eval:
         provider: mock
 `)).toThrow(/prompt/);
+  });
+
+  test("throws when assert_quality present but pass_if absent", () => {
+    expect(() => parseTestDefinition(`
+test:
+  name: test
+  steps:
+    - llm_eval:
+        provider: mock
+        prompt: "hello"
+        assert_quality:
+          criteria: "Is correct"
+`)).toThrow(/pass_if/);
   });
 });

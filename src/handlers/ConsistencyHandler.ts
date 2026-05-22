@@ -8,10 +8,15 @@ import { IEmbedder } from "../knowledge/Embedder";
 import { VarianceComputer } from "../ai-testing/VarianceComputer";
 import { wwrite, wlog } from "../execution/WorkerContext";
 
+type LLMTargets = Record<string, { provider: ProviderName; model?: string }>;
+
 export class ConsistencyHandler implements StepHandler {
   readonly handles = ["llm_consistency"];
 
-  constructor(private readonly embedder: IEmbedder) {}
+  constructor(
+    private readonly embedder:    IEmbedder,
+    private readonly llmTargets:  LLMTargets = {},
+  ) {}
 
   async execute(step: StepAction, _adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
     if (step.action !== "llm_consistency") return;
@@ -53,15 +58,10 @@ export class ConsistencyHandler implements StepHandler {
     }
   }
 
+  // Priority: named target from llmTargets > inline provider/model > mock
   private resolveTarget(step: StepAction & { action: "llm_consistency" }): LLMProvider {
     if (step.target) {
-      let targets: Record<string, { provider: ProviderName; model?: string }> = {};
-      try {
-        const { getConfig } = require("../config/ConfigLoader") as typeof import("../config/ConfigLoader");
-        targets = (getConfig().llm_targets ?? {}) as typeof targets;
-      } catch { /* config not loaded — fall through to mock */ }
-
-      const cfg = targets[step.target];
+      const cfg = this.llmTargets[step.target];
       if (!cfg) throw new AssertionError(`llm_consistency: unknown target "${step.target}" — check config.llm_targets`);
       return createLLMProvider({ provider: cfg.provider, model: cfg.model });
     }
