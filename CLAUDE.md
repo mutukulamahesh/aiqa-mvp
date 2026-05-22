@@ -40,7 +40,7 @@ npx ts-node src/cli.ts knowledge ingest                # ingest all configured c
 npx ts-node src/cli.ts knowledge readiness --tag login # READY/PARTIAL/MISSING for a tag
 npx ts-node src/cli.ts serve                           # start REST+WS API on port 7432
 npx tsc --noEmit                                       # type check (must be clean before commit)
-npx jest --no-coverage                                 # full test suite (701 tests, ~90s)
+npx jest --no-coverage                                 # full test suite (858 tests, ~90s)
 ```
 
 ---
@@ -144,23 +144,34 @@ jira:
 
 ---
 
-## Current state (2026-05-21)
+## Current state (2026-05-22)
 
-- **Branch:** `main` at `e5bbd3e`
-- **Tests:** 701 passing, tsc clean
-- **EPIC-RAG Phase 1 + Phase 2:** complete and merged
-- **Next branch:** `rag3`
+- **Branch:** `main` (merged from `genaieval` — Phase 5 complete)
+- **Tests:** 858 passing, tsc clean
+- **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
+- **Phase 5 — GenAI Testing:** complete and merged to main
+- **Next:** EPIC-DEX (developer experience), EPIC-OSS (open-source community), EPIC-MON (synthetic monitoring)
 
-### RAG Phase 3 stories (next up)
+### Phase 5 stories — ALL COMPLETE ✅
 
-| ID | Story | Size |
-|---|---|---|
-| RAG3-01 | `defect.category: "ui"\|"functional"\|"regression"` on `KnowledgeChunk`; SelectorHealer filters to `"ui"` only; functional defects become run-report warnings | S |
-| RAG3-02 | `scoreBreakdown` in `RetrievedChunk`; HybridReranker preserves sub-scores (semantic/recency/severity/sourceWeight); visible in judge output + `aiqa knowledge status` | M |
-| RAG3-03 | Retrieval budget: `knowledge.budget.maxChunks` + `maxTokensApprox` in config; enforced in `KnowledgeRetriever.retrieve()` | S |
-| RAG3-04 | `GraphEnricher` one-hop via `relations[]`; JiraConnector populates story↔defect relations during ingest | L |
+| ID | Story | Size | Status |
+|---|---|---|---|
+| GEN-01 | `llm_eval:` — named `target:` from `llm_targets` config, call LLM, judge quality | S | ✅ |
+| GEN-04 | `llm_consistency:` — N runs sequential, max pairwise cosine distance, configurable to mean | M | ✅ |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertions; wired same as JudgeHandler | S | ✅ |
+| GEN-02 | Prompt regression — `baseline_key` on `llm_eval`; baselines in `tests/baselines/` (VCS) | M | ✅ |
+| GEN-03 | `agent_trace:` spike — schema + normalizers proven clean; deferred pending injectable transport | L | ✅ spike |
 
-**After RAG3:** Phase 5 — GenAI Testing (EPIC-13): `LLMEvalHandler`, prompt regression, agentic workflow validation.
+### Key Phase 5 files
+
+| File | Role |
+|---|---|
+| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step; resolves target LLM, judges with AIQA internal; baseline regression |
+| `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step; N runs + max pairwise variance |
+| `src/handlers/RagAssertHandler.ts` | `rag_assert:` step; wraps KnowledgeRetriever |
+| `src/ai-testing/BaselineStore.ts` | Reads/writes `tests/baselines/{key}.json`; path traversal guard; async I/O |
+| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity via Embedder; max/mean; exports `cosineDist` |
+| `src/ai-testing/TraceParser.ts` | GEN-03 spike: normalises OpenAI + LangChain traces; depth guard; deferred |
 
 ---
 
@@ -196,4 +207,26 @@ steps:
       query: "SELECT * FROM users WHERE id = ?"
       params: [1]
       assert_rows: 1
+  - llm_eval:
+      target: fast                          # resolves via config.llm_targets
+      prompt: "Translate 'hello' to French"
+      assert_quality:
+        criteria: "Response is a correct French translation"
+        pass_if: "score >= 0.8"
+      baseline_key: translate-hello         # optional drift regression
+      max_drift: 0.15
+      store_as: evalResult
+  - llm_consistency:
+      target: fast
+      prompt: "What is the capital of France?"
+      runs: 5
+      assert_variance:
+        max: 0.1
+        metric: max                         # max | mean
+      store_as: consistencyResult
+  - rag_assert:
+      query: "user authentication acceptance criteria"
+      min_chunks: 2
+      min_score: 0.7
+      store_as: ragResult
 ```

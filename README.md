@@ -23,7 +23,8 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **Import existing test cases** from CSV, Excel, or Gherkin — no rewrite needed
 - **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
 - **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
-- **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA) — no code changes needed
+- **Test AI systems natively** — call any LLM as the system under test, judge quality with a second LLM, assert consistency across runs, and detect prompt regressions via embedding drift
+- **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA, Ollama) — no code changes needed
 - **Web Portal** — browser-based UI to trigger runs, view live progress, edit tests, and browse history
 - **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
 - **Chrome Extension** — test any app from the browser, no CLI or YAML needed
@@ -598,12 +599,62 @@ npm install knex pg   # only required for real DB connections
 | `api: { method, url, ... }` | Make an HTTP request, optionally store response |
 | `db: { query, ... }` | Execute SQL, assert rows/fields, store results |
 | `judge: { value, prompt, pass_if }` | LLM scores a value against a natural-language criterion (0.0–1.0); `pass_if: "score >= 0.7"` |
+| `llm_eval: { target, prompt, assert_quality, baseline_key }` | Call a named target LLM, judge quality, and/or detect prompt regression via embedding drift |
+| `llm_consistency: { target, prompt, runs, assert_variance }` | Run the same prompt N times and assert the maximum pairwise cosine distance stays below threshold |
+| `rag_assert: { query, min_chunks, min_score }` | Assert the knowledge index returns relevant chunks for a query — validates RAG retrieval quality |
 | `wait_for_element: <selector>` | Wait for an element to appear |
 | `wait_ms: <n>` | Wait N milliseconds |
 | `wait_for_url: <pattern>` | Wait until URL matches |
 | `if: { variable, equals, steps }` | Conditional branching |
 | `for_each: { over, as, steps }` | Loop over an array (max 100 iterations) |
 | `store: { selector, as }` | Capture page text/attribute into a variable |
+
+### GenAI testing
+
+Test AI systems with the same YAML syntax as web and API tests. Configure target LLMs in your environment profile, then reference them by name:
+
+```yaml
+# config/environments/dev.yaml
+llm_targets:
+  fast:     { provider: ollama,    model: llama3.2 }
+  powerful: { provider: anthropic, model: claude-sonnet-4-6 }
+```
+
+```yaml
+test:
+  name: "Translation quality + consistency"
+  steps:
+    # Quality assertion — judge the response against natural-language criteria
+    - llm_eval:
+        target: fast
+        prompt: "Translate 'Good morning' to French"
+        assert_quality:
+          criteria: "Response is a correct French translation"
+          pass_if: "score >= 0.8"
+        baseline_key: translate-good-morning   # regression: fails if response drifts > 20%
+        store_as: evalResult
+
+    # Consistency — same prompt N times; assert low variance
+    - llm_consistency:
+        target: fast
+        prompt: "What is the capital of France?"
+        runs: 5
+        assert_variance:
+          max: 0.1        # max pairwise cosine distance across 5 responses
+        store_as: consistencyResult
+
+    # RAG health — assert the knowledge index retrieves relevant content
+    - rag_assert:
+        query: "user authentication acceptance criteria"
+        min_chunks: 2
+        min_score: 0.7
+```
+
+Record a baseline on first run, then CI diffs against it automatically:
+```bash
+AIQA_BASELINE_RECORD=true npx aiqa run tests/ai/translation.yaml   # record
+npx aiqa run tests/ai/translation.yaml                              # subsequent CI runs diff vs baseline
+```
 
 ### Template variables
 
@@ -687,6 +738,7 @@ AIQA works out of the box without any API key and upgrades seamlessly when one i
 | `openai` | `OPENAI_API_KEY` | GPT-4o-mini default |
 | `nvidia` | `NVIDIA_API_KEY` | Free API at [build.nvidia.com](https://build.nvidia.com) — OpenAI-compatible |
 | `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash default |
+| `ollama` | — | Local LLM, no API key, data never leaves machine; `baseUrl` configurable per `llm_targets` entry |
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."

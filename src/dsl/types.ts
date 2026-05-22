@@ -40,6 +40,44 @@ export type StepAction =
       prompt:    string;
       pass_if:   string;
       store_as?: string;
+    }
+  | {
+      action:         "llm_eval";
+      target?:        string;    // named target from config.llm_targets (preferred)
+      provider?:      string;    // inline fallback when target is omitted
+      model?:         string;
+      system?:        string;
+      prompt:         string;
+      max_tokens?:    number;
+      assert_quality?: {
+        criteria: string;
+        pass_if:  string;
+      };
+      baseline_key?:  string;    // regression key; compare against tests/baselines/{key}.json
+      max_drift?:     number;    // max cosine distance vs baseline (0–1); default 0.2
+      store_as?:      string;    // stores { response, score?, verdict?, reason?, baseline_distance?, baseline_verdict? }
+    }
+  | {
+      action:           "llm_consistency";
+      target?:          string;
+      provider?:        string;
+      model?:           string;
+      system?:          string;
+      prompt:           string;
+      max_tokens?:      number;
+      runs?:            number;           // sequential runs; default 3
+      assert_variance?: {
+        max:     number;                  // max allowed pairwise cosine distance
+        metric?: "max" | "mean";          // default max
+      };
+      store_as?:        string;           // { responses[], variance, metric, verdict? }
+    }
+  | {
+      action:      "rag_assert";
+      query:       string;
+      min_score?:  number;   // minimum chunk relevance score (0.0–1.0); default 0.0
+      min_chunks?: number;   // minimum chunks meeting min_score; default 1
+      store_as?:   string;   // stores RetrievedChunk[] (only chunks that passed)
     };
 
 export interface TestDefinition {

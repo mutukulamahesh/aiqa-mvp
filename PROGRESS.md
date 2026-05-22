@@ -1,8 +1,8 @@
 # AIQA — Progress Report
 
-> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-19
-> Platform alignment: **~95%** of vision  ·  Sprint 1 + Sprint 2 + Phase 2 + Phase 3 + Pre-Phase 4 hardening + Phase 4 Product Surface + EPIC-10 + EPIC-11 + EPIC-12 + EPIC-13: **DONE**
-> **Next:** EPIC-RAG — RAG Knowledge Layer (Phase 1: Jira connector · local embeddings · FlowMapper wiring)
+> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-22
+> Platform alignment: **~99%** of vision  ·  Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 GenAI: **DONE**
+> **Next:** EPIC-DEX (developer experience) · EPIC-OSS (community) · EPIC-MON (synthetic monitoring)
 
 ---
 
@@ -1113,3 +1113,55 @@ Completes the Jira integration layer — AIQA now reads stories from Jira, creat
 | CI pipeline | ❌ Failing (5 runs) | ✅ **Fixed** — SSRF allowlist unblocks smoke tests |
 | Jira project | AIQA (invalid) | **SCRUM** (verified — SCRUM-1 created live) |
 | Vision alignment | ~93% | **~95%** |
+
+---
+
+## Phase 5 — GenAI Testing ✅ COMPLETE (2026-05-22)
+
+> Branch: `genaieval` → merged to `main`. All 5 stories delivered and review-clean.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/handlers/LLMEvalHandler.ts` | `llm_eval:` step — resolves named `target:` from `llm_targets`, calls LLM, judges quality, detects prompt regression |
+| `src/handlers/ConsistencyHandler.ts` | `llm_consistency:` step — N sequential runs, pairwise cosine variance, max/mean metric |
+| `src/handlers/RagAssertHandler.ts` | `rag_assert:` step — asserts KnowledgeRetriever returns relevant chunks above score threshold |
+| `src/handlers/judgeUtils.ts` | Shared scoring utilities: `scoreByCriteria`, `parsePassIf`, `applyOp`, `formatACContext` |
+| `src/ai-testing/BaselineStore.ts` | Async file I/O; `tests/baselines/{key}.json`; path traversal guard; separate not-found vs corrupt errors |
+| `src/ai-testing/VarianceComputer.ts` | Pairwise cosine distance across N embeddings; max/mean; exports `cosineDist` for reuse |
+| `src/ai-testing/TraceParser.ts` | GEN-03 spike: common `AgentTrace` schema normalising OpenAI + LangChain; depth guard; deferred |
+| `src/llm/OllamaLLMProvider.ts` | Local Ollama provider; `baseUrl` configurable per `llm_targets` entry |
+| `src/dsl/types.ts` | `llm_eval`, `llm_consistency`, `rag_assert` added to `StepAction` union |
+| `src/dsl/DslParser.ts` | Parsing + validation for all three new step types; `baseline_key`, `max_drift`, `runs 1–20`, `min_score 0–1` |
+| `src/config/ConfigLoader.ts` | `llm_targets` Zod schema — named LLMs with `provider`, `model?`, `baseUrl?` |
+| `src/execution/StepInterpreter.ts` | Wires shared `Embedder`, `BaselineStore`, `llmTargets` into all three new handlers |
+
+### Key design decisions
+
+- **Two-LLM pattern**: target LLM (system under test) resolved from `config.llm_targets`; AIQA judge LLM injected via constructor — they never get confused
+- **Record before assert**: `AIQA_BASELINE_RECORD=true` captures baseline unconditionally before quality assertion runs — intent is to capture, not to validate
+- **baseUrl forwarded**: `llm_targets[].baseUrl` threads through `LLMConfig` → `buildSingle` → `OllamaLLMProvider` — remote Ollama targets work correctly
+- **GEN-03 deferred**: TraceParser schema and normalizers are clean; blockers are integration concerns (OpenAI network dep, LangChain peer dep, trace timing); defer until injectable transport pattern is designed
+
+### Tests added (5 new suites, 127 new tests)
+
+| Suite | Tests | Coverage |
+|---|---|---|
+| `tests/handlers/llm-eval.test.ts` | 35 | judgeUtils matrix, scoreByCriteria, pass/fail/store, target resolution, DslParser |
+| `tests/handlers/llm-baseline.test.ts` | 21 | BaselineStore I/O, record/compare modes, drift=0, drift>max, store-before-throw, record bypasses quality |
+| `tests/handlers/llm-consistency.test.ts` | 21 | VarianceComputer, sequential runs, max/mean metric, pass/fail/store, DslParser runs bounds |
+| `tests/handlers/rag-assert.test.ts` | 24 | No retriever, pass/fail by score+count, store-before-throw, topK logic, DslParser |
+| `tests/ai-testing/trace-parser.test.ts` | 26 | OpenAI expand, LangChain DFS, depth guard (52 levels), no-output branch, schema consistency |
+
+### Platform metrics after Phase 5
+
+| Metric | Before (main) | After Phase 5 |
+|---|---|---|
+| Tests passing | 731 | **858** |
+| Test suites | 26 | **32** |
+| GenAI step types | 0 | **3** (`llm_eval`, `llm_consistency`, `rag_assert`) |
+| LLM providers | 5 | **6** (+ Ollama local) |
+| Baseline regression | ❌ | ✅ embedding drift detection, VCS-committed baselines |
+| Trace normalisation | ❌ | ✅ spike proven clean — OpenAI + LangChain schema |
+| Vision alignment | ~95% | **~99%** |

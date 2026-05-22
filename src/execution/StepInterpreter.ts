@@ -11,14 +11,19 @@ import { WaitHandler } from "../handlers/WaitHandler";
 import { StoreHandler } from "../handlers/StoreHandler";
 import { ConditionHandler } from "../handlers/ConditionHandler";
 import { LoopHandler } from "../handlers/LoopHandler";
-import { JudgeHandler } from "../handlers/JudgeHandler";
+import { JudgeHandler }        from "../handlers/JudgeHandler";
+import { LLMEvalHandler }       from "../handlers/LLMEvalHandler";
+import { ConsistencyHandler }   from "../handlers/ConsistencyHandler";
+import { RagAssertHandler }     from "../handlers/RagAssertHandler";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
 import { wrapWithDepthGuard } from "./DepthGuard";
-import { createLLMProvider } from "../llm/LLMProvider";
+import { createLLMProvider, ProviderName } from "../llm/LLMProvider";
 import { getConfig } from "../config/ConfigLoader";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
+import { IEmbedder, Embedder } from "../knowledge/Embedder";
+import { BaselineStore } from "../ai-testing/BaselineStore";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -30,7 +35,7 @@ export class StepInterpreter {
    * @param opts.retriever   KnowledgeRetriever passed to JudgeHandler for requirement-aware
    *                         evaluation. When omitted, JudgeHandler uses generic LLM scoring.
    */
-  constructor(opts: { registry?: HandlerRegistry; retriever?: KnowledgeRetriever } = {}) {
+  constructor(opts: { registry?: HandlerRegistry; retriever?: KnowledgeRetriever; embedder?: IEmbedder } = {}) {
     this.dbHandler = new DBActionHandler();
 
     if (opts.registry) {
@@ -45,7 +50,10 @@ export class StepInterpreter {
         this.execute(step, adapter, ctx)
     );
 
-    const llmConfig = (() => { try { return getConfig().llm; } catch { return undefined; } })();
+    const cfg        = (() => { try { return getConfig(); } catch { return undefined; } })();
+    const llmConfig  = cfg?.llm;
+    const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string; baseUrl?: string }>;
+    const embedder   = opts.embedder ?? new Embedder();
 
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
@@ -56,7 +64,10 @@ export class StepInterpreter {
       .register(new StoreHandler())
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
-      .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever));
+      .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
+      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever, llmTargets, embedder, new BaselineStore()))
+      .register(new ConsistencyHandler(embedder, llmTargets))
+      .register(new RagAssertHandler(opts.retriever));
   }
 
   async execute(

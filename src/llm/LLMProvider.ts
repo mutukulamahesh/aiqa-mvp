@@ -9,6 +9,7 @@ import type { OpenAILLMProvider   as _OpenAIType }    from "./OpenAILLMProvider"
 import type { GeminiLLMProvider   as _GeminiType }    from "./GeminiLLMProvider";
 import type { MockLLMProvider     as _MockType }      from "./MockLLMProvider";
 import type { FallbackLLMProvider as _FallbackType }  from "./FallbackLLMProvider";
+import type { OllamaLLMProvider   as _OllamaType }    from "./OllamaLLMProvider";
 import { getCircuitBreaker }                          from "../utils/circuitBreaker";
 
 /**
@@ -33,12 +34,13 @@ export interface LLMProvider {
   complete(request: LLMRequest): Promise<LLMResponse>;
 }
 
-export type ProviderName = "anthropic" | "openai" | "nvidia" | "gemini" | "mock";
+export type ProviderName = "anthropic" | "openai" | "nvidia" | "gemini" | "ollama" | "mock";
 
 export interface LLMConfig {
   provider:  ProviderName;
   fallback?: ProviderName[];
   model?:    string;
+  baseUrl?:  string;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
 
   let primary: LLMProvider;
   try {
-    primary = buildSingle(resolved.provider, resolved.model);
+    primary = buildSingle(resolved.provider, resolved.model, resolved.baseUrl);
   } catch (err) {
     if (resolved.fallback?.length) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -115,7 +117,7 @@ function autoDetect(): ProviderName {
   return "mock";
 }
 
-function buildSingle(name: ProviderName, model?: string): LLMProvider {
+function buildSingle(name: ProviderName, model?: string, baseUrl?: string): LLMProvider {
   switch (name) {
     case "anthropic": {
       const key = process.env.ANTHROPIC_API_KEY;
@@ -144,6 +146,10 @@ function buildSingle(name: ProviderName, model?: string): LLMProvider {
       if (!key) throw new Error("GEMINI_API_KEY is not set");
       const { GeminiLLMProvider } = require("./GeminiLLMProvider") as { GeminiLLMProvider: typeof _GeminiType };
       return new GeminiLLMProvider(key, model);
+    }
+    case "ollama": {
+      const { OllamaLLMProvider } = require("./OllamaLLMProvider") as { OllamaLLMProvider: typeof _OllamaType };
+      return new OllamaLLMProvider({ model, baseUrl });
     }
     default: {
       const { MockLLMProvider } = require("./MockLLMProvider") as { MockLLMProvider: typeof _MockType };

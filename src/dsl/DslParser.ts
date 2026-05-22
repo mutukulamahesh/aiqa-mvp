@@ -285,6 +285,82 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // llm_eval
+  if ("llm_eval" in raw) {
+    const e = raw.llm_eval as Record<string, unknown> | undefined;
+    if (!e) throw new Error(`Step[${idx}] llm_eval: empty`);
+    if (typeof e.prompt !== "string") throw new Error(`Step[${idx}] llm_eval: missing "prompt"`);
+    const aq = e.assert_quality as Record<string, unknown> | undefined;
+    if (aq) {
+      if (typeof aq.criteria !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.criteria must be a string`);
+      if (typeof aq.pass_if  !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.pass_if is required`);
+    }
+    if (e.max_drift !== undefined && (typeof e.max_drift !== "number" || e.max_drift < 0 || e.max_drift > 1)) {
+      throw new Error(`Step[${idx}] llm_eval: "max_drift" must be a number between 0 and 1`);
+    }
+    return {
+      action:     "llm_eval",
+      ...(typeof e.target       === "string" ? { target:       e.target       } : {}),
+      ...(typeof e.provider     === "string" ? { provider:     e.provider     } : {}),
+      ...(typeof e.model        === "string" ? { model:        e.model        } : {}),
+      ...(typeof e.system       === "string" ? { system:       e.system       } : {}),
+      prompt:     e.prompt,
+      ...(typeof e.max_tokens   === "number" ? { max_tokens:   e.max_tokens   } : {}),
+      ...(aq ? { assert_quality: { criteria: aq.criteria as string, pass_if: aq.pass_if as string } } : {}),
+      ...(typeof e.baseline_key === "string" ? { baseline_key: e.baseline_key } : {}),
+      ...(typeof e.max_drift    === "number" ? { max_drift:    e.max_drift    } : {}),
+      ...(typeof e.store_as     === "string" ? { store_as:     e.store_as     } : {}),
+    };
+  }
+
+  // llm_consistency
+  if ("llm_consistency" in raw) {
+    const e = raw.llm_consistency as Record<string, unknown> | undefined;
+    if (!e) throw new Error(`Step[${idx}] llm_consistency: empty`);
+    if (typeof e.prompt !== "string") throw new Error(`Step[${idx}] llm_consistency: missing "prompt"`);
+    if (e.runs !== undefined && (typeof e.runs !== "number" || !Number.isInteger(e.runs) || e.runs < 1 || e.runs > 20)) {
+      throw new Error(`Step[${idx}] llm_consistency: "runs" must be a positive integer between 1 and 20`);
+    }
+    const av = e.assert_variance as Record<string, unknown> | undefined;
+    return {
+      action: "llm_consistency",
+      ...(typeof e.target     === "string" ? { target:     e.target     } : {}),
+      ...(typeof e.provider   === "string" ? { provider:   e.provider   } : {}),
+      ...(typeof e.model      === "string" ? { model:      e.model      } : {}),
+      ...(typeof e.system     === "string" ? { system:     e.system     } : {}),
+      prompt: e.prompt,
+      ...(typeof e.max_tokens === "number" ? { max_tokens: e.max_tokens } : {}),
+      ...(typeof e.runs       === "number" ? { runs:       e.runs       } : {}),
+      ...(av && typeof av.max === "number"
+        ? { assert_variance: {
+              max: av.max,
+              ...(av.metric === "max" || av.metric === "mean" ? { metric: av.metric as "max" | "mean" } : {}),
+            } }
+        : {}),
+      ...(typeof e.store_as   === "string" ? { store_as:   e.store_as   } : {}),
+    };
+  }
+
+  // rag_assert
+  if ("rag_assert" in raw) {
+    const r = raw.rag_assert as Record<string, unknown> | undefined;
+    if (!r) throw new Error(`Step[${idx}] rag_assert: empty`);
+    if (typeof r.query !== "string") throw new Error(`Step[${idx}] rag_assert: missing "query"`);
+    if (r.min_score  !== undefined && (typeof r.min_score  !== "number" || r.min_score  < 0 || r.min_score  > 1)) {
+      throw new Error(`Step[${idx}] rag_assert: "min_score" must be a number between 0 and 1`);
+    }
+    if (r.min_chunks !== undefined && (typeof r.min_chunks !== "number" || !Number.isInteger(r.min_chunks) || r.min_chunks < 1)) {
+      throw new Error(`Step[${idx}] rag_assert: "min_chunks" must be a positive integer`);
+    }
+    return {
+      action:  "rag_assert",
+      query:   r.query,
+      ...(typeof r.min_score  === "number" ? { min_score:  r.min_score  } : {}),
+      ...(typeof r.min_chunks === "number" ? { min_chunks: r.min_chunks } : {}),
+      ...(typeof r.store_as   === "string" ? { store_as:   r.store_as   } : {}),
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -317,6 +393,9 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     "if",
     "for_each",
     "judge",
+    "llm_eval",
+    "llm_consistency",
+    "rag_assert",
   ] as const;
   throw new Error(
     `Step[${idx}]: unknown action. Supported: ${SUPPORTED.join(", ")}. Got: ${JSON.stringify(raw)}`

@@ -9,7 +9,12 @@ import { LLMProvider, LLMRequest, LLMResponse } from "./LLMProvider";
 export class MockLLMProvider implements LLMProvider {
   readonly name = "mock";
 
+  constructor(private readonly fixedResponse?: string) {}
+
   async complete(req: LLMRequest): Promise<LLMResponse> {
+    if (this.fixedResponse !== undefined) {
+      return { content: this.fixedResponse, model: this.name };
+    }
     const sys = req.system.toLowerCase();
 
     if (sys.includes("debug") || sys.includes("failure analysis")) {

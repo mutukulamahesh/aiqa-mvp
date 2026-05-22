@@ -45,10 +45,22 @@ const EnvConfigSchema = z.object({
   }),
 
   llm: z.object({
-    provider: z.enum(["anthropic", "openai", "nvidia", "gemini", "mock"]).default("mock"),
-    fallback: z.array(z.enum(["anthropic", "openai", "nvidia", "gemini", "mock"])).default([]),
+    provider: z.enum(["anthropic", "openai", "nvidia", "gemini", "ollama", "mock"]).default("mock"),
+    fallback: z.array(z.enum(["anthropic", "openai", "nvidia", "gemini", "ollama", "mock"])).default([]),
     model:    z.string().optional(),
   }).default({ provider: "mock", fallback: [] }),
+
+  // Named LLM targets for llm_eval / llm_consistency steps.
+  // Allows test YAML to reference "target: fast" instead of hardcoding provider/model.
+  // Each target is independent of the internal AIQA judge LLM (llm.provider above).
+  llm_targets: z.record(
+    z.string(),
+    z.object({
+      provider: z.enum(["anthropic", "openai", "nvidia", "gemini", "ollama", "mock"]),
+      model:    z.string().optional(),
+      baseUrl:  z.string().optional(),  // for ollama: override default localhost:11434
+    })
+  ).default({}),
 
   db: z.object({
     readOnly: z.boolean().default(true),
@@ -195,12 +207,16 @@ export function checkSecrets(): { missing: string[]; warnings: string[] } {
     gemini:    "GEMINI_API_KEY",
   };
 
-  if (configuredProvider && configuredProvider !== "mock") {
+  if (configuredProvider && configuredProvider !== "mock" && configuredProvider !== "ollama") {
     // Explicit provider selected — check its key
     const required = KEY_MAP[configuredProvider];
     if (required && !process.env[required]) {
       missing.push(`${required} is required for provider "${configuredProvider}"`);
     }
+  } else if (configuredProvider === "ollama") {
+    // Ollama needs no API key — runs locally. Warn if OLLAMA_BASE_URL looks wrong.
+    const base = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+    warnings.push(`Ollama provider configured — ensure Ollama is running at ${base} and model is pulled`);
   } else if (!configuredProvider) {
     // Auto-detect mode — warn if no key at all (will silently use mock)
     const hasAny = Object.values(KEY_MAP).some(k => process.env[k]);

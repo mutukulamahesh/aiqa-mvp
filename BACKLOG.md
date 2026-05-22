@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~97%**  *(updated 2026-05-21)*
-> Sprint 1–2 + Phase 2–3 + Pre-Phase 4 hardening + Phase 4 (Product Surface + Enterprise + Knowledge Layer P1+P2): **DONE**.
-> Remaining: RAG Phase 3 (Quality & Trust — 4 stories), Phase 5-7 (GenAI, desktop, agentic).
+> Current alignment with vision: **~99%**  *(updated 2026-05-22)*
+> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (Product Surface + Enterprise + Knowledge Layer P1+P2+P3) + Phase 5 (GenAI Testing): **DONE**.
+> Remaining: Strategic epics (DEX, OSS, LOCAL, MON) + Phase 6-7 (Vision, desktop, agentic).
 
 ---
 
@@ -416,17 +416,220 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 
 ---
 
-## Phase 5 — GenAI Testing `[UNIQUE CAPABILITY]`
-> Test AI systems the same way we test web apps
+## Phase 5 — GenAI Testing `[✅ COMPLETE — 2026-05-22]`
+> Test AI systems the same way we test web apps — merged to `main`
 
-### EPIC-13 · AI Application Testing
-| ID | Story | Status |
-|---|---|---|
-| 13.1 | `LLMEvalHandler` — call any LLM API and assert response quality via DSL | [ ] |
-| 13.2 | Prompt regression testing — detect output drift between model versions, store baseline | [ ] |
-| 13.3 | Agentic workflow testing — multi-step agent decision path validation, assert intermediate states | [ ] |
-| 13.4 | Consistency testing — same prompt N times, assert variance below threshold | [ ] |
-| 13.5 | RAG validation — assert retrieved context is relevant to query via vector similarity | [ ] |
+### Design decisions (locked before implementation)
+
+**D-1 · Target LLM: named reference, not per-step inline.**
+Test YAML uses a `target:` name that resolves to a block in config. This makes tests
+portable across environments (staging uses gpt-3.5, prod uses gpt-4o) without touching
+test files. Config schema adds a new `llm_targets` map:
+```yaml
+# config/environments/dev.yaml
+llm_targets:
+  default:  { provider: mock }
+  fast:     { provider: anthropic, model: claude-haiku-4-5-20251001 }
+  powerful: { provider: anthropic, model: claude-sonnet-4-6 }
+```
+YAML test:
+```yaml
+- llm_eval:
+    target: fast                   # resolves via config llm_targets
+    prompt: "Translate 'hello' to French"
+    ...
+```
+Inline `provider/model` still accepted as escape hatch for one-off tests, but not the
+recommended path. ConfigLoader Zod schema extended with `llm_targets` map.
+
+**D-2 · BaselineStore path: `tests/baselines/` (version-controlled).**
+Default path is `tests/baselines/{baseline_key}.json`, NOT `.aiqa/` (which is gitignored).
+Baselines are committed alongside tests — CI always has a baseline; first-run-passes
+in CI are explicitly opt-in via `AIQA_BASELINE_RECORD=true` env var (record mode).
+Normal CI runs always diff against the committed baseline; missing baseline = test error.
+
+**D-3 · Consistency variance metric: max pairwise cosine distance.**
+For N responses, compute all N*(N-1)/2 pairwise cosine distances; the failing threshold
+is checked against the maximum. This is the most conservative metric — one outlier
+response triggers failure. Configurable to `mean` via `variance_metric: max|mean`.
+LLM calls are sequential by default; `parallel: true` opt-in per-step with a 3-call
+concurrency cap to avoid rate-limit errors in CI.
+
+**D-4 · GEN-03 gated behind a spike.**
+`agent_trace:` is held from the first commit. A spike defines the `AgentTrace` interface
+and proves both OpenAI Assistants + LangChain traces normalise cleanly without a
+third-party lib. If clean → GEN-03 proceeds. If not → Phase 5 ships with custom-schema
+only; Assistants/LangChain normalisation moves to Phase 6.
+
+---
+
+### EPIC-GEN · AI Application Testing
+
+**Implementation order:** GEN-01 → GEN-04 → GEN-05 → GEN-02 → GEN-03 (gated)
+
+#### GEN-01 · LLMEvalHandler `[S]`
+New `llm_eval:` DSL step. Resolves `target` from `llm_targets` config, calls that LLM,
+then judges the response using AIQA's internal judge LLM (same as `judge:` step).
+
+```yaml
+- llm_eval:
+    target: fast                   # resolved via config.llm_targets
+    system: "You are a helpful assistant"
+    prompt: "Translate 'hello' to French"
+    max_tokens: 100
+    assert_quality:
+      criteria: "Response is a correct French translation"
+      pass_if: ">= 0.8"
+    store_as: evalResult           # { response, score, verdict, reason }
+```
+
+Files:
+- `src/handlers/LLMEvalHandler.ts`
+- `src/dsl/types.ts` — add `llm_eval` to `StepAction` union
+- `src/config/ConfigLoader.ts` — add `llm_targets` Zod schema
+- Refactor `JudgeHandler` to extract `scoreValue(value, criteria, acContext)` as a
+  module-level helper; both `JudgeHandler` and `LLMEvalHandler` call it
+
+#### GEN-04 · ConsistencyHandler `[M]`
+New `llm_consistency:` DSL step. Runs the same prompt N times (sequential default,
+`parallel: true` opt-in with 3-call cap), computes max pairwise cosine distance across
+embeddings of all responses, fails if distance exceeds `max_variance`.
+
+```yaml
+- llm_consistency:
+    target: fast
+    prompt: "What is the capital of France?"
+    runs: 5
+    max_variance: 0.1              # max pairwise cosine distance (default metric)
+    variance_metric: max           # max | mean — default max
+    assert_all_quality:
+      criteria: "Answer correctly names Paris"
+      pass_if: ">= 0.9"
+    store_as: consistencyResult    # { runs, max_variance_observed, metric, passed, responses[] }
+```
+
+Files:
+- `src/handlers/ConsistencyHandler.ts`
+- `src/ai-testing/VarianceComputer.ts` — pairwise cosine via Embedder; supports max/mean
+
+#### GEN-05 · RagAssertHandler `[S]`
+New `rag_assert:` DSL step. Injected with `KnowledgeRetriever` via constructor (same
+pattern as `JudgeHandler` in `StepInterpreter`) — no new wiring needed, just add
+`new RagAssertHandler(opts.retriever)` to the registry.
+
+```yaml
+- rag_assert:
+    query: "user authentication acceptance criteria"
+    min_chunks: 2
+    min_relevance: 0.7
+    assert_contains_type: story
+    assert_contains_source: "SCRUM-42"
+    store_as: ragResult            # { chunks[], passed }
+```
+
+Files:
+- `src/handlers/RagAssertHandler.ts`
+
+#### GEN-02 · Prompt Regression `[M]`
+Extends `llm_eval` with `baseline_key` + `max_drift`. Baseline files live in
+`tests/baselines/` (version-controlled). Missing baseline in non-record mode = test error.
+Record mode enabled via `AIQA_BASELINE_RECORD=true` env var.
+
+```yaml
+- llm_eval:
+    target: powerful
+    prompt: "Summarise our product in one sentence"
+    baseline_key: "product-summary-v1"
+    max_drift: 0.15
+    store_as: regressionResult     # { response, drift, baseline_response, passed }
+```
+
+Files:
+- `src/ai-testing/BaselineStore.ts` — reads/writes `tests/baselines/{key}.json`
+- `LLMEvalHandler` extended: baseline_key triggers load/store + drift computation
+
+#### GEN-03 · AgentTraceHandler `[L — gated by spike]`
+Spike first: define `AgentTrace` interface + confirm OpenAI Assistants and LangChain
+trace schemas normalise without third-party parsing library. If clean → implement.
+If not → Phase 5 ships with custom-schema only.
+
+```yaml
+- agent_trace:
+    url: "http://localhost:3001/api/agent"
+    method: POST
+    body: { message: "Book me a flight to Paris" }
+    assert_steps:
+      - tool_called: "search_flights"
+      - tool_called: "present_options"
+    assert_final_response:
+      criteria: "Response presents flight options with prices"
+      pass_if: ">= 0.8"
+    store_as: agentTrace
+```
+
+Files (post-spike):
+- `src/handlers/AgentTraceHandler.ts`
+- `src/ai-testing/TraceParser.ts`
+
+---
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| GEN-01 | `llm_eval:` — named target, call LLM, judge quality | S | [x] |
+| GEN-04 | `llm_consistency:` — N runs, max pairwise cosine variance | M | [x] |
+| GEN-05 | `rag_assert:` — KnowledgeRetriever assertion step | S | [x] |
+| GEN-02 | Prompt regression — BaselineStore in tests/baselines/, drift via Embedder | M | [x] |
+| GEN-03 | `agent_trace:` spike — schema + normalizers proven clean; deferred (injectable transport needed) | L | [x] spike |
+
+---
+
+---
+
+## Strategic Gap Plan `[OSS ADOPTION + MARKET GAPS]`
+> Addresses 8 market gaps and 8 OSS adoption blockers from strategic review (2026-05-21).
+> These run in parallel with product phases — not a replacement for them.
+
+### EPIC-DEX · Developer Experience & Adoption `[HIGH PRIORITY]`
+Fix the friction that kills adoption before a developer sees any value.
+
+| ID | Story | Blocker | Status |
+|---|---|---|---|
+| DEX-01 | `OllamaLLMProvider` — local LLM, no API key, data never leaves machine | #1 API key, #6 sensitive data | [x] |
+| DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [ ] |
+| DEX-03 | Official Docker image with Playwright browsers pre-installed | #2 Node.js only, #4 air-gapped CI | [ ] |
+| DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [ ] |
+| DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [ ] |
+| DEX-06 | Python subprocess wrapper — `pip install aiqa-runner` calls Node CLI under the hood | #2 Node.js only | [ ] |
+
+### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
+The engineering quality is invisible until you dig in. Make it visible upfront.
+
+| ID | Story | Blocker | Status |
+|---|---|---|---|
+| OSS-01 | `CHANGELOG.md` — semantic versioning, entry per release with migration notes | #3 one contributor | [ ] |
+| OSS-02 | `CONTRIBUTING.md` — local dev setup, test conventions, PR checklist | #3 one contributor | [ ] |
+| OSS-03 | Publish open-core business model in README — "Core: forever free. Cloud: hosted execution for teams" | #8 monetisation fear | [ ] |
+| OSS-04 | GitHub Discussions enabled + pinned "Roadmap & Q3 2026 goals" thread | #3 no community signals | [ ] |
+| OSS-05 | Readiness Score badge — `[![AIQA Readiness](badge-url)](report-url)` embeddable in repo READMEs | marketing | [ ] |
+
+### EPIC-LOCAL · Local-First & Privacy Mode `[HIGH PRIORITY]`
+Unlock enterprise teams that block external API calls.
+
+| ID | Story | Gap | Status |
+|---|---|---|---|
+| LOCAL-01 | `OllamaLLMProvider` — done above | #6 sensitive data | [x] |
+| LOCAL-02 | `aiqa doctor` Ollama check — detects running Ollama instance + pulled models | DX | [ ] |
+| LOCAL-03 | "Data stays on-prem" documentation section — explicit about what leaves the machine and when | #6 sensitive data | [ ] |
+| LOCAL-04 | Config: `privacy_mode: true` — blocks all outbound LLM calls, forces local-only | #6 sensitive data | [ ] |
+
+### EPIC-MON · Synthetic Monitoring `[MEDIUM PRIORITY]`
+DataDog alternative at near-zero cost.
+
+| ID | Story | Gap | Status |
+|---|---|---|---|
+| MON-01 | `aiqa schedule "*/5 * * * *" tests/smoke/` — cron-triggered recurring test runs | #7 synthetic monitoring | [ ] |
+| MON-02 | `--alert-webhook <url>` — POST JSON payload to Slack/Teams/PagerDuty on failure | #7 synthetic monitoring | [ ] |
+| MON-03 | Uptime history in `results/` — rolling 30-day pass/fail log per test file | #7 synthetic monitoring | [ ] |
 
 ---
 
@@ -489,11 +692,15 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | Phase 4 — Enterprise | 4 | 20 | ✅ DONE | Jira full ✅, reports ✅, CI impact filter ✅, CLI polish ✅ |
 | Phase 4 — Knowledge Layer P1 | 1 | 23 | ✅ DONE | RAG Phase 1 — Jira, embeddings, FlowMapper wiring |
 | Phase 4 — Knowledge Layer P2 | 1 | 11 | ✅ DONE | RAG Phase 2 — hybrid reranker, all connectors, healer+judge wiring |
-| Phase 4 — Knowledge Layer P3 | 1 | 4 | ▶ NEXT | RAG Phase 3 — explainability, defect masking fix, retrieval budget |
-| Phase 5 — GenAI | 1 | 5 | ⬜ | Test AI systems natively |
+| Phase 4 — Knowledge Layer P3 | 1 | 4 | ✅ DONE | RAG Phase 3 — explainability, defect masking fix, budget, graph |
+| Phase 5 — GenAI | 1 | 5 | ✅ DONE | Test AI systems natively — llm_eval, llm_consistency, rag_assert, baseline regression |
+| Strategic — DEX | 1 | 6 | ▶ ACTIVE | OSS adoption, Ollama (DEX-01 done), quickstart, Docker |
+| Strategic — OSS | 1 | 5 | ⬜ | Community, changelog, open-core model |
+| Strategic — LOCAL | 1 | 4 | ▶ ACTIVE | Privacy mode, Ollama doctor, local-only config |
+| Strategic — MON | 1 | 3 | ⬜ | Synthetic monitoring, alerts |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **27+** | **151+** | | |
+| **Total** | **31+** | **169+** | | |
 
-**Next up: RAG Phase 3 — Quality & Trust (4 stories: defect.category, scoreBreakdown, retrieval budget, Knowledge Graph foundations).**
-**After that: Phase 5 — GenAI Testing (EPIC-13).**
+**Active:** Strategic DEX/LOCAL epics.
+**Next:** EPIC-OSS community work + EPIC-MON synthetic monitoring + Phase 6 Vision.
