@@ -336,6 +336,26 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // rag_assert
+  if ("rag_assert" in raw) {
+    const r = raw.rag_assert as Record<string, unknown> | undefined;
+    if (!r) throw new Error(`Step[${idx}] rag_assert: empty`);
+    if (typeof r.query !== "string") throw new Error(`Step[${idx}] rag_assert: missing "query"`);
+    if (r.min_score  !== undefined && (typeof r.min_score  !== "number" || r.min_score  < 0 || r.min_score  > 1)) {
+      throw new Error(`Step[${idx}] rag_assert: "min_score" must be a number between 0 and 1`);
+    }
+    if (r.min_chunks !== undefined && (typeof r.min_chunks !== "number" || !Number.isInteger(r.min_chunks) || r.min_chunks < 1)) {
+      throw new Error(`Step[${idx}] rag_assert: "min_chunks" must be a positive integer`);
+    }
+    return {
+      action:  "rag_assert",
+      query:   r.query,
+      ...(typeof r.min_score  === "number" ? { min_score:  r.min_score  } : {}),
+      ...(typeof r.min_chunks === "number" ? { min_chunks: r.min_chunks } : {}),
+      ...(typeof r.store_as   === "string" ? { store_as:   r.store_as   } : {}),
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -370,6 +390,7 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     "judge",
     "llm_eval",
     "llm_consistency",
+    "rag_assert",
   ] as const;
   throw new Error(
     `Step[${idx}]: unknown action. Supported: ${SUPPORTED.join(", ")}. Got: ${JSON.stringify(raw)}`

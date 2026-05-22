@@ -69,6 +69,13 @@ export type StepAction =
         metric?: "max" | "mean";          // default max
       };
       store_as?:        string;           // { responses[], variance, metric, verdict? }
+    }
+  | {
+      action:      "rag_assert";
+      query:       string;
+      min_score?:  number;   // minimum chunk relevance score (0.0–1.0); default 0.0
+      min_chunks?: number;   // minimum chunks meeting min_score; default 1
+      store_as?:   string;   // stores RetrievedChunk[] (only chunks that passed)
     };
 
 export interface TestDefinition {
