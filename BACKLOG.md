@@ -592,14 +592,23 @@ Files (post-spike):
 ### EPIC-DEX · Developer Experience & Adoption `[HIGH PRIORITY]`
 Fix the friction that kills adoption before a developer sees any value.
 
+**Language barrier elimination — agreed order (2026-05-22):**
+1. README messaging (done) → 2. Docker → 3. Shell script → 4. Python wrapper → 5. REST API wrappers (backlog last)
+
 | ID | Story | Blocker | Status |
 |---|---|---|---|
 | DEX-01 | `OllamaLLMProvider` — local LLM, no API key, data never leaves machine | #1 API key, #6 sensitive data | [x] |
 | DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [ ] |
-| DEX-03 | Official Docker image with Playwright browsers pre-installed | #2 Node.js only, #4 air-gapped CI | [ ] |
+| DEX-03 | Official Docker image — Node + Playwright pre-installed; `docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml` | #2 Node.js only, #4 air-gapped CI | [ ] |
 | DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [ ] |
 | DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [ ] |
-| DEX-06 | Python subprocess wrapper — `pip install aiqa-runner` calls Node CLI under the hood | #2 Node.js only | [ ] |
+| DEX-06 | Python wrapper — `pip install aiqa-runner` shells out to Node CLI; thin, honest, no re-implementation | #2 Node.js only | [ ] |
+| DEX-07 | Shell script installer — `curl -fsSL https://get.aiqa.dev \| sh` installs Node + AIQA silently; targets Linux/macOS CI | #4 air-gapped CI, #2 Node.js only | [ ] |
+| DEX-08 | GitHub Actions native action — `uses: aiqa/aiqa-action@v1`; no install step in CI at all | CI teams | [ ] |
+| DEX-09 | Maven plugin — `mvn aiqa:run`; Java enterprise teams; shells out to Docker or Node CLI | #2 Node.js only (Java shops) | [ ] |
+| DEX-10 | Gradle plugin — `./gradlew aiqaRun`; Spring Boot / Android teams | #2 Node.js only (Java shops) | [ ] |
+| DEX-11 | REST API language-native Python client — `pip install aiqa-client` calls AIQA REST API; no Node required at all | advanced, air-gapped | [ ] |
+| DEX-12 | REST API language-native Java client — Maven artifact calling AIQA REST API | advanced, Java enterprise | [ ] |
 
 ### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
 The engineering quality is invisible until you dig in. Make it visible upfront.
@@ -694,13 +703,13 @@ DataDog alternative at near-zero cost.
 | Phase 4 — Knowledge Layer P2 | 1 | 11 | ✅ DONE | RAG Phase 2 — hybrid reranker, all connectors, healer+judge wiring |
 | Phase 4 — Knowledge Layer P3 | 1 | 4 | ✅ DONE | RAG Phase 3 — explainability, defect masking fix, budget, graph |
 | Phase 5 — GenAI | 1 | 5 | ✅ DONE | Test AI systems natively — llm_eval, llm_consistency, rag_assert, baseline regression |
-| Strategic — DEX | 1 | 6 | ▶ ACTIVE | OSS adoption, Ollama (DEX-01 done), quickstart, Docker |
+| Strategic — DEX | 1 | 12 | ▶ ACTIVE | Language barrier elimination: README ✅, Docker, Shell, Python wrapper, GitHub Action, Maven/Gradle, REST clients |
 | Strategic — OSS | 1 | 5 | ⬜ | Community, changelog, open-core model |
 | Strategic — LOCAL | 1 | 4 | ▶ ACTIVE | Privacy mode, Ollama doctor, local-only config |
 | Strategic — MON | 1 | 3 | ⬜ | Synthetic monitoring, alerts |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **31+** | **169+** | | |
+| **Total** | **31+** | **175+** | | |
 
-**Active:** Strategic DEX/LOCAL epics.
-**Next:** EPIC-OSS community work + EPIC-MON synthetic monitoring + Phase 6 Vision.
+**Active:** Strategic DEX (language barrier elimination) + LOCAL (privacy mode).
+**Next session:** DEX-03 Docker image → DEX-07 Shell script → DEX-06 Python wrapper.

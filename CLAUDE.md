@@ -150,7 +150,9 @@ jira:
 - **Tests:** 858 passing, tsc clean
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
-- **Next:** EPIC-DEX (developer experience), EPIC-OSS (open-source community), EPIC-MON (synthetic monitoring)
+- **Active:** EPIC-DEX language barrier elimination — README messaging done; next: Docker (DEX-03) → Shell script (DEX-07) → Python wrapper (DEX-06)
+- **Parked (do last in DEX):** REST API-based language-native clients (DEX-11, DEX-12); GitHub Action (DEX-08); Maven/Gradle plugins (DEX-09, DEX-10)
+- **Next epics after DEX:** EPIC-LOCAL (privacy mode), EPIC-OSS (community), EPIC-MON (synthetic monitoring)
 
 ### Phase 5 stories — ALL COMPLETE ✅
 

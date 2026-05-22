@@ -38,9 +38,15 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - Node.js v18 or higher
 - npm
 
+> **Not a JavaScript shop?** No problem. Your tests are written in plain YAML — no JavaScript knowledge required. The runtime is Node.js but you never write or read any JavaScript. If you prefer not to install Node at all, use the [Docker image](#docker) or the [Python wrapper](#python-wrapper) instead.
+
 ---
 
 ## Installation
+
+Choose the method that fits your team:
+
+### Node.js (default)
 
 ```bash
 git clone https://github.com/mutukulamahesh/aiqa-mvp.git
@@ -59,6 +65,39 @@ aiqa --help              # aiqa <command> anywhere
 ```
 
 All examples below use `npx aiqa`. If you've run `npm link`, drop the `npx` prefix.
+
+### Docker
+
+No Node.js install needed. Works on any OS, any tech stack:
+
+```bash
+docker pull aiqa/aiqa
+docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
+```
+
+> Docker image coming soon — tracked in [DEX-03].
+
+### Python wrapper
+
+For Python teams — install once, run YAML tests from your existing Python environment:
+
+```bash
+pip install aiqa-runner
+aiqa run tests/login.yaml
+```
+
+> Python wrapper coming soon — tracked in [DEX-06].
+
+### Shell script (Linux / macOS / CI)
+
+One-liner that installs everything silently — no manual Node.js setup:
+
+```bash
+curl -fsSL https://get.aiqa.dev | sh
+aiqa run tests/login.yaml
+```
+
+> Shell installer coming soon — tracked in [DEX-07].
 
 ---
 
