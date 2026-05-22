@@ -11,7 +11,7 @@ export class VarianceComputer {
     const distances: number[] = [];
     for (let i = 0; i < embeddings.length; i++) {
       for (let j = i + 1; j < embeddings.length; j++) {
-        distances.push(1 - cosineSimilarity(embeddings[i], embeddings[j]));
+        distances.push(cosineDist(embeddings[i], embeddings[j]));
       }
     }
 
@@ -19,6 +19,10 @@ export class VarianceComputer {
       ? Math.max(...distances)
       : distances.reduce((a, b) => a + b, 0) / distances.length;
   }
+}
+
+export function cosineDist(a: number[], b: number[]): number {
+  return 1 - cosineSimilarity(a, b);
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {

@@ -53,7 +53,9 @@ export type StepAction =
         criteria: string;
         pass_if:  string;
       };
-      store_as?:      string;    // stores { response, score?, verdict?, reason? }
+      baseline_key?:  string;    // regression key; compare against tests/baselines/{key}.json
+      max_drift?:     number;    // max cosine distance vs baseline (0–1); default 0.2
+      store_as?:      string;    // stores { response, score?, verdict?, reason?, baseline_distance?, baseline_verdict? }
     }
   | {
       action:           "llm_consistency";

@@ -295,16 +295,21 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
       if (typeof aq.criteria !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.criteria is required`);
       if (typeof aq.pass_if  !== "string") throw new Error(`Step[${idx}] llm_eval: assert_quality.pass_if is required`);
     }
+    if (e.max_drift !== undefined && (typeof e.max_drift !== "number" || e.max_drift < 0 || e.max_drift > 1)) {
+      throw new Error(`Step[${idx}] llm_eval: "max_drift" must be a number between 0 and 1`);
+    }
     return {
       action:     "llm_eval",
-      ...(typeof e.target    === "string" ? { target:    e.target    } : {}),
-      ...(typeof e.provider  === "string" ? { provider:  e.provider  } : {}),
-      ...(typeof e.model     === "string" ? { model:     e.model     } : {}),
-      ...(typeof e.system    === "string" ? { system:    e.system    } : {}),
+      ...(typeof e.target       === "string" ? { target:       e.target       } : {}),
+      ...(typeof e.provider     === "string" ? { provider:     e.provider     } : {}),
+      ...(typeof e.model        === "string" ? { model:        e.model        } : {}),
+      ...(typeof e.system       === "string" ? { system:       e.system       } : {}),
       prompt:     e.prompt,
-      ...(typeof e.max_tokens === "number" ? { max_tokens: e.max_tokens } : {}),
+      ...(typeof e.max_tokens   === "number" ? { max_tokens:   e.max_tokens   } : {}),
       ...(aq ? { assert_quality: { criteria: aq.criteria as string, pass_if: aq.pass_if as string } } : {}),
-      ...(typeof e.store_as  === "string" ? { store_as:  e.store_as  } : {}),
+      ...(typeof e.baseline_key === "string" ? { baseline_key: e.baseline_key } : {}),
+      ...(typeof e.max_drift    === "number" ? { max_drift:    e.max_drift    } : {}),
+      ...(typeof e.store_as     === "string" ? { store_as:     e.store_as     } : {}),
     };
   }
 

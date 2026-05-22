@@ -6,6 +6,9 @@ import { AssertionError } from "../errors";
 import { LLMProvider, createLLMProvider, ProviderName } from "../llm/LLMProvider";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 import { RetrievedChunk } from "../knowledge/types";
+import { IEmbedder } from "../knowledge/Embedder";
+import { BaselineStore } from "../ai-testing/BaselineStore";
+import { cosineDist } from "../ai-testing/VarianceComputer";
 import { wwrite, wlog } from "../execution/WorkerContext";
 import { scoreByCriteria, parsePassIf, applyOp, formatACContext } from "./judgeUtils";
 
@@ -17,9 +20,11 @@ export class LLMEvalHandler implements StepHandler {
   readonly handles = ["llm_eval"];
 
   constructor(
-    private readonly judgeLlm:    LLMProvider,
-    private readonly retriever?:  KnowledgeRetriever,
-    private readonly llmTargets:  LLMTargets = {},
+    private readonly judgeLlm:       LLMProvider,
+    private readonly retriever?:     KnowledgeRetriever,
+    private readonly llmTargets:     LLMTargets = {},
+    private readonly embedder?:      IEmbedder,
+    private readonly baselineStore?: BaselineStore,
   ) {}
 
   async execute(step: StepAction, _adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
@@ -78,6 +83,50 @@ export class LLMEvalHandler implements StepHandler {
       }
     } else {
       if (step.store_as) ctx.set(step.store_as, { response });
+    }
+
+    // ── Baseline regression (optional) ───────────────────────────────────────
+    if (step.baseline_key) {
+      if (!this.embedder || !this.baselineStore) {
+        throw new AssertionError("llm_eval: baseline_key requires an embedder — check StepInterpreter setup");
+      }
+
+      const embedding = await this.embedder.embed(response);
+
+      if (this.baselineStore.recordMode) {
+        this.baselineStore.write(step.baseline_key, { embedding, response, recordedAt: new Date().toISOString() });
+        wwrite(`  ▶ llm_eval   → baseline recorded: ${step.baseline_key}`);
+        if (step.store_as) {
+          const prev = ctx.get(step.store_as) as Record<string, unknown> | undefined ?? {};
+          ctx.set(step.store_as, { ...prev, baseline_recorded: true });
+        }
+        return;
+      }
+
+      const baseline = this.baselineStore.read(step.baseline_key);
+      if (!baseline) {
+        throw new AssertionError(
+          `llm_eval: no baseline for "${step.baseline_key}" — run with AIQA_BASELINE_RECORD=true first`
+        );
+      }
+
+      const drift    = cosineDist(embedding, baseline.embedding);
+      const maxDrift = step.max_drift ?? 0.2;
+      const passed   = drift <= maxDrift;
+      const bVerdict = passed ? "pass" : "fail";
+
+      wlog(`      ↳ baseline drift=${drift.toFixed(4)}  verdict=${bVerdict}`);
+
+      if (step.store_as) {
+        const prev = ctx.get(step.store_as) as Record<string, unknown> | undefined ?? {};
+        ctx.set(step.store_as, { ...prev, baseline_distance: drift, baseline_verdict: bVerdict });
+      }
+
+      if (!passed) {
+        throw new AssertionError(
+          `llm_eval regression: drift ${drift.toFixed(4)} > ${maxDrift} for baseline "${step.baseline_key}"`
+        );
+      }
     }
   }
 

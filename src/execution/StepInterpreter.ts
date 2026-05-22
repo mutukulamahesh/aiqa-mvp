@@ -23,6 +23,7 @@ import { createLLMProvider, ProviderName } from "../llm/LLMProvider";
 import { getConfig } from "../config/ConfigLoader";
 import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 import { IEmbedder, Embedder } from "../knowledge/Embedder";
+import { BaselineStore } from "../ai-testing/BaselineStore";
 
 export class StepInterpreter {
   private registry: HandlerRegistry;
@@ -52,6 +53,7 @@ export class StepInterpreter {
     const cfg        = (() => { try { return getConfig(); } catch { return undefined; } })();
     const llmConfig  = cfg?.llm;
     const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string }>;
+    const embedder   = opts.embedder ?? new Embedder();
 
     this.registry = new HandlerRegistry()
       .register(new UIActionHandler())
@@ -63,8 +65,8 @@ export class StepInterpreter {
       .register(new ConditionHandler(runSubStep))
       .register(new LoopHandler(runSubStep))
       .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
-      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever, llmTargets))
-      .register(new ConsistencyHandler(opts.embedder ?? new Embedder(), llmTargets))
+      .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever, llmTargets, embedder, new BaselineStore()))
+      .register(new ConsistencyHandler(embedder, llmTargets))
       .register(new RagAssertHandler(opts.retriever));
   }
 
