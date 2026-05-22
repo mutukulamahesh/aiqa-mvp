@@ -94,7 +94,7 @@ export class LLMEvalHandler implements StepHandler {
       const embedding = await this.embedder.embed(response);
 
       if (this.baselineStore.recordMode) {
-        this.baselineStore.write(step.baseline_key, { embedding, response, recordedAt: new Date().toISOString() });
+        await this.baselineStore.write(step.baseline_key, { embedding, response, recordedAt: new Date().toISOString() });
         wwrite(`  ▶ llm_eval   → baseline recorded: ${step.baseline_key}`);
         if (step.store_as) {
           const prev = ctx.get(step.store_as) as Record<string, unknown> | undefined ?? {};
@@ -103,7 +103,7 @@ export class LLMEvalHandler implements StepHandler {
         return;
       }
 
-      const baseline = this.baselineStore.read(step.baseline_key);
+      const baseline = await this.baselineStore.read(step.baseline_key);
       if (!baseline) {
         throw new AssertionError(
           `llm_eval: no baseline for "${step.baseline_key}" — run with AIQA_BASELINE_RECORD=true first`

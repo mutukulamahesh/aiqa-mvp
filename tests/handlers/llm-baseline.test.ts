@@ -36,11 +36,11 @@ function fakeStore(opts: {
   let written: BaselineEntry | undefined;
   const store = {
     get recordMode() { return opts.record ?? false; },
-    read(_key: string): BaselineEntry | null {
+    async read(_key: string): Promise<BaselineEntry | null> {
       if (!opts.baseline) return null;
       return { embedding: opts.baseline, response: "prev", recordedAt: "2026-01-01T00:00:00.000Z" };
     },
-    write(_key: string, entry: BaselineEntry) { written = entry; },
+    async write(_key: string, entry: BaselineEntry) { written = entry; },
     get written() { return written; },
   } as unknown as BaselineStore & { written?: BaselineEntry };
   return store;
@@ -54,23 +54,22 @@ describe("BaselineStore — file I/O", () => {
   beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aiqa-baseline-")); });
   afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
 
-  test("read returns null for missing file", () => {
+  test("read returns null for missing file", async () => {
     const store = new BaselineStore(tmpDir);
-    expect(store.read("nonexistent")).toBeNull();
+    expect(await store.read("nonexistent")).toBeNull();
   });
 
-  test("write then read round-trips correctly", () => {
+  test("write then read round-trips correctly", async () => {
     const store = new BaselineStore(tmpDir);
     const entry: BaselineEntry = { embedding: [1, 0, 0], response: "hello", recordedAt: "2026-01-01T00:00:00.000Z" };
-    store.write("my-key", entry);
-    const back = store.read("my-key");
-    expect(back).toEqual(entry);
+    await store.write("my-key", entry);
+    expect(await store.read("my-key")).toEqual(entry);
   });
 
-  test("write creates nested directories", () => {
+  test("write creates nested directories", async () => {
     const store = new BaselineStore(path.join(tmpDir, "deep", "nested"));
-    store.write("k", { embedding: [1], response: "r", recordedAt: "2026-01-01T00:00:00.000Z" });
-    expect(store.read("k")).not.toBeNull();
+    await store.write("k", { embedding: [1], response: "r", recordedAt: "2026-01-01T00:00:00.000Z" });
+    expect(await store.read("k")).not.toBeNull();
   });
 
   test("recordMode reads AIQA_BASELINE_RECORD env var", () => {
@@ -80,6 +79,18 @@ describe("BaselineStore — file I/O", () => {
     process.env.AIQA_BASELINE_RECORD = "true";
     expect(store.recordMode).toBe(true);
     delete process.env.AIQA_BASELINE_RECORD;
+  });
+
+  test("M1: throws on path traversal in key", () => {
+    const store = new BaselineStore(tmpDir);
+    expect(() => store["filePath"]("../../.env")).toThrow(/path traversal/);
+  });
+
+  test("L1: throws descriptive error on corrupt baseline file", async () => {
+    const store = new BaselineStore(tmpDir);
+    const file  = path.join(tmpDir, "bad.json");
+    await fs.promises.writeFile(file, "{ not valid json", "utf-8");
+    await expect(store.read("bad")).rejects.toThrow(/corrupt baseline/);
   });
 });
 

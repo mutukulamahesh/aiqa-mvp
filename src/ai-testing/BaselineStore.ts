@@ -14,23 +14,35 @@ export class BaselineStore {
     return process.env.AIQA_BASELINE_RECORD === "true";
   }
 
-  read(key: string): BaselineEntry | null {
+  async read(key: string): Promise<BaselineEntry | null> {
     const file = this.filePath(key);
-    if (!fs.existsSync(file)) return null;
     try {
-      return JSON.parse(fs.readFileSync(file, "utf-8")) as BaselineEntry;
+      await fs.promises.access(file);
     } catch {
-      return null;
+      return null;  // file not found
+    }
+    let content: string;
+    try {
+      content = await fs.promises.readFile(file, "utf-8");
+      return JSON.parse(content) as BaselineEntry;
+    } catch (err) {
+      throw new Error(`BaselineStore: corrupt baseline "${file}" — ${(err as Error).message}`);
     }
   }
 
-  write(key: string, entry: BaselineEntry): void {
+  async write(key: string, entry: BaselineEntry): Promise<void> {
     const file = this.filePath(key);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(entry, null, 2), "utf-8");
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify(entry, null, 2), "utf-8");
   }
 
+  // M1: reject keys containing path traversal sequences
   private filePath(key: string): string {
-    return path.join(this.basePath, `${key}.json`);
+    const base     = path.resolve(this.basePath);
+    const resolved = path.resolve(base, `${key}.json`);
+    if (!resolved.startsWith(base + path.sep)) {
+      throw new Error(`BaselineStore: invalid baseline_key "${key}" — path traversal not allowed`);
+    }
+    return resolved;
   }
 }
