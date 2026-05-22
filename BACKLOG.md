@@ -593,7 +593,7 @@ Files (post-spike):
 Fix the friction that kills adoption before a developer sees any value.
 
 **Agreed delivery order (2026-05-22):**
-1. README messaging ✅ → 2. DEX-03 Docker → 3. DEX-07 Shell script → 4. DEX-06 Python wrapper → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients (last)
+1. README messaging ✅ → 2. DEX-03 Docker → 3. DEX-07 Shell script → 4. DEX-06 Python wrapper → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
@@ -609,6 +609,8 @@ Fix the friction that kills adoption before a developer sees any value.
 | DEX-10 | Gradle plugin — `./gradlew aiqaRun`; Spring Boot / Android teams | #2 Node.js only (Java shops) | [ ] |
 | DEX-11 | REST API language-native Python client — `pip install aiqa-client` calls AIQA REST API; no Node required at all | advanced, air-gapped | [ ] |
 | DEX-12 | REST API language-native Java client — Maven artifact calling AIQA REST API | advanced, Java enterprise | [ ] |
+| DEX-13 | VS Code extension MVP — right-click YAML → run, live results panel, inline failure highlighting, YAML autocomplete; depends on DEX-11 REST API client | IDE integration | [ ] |
+| DEX-14 | JetBrains plugin — same feature set as VS Code extension; targets IntelliJ IDEA, PyCharm, WebStorm | IDE integration (Java/Python shops) | [ ] |
 
 ### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
 The engineering quality is invisible until you dig in. Make it visible upfront.
