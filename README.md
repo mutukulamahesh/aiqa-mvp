@@ -24,7 +24,7 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
 - **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
 - **Test AI systems natively** — call any LLM as the system under test, judge quality with a second LLM, assert consistency across runs, and detect prompt regressions via embedding drift
-- **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA, Ollama) — no code changes needed
+- **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA, Ollama) or point to your **enterprise AI endpoint** (Azure OpenAI, AWS Bedrock-compatible, internal AI gateway) — no code changes needed
 - **Web Portal** — browser-based UI to trigger runs, view live progress, edit tests, and browse history
 - **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
 - **Chrome Extension** — test any app from the browser, no CLI or YAML needed
@@ -761,7 +761,7 @@ AIQA works out of the box without any API key and upgrades seamlessly when one i
 |---|---|---|
 | `mock` (default) | — | Rule-based, zero dependencies, always works |
 | `anthropic` | `ANTHROPIC_API_KEY` | Claude — `npm install @anthropic-ai/sdk` required |
-| `openai` | `OPENAI_API_KEY` | GPT-4o-mini default |
+| `openai` | `OPENAI_API_KEY` | GPT-4o-mini default; also used for **Azure OpenAI** and any OpenAI-compatible enterprise gateway — set `baseUrl` to your endpoint |
 | `nvidia` | `NVIDIA_API_KEY` | Free API at [build.nvidia.com](https://build.nvidia.com) — OpenAI-compatible |
 | `gemini` | `GEMINI_API_KEY` | Gemini 2.0 Flash default |
 | `ollama` | — | Local LLM, no API key, data never leaves machine; `baseUrl` configurable per `llm_targets` entry |
@@ -782,6 +782,37 @@ llm:
 ```
 
 Transient failures (rate limits, server errors) advance to the next provider automatically.
+
+### Enterprise & on-premise AI
+
+If your organisation routes all AI traffic through an approved endpoint — Azure OpenAI, an internal LiteLLM proxy, or an Azure API Management AI gateway — AIQA works with it out of the box. No new API keys or external AI contracts needed.
+
+**Azure OpenAI** — use `provider: openai` and set `baseUrl` to your Azure deployment:
+
+```yaml
+llm:
+  provider: openai
+  baseUrl: "https://your-company.openai.azure.com/openai/deployments/gpt-4o"
+```
+
+**Internal AI gateway** (LiteLLM, Azure APIM, or any OpenAI-compatible proxy):
+
+```yaml
+llm:
+  provider: openai
+  baseUrl: "https://ai-gateway.internal.yourcompany.com/v1"
+```
+
+**Per-target routing** — if your company tests its own AI product (the "target") and uses a separate approved LLM as the judge, each can route through a different endpoint:
+
+```yaml
+# config/environments/prod.yaml
+llm_targets:
+  our-chatbot:   { provider: openai, baseUrl: "https://chatbot.internal/v1" }   # system under test
+  judge:         { provider: openai, baseUrl: "https://approved-aoai.openai.azure.com/openai/deployments/gpt-4o" }
+```
+
+**What AIQA sends to the LLM** — only the test prompt and the LLM response being evaluated. No application credentials, no user data, no source code. Your AI gateway's audit log will capture every call.
 
 ---
 
