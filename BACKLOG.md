@@ -593,7 +593,7 @@ Files (post-spike):
 Fix the friction that kills adoption before a developer sees any value.
 
 **Agreed delivery order (2026-05-22):**
-1. README messaging ✅ → 2. DEX-03 Docker ✅ → 3. DEX-07 Shell script ✅ → 4. DEX-06 Python wrapper ✅ → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
+1. README messaging ✅ → 2. DEX-03 Docker ✅ → 3. DEX-07 Shell script ✅ → 4. DEX-06 Python wrapper ✅ → 5. DEX-05 README quickstart ✅ → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
@@ -601,7 +601,7 @@ Fix the friction that kills adoption before a developer sees any value.
 | DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [ ] |
 | DEX-03 | Official Docker image — Node + Playwright pre-installed; `docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml` | #2 Node.js only, #4 air-gapped CI | [x] |
 | DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [ ] |
-| DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [ ] |
+| DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [x] |
 | DEX-06 | Python wrapper — `pip install aiqa-runner` shells out to Node CLI; thin, honest, no re-implementation | #2 Node.js only | [x] |
 | DEX-07 | Shell script installer — `curl -fsSL https://get.aiqa.dev \| sh` installs Node + AIQA silently; targets Linux/macOS CI | #4 air-gapped CI, #2 Node.js only | [x] |
 | DEX-08 | GitHub Actions native action — `uses: aiqa/aiqa-action@v1`; no install step in CI at all | CI teams | [ ] |
