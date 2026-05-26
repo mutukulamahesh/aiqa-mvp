@@ -3,6 +3,7 @@ Entry point for the aiqa-runner Python wrapper.
 Locates the AIQA Node CLI and delegates all arguments to it.
 """
 
+import platform
 import shutil
 import subprocess
 import sys
@@ -82,10 +83,19 @@ def _die_old_node(node: str) -> None:
 
 
 def _die_no_aiqa() -> None:
+    if platform.system() == "Windows":
+        installer = (
+            "         # Windows PowerShell\n"
+            "         iwr https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.ps1 | iex"
+        )
+    else:
+        installer = (
+            "         # Linux / macOS\n"
+            "         curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash"
+        )
     print(
         "[aiqa] AIQA CLI not found. Install it with:\n"
-        "         # shell installer (Linux/macOS)\n"
-        "         curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash\n"
+        f"{installer}\n"
         "\n"
         "         # Docker (no Node.js needed)\n"
         "         docker pull aiqa/aiqa",

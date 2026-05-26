@@ -2,7 +2,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install dependencies first (layer cache)
+# Install all dependencies (including devDeps — needed for the build step)
 COPY package*.json ./
 RUN npm ci
 
@@ -10,12 +10,17 @@ RUN npm ci
 # --with-deps handles the full OS dependency list; no manual apt-get list needed
 RUN npx playwright install chromium --with-deps
 
-# Prune dev dependencies after browser install (playwright is in devDeps).
+# Compile TypeScript source to dist/ before pruning devDeps
+RUN npm run build
+
+# Prune dev dependencies after build (ts-node, typescript, etc. no longer needed).
 # If runtime features stop working in the image, check that their packages
 # haven't drifted into devDependencies by mistake.
 RUN npm prune --omit=dev
 
-# Copy source and hand ownership to the non-root node user
+# Copy source and hand ownership to the non-root node user.
+# dist/ is excluded from the build context (portal/dist in .dockerignore) but
+# already exists in the container from the build step above — COPY . . is safe.
 COPY . .
 RUN chown -R node:node /app
 

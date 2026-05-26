@@ -40,6 +40,7 @@ else
 
   if [ ! -f "$HOME/.nvm/nvm.sh" ]; then
     print "Installing nvm..."
+    # Pin to a known-good release. Check https://github.com/nvm-sh/nvm/releases for newer versions.
     curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
   fi
 
@@ -71,7 +72,10 @@ fi
 
 cd "$INSTALL_DIR"
 print "Installing dependencies..."
-npm ci --silent --omit=dev
+npm ci --silent
+
+print "Building AIQA..."
+npm run build --silent
 
 # ── Install Playwright browsers ───────────────────────────────────────────────
 
