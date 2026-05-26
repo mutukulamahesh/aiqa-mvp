@@ -2,7 +2,7 @@
 
 Write tests in YAML. Run them anywhere. Test web apps, APIs, databases, and AI systems with one tool.
 
-> **Tests are plain YAML — no JavaScript knowledge required.** Works with Node.js, Docker, Python (`pip install aiqa-runner`), or a one-line shell installer.
+> **Tests are plain YAML — no JavaScript knowledge required.** Works with Node.js, Docker, Python (`pip install aiqa-runner`), or a one-line installer for Linux, macOS, and Windows.
 
 ---
 
@@ -787,7 +787,7 @@ npm install knex pg   # only required for real DB connections
 | `assert: { value, equals }` | Assert a stored variable equals expected |
 | `assert: { element_not_visible }` | Assert an element (e.g. login form) is no longer visible — used to confirm successful login |
 | `api: { method, url, ... }` | Make an HTTP request, optionally store response |
-| `db: { query, ... }` | Execute SQL, assert rows/fields, store results |
+| `db: { query, params?, assert_rows?, assert_field?, store_as? }` | Execute SQL with optional positional `params` array; assert row counts and field values |
 | `judge: { value, prompt, pass_if }` | LLM scores a value against a natural-language criterion (0.0–1.0); `pass_if: "score >= 0.7"` |
 | `llm_eval: { target, prompt, assert_quality, baseline_key }` | Call a named target LLM, judge quality, and/or detect prompt regression via embedding drift |
 | `llm_consistency: { target, prompt, runs, assert_variance }` | Run the same prompt N times and assert the maximum pairwise cosine distance stays below threshold |
