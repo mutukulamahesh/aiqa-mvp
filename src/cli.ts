@@ -62,9 +62,9 @@ function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function saveResults(results: unknown[], dir: string): string {
+function saveResults(results: unknown[], dir: string, label?: string): string {
   ensureDir(dir);
-  const filePath = path.join(dir, `run-${runTimestamp()}.json`);
+  const filePath = path.join(dir, `run-${label ?? runTimestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
   return filePath;
 }
@@ -1217,12 +1217,14 @@ program
 
     const runOnce = async (): Promise<void> => {
       runCount++;
-      const ts     = new Date();
-      const runDir = path.join(outBase, runTimestamp());
+      // Capture timestamp once — used for both the directory name and the JSON filename
+      // so the two never diverge if a second boundary is crossed mid-run.
+      const label  = runTimestamp();
+      const runDir = path.join(outBase, label);
       ensureDir(runDir);
 
       console.log(`\n─────────────────────────────────────────`);
-      console.log(`🕐 Run #${runCount}  ${ts.toLocaleString()}`);
+      console.log(`🕐 Run #${runCount}  ${new Date().toLocaleString()}`);
 
       let files: string[] = [];
       const stat = fs.statSync(absPath);
@@ -1277,7 +1279,7 @@ program
       const passed     = allResults.filter(r => r.passed).length;
       const failed     = allResults.length - passed;
 
-      const jsonPath = saveResults(allResults, runDir);
+      const jsonPath = saveResults(allResults, runDir, label);
       const rptPath  = path.join(runDir, "report.html");
       new HTMLReporter().generate(allResults, rptPath, { baseUrl: path.basename(absPath) });
 
@@ -1286,26 +1288,25 @@ program
       console.log(`   HTML  → ${rptPath}`);
     };
 
-    const task = cronSchedule(cron, () => { runOnce().catch(console.error); });
+    const task = cronSchedule(cron, () => {
+      runOnce()
+        .then(() => {
+          if (maxRuns !== undefined && runCount >= maxRuns) {
+            console.log(`\n✅ Reached max-runs (${maxRuns}) — stopping scheduler`);
+            task.stop();
+            process.exit(0);
+          }
+        })
+        .catch(console.error);
+    });
 
-    process.on("SIGINT", () => {
+    // process.once — a single SIGINT handler per schedule invocation; avoids
+    // listener accumulation if the command is ever called programmatically.
+    process.once("SIGINT", () => {
       console.log(`\n⏹  Scheduler stopped (${runCount} run(s) completed)`);
       task.stop();
       process.exit(0);
     });
-
-    // maxRuns: poll after each run to stop when limit reached
-    if (maxRuns !== undefined) {
-      const checkDone = setInterval(() => {
-        if (runCount >= maxRuns) {
-          clearInterval(checkDone);
-          console.log(`\n✅ Reached max-runs (${maxRuns}) — stopping scheduler`);
-          task.stop();
-          process.exit(0);
-        }
-      }, 5000);
-      checkDone.unref();  // don't prevent process exit if task already stopped
-    }
   });
 
 // ── import ────────────────────────────────────────────────────────────────────
