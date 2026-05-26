@@ -59,13 +59,14 @@ export class UptimeTracker {
     }).sort((a, b) => a.pct - b.pct);   // worst first
 
     const labelW = Math.max(10, ...rows.map(r => r.label.length));
-    const header = `${"Test file".padEnd(labelW)}  Uptime   Runs  Last run          Last status`;
+    const dateW  = Math.max(18, ...rows.map(r => r.lastDate.length));
+    const header = `${"Test file".padEnd(labelW)}  Uptime   Runs  ${"Last run".padEnd(dateW)}  Last status`;
     const sep    = "─".repeat(header.length);
 
     const lines = rows.map(r => {
       const bar  = uptimeBar(r.pct);
       const pctS = `${r.pct}%`.padStart(4);
-      return `${r.label.padEnd(labelW)}  ${bar} ${pctS}  ${String(r.total).padStart(4)}  ${r.lastDate.padEnd(18)}  ${r.lastStatus}`;
+      return `${r.label.padEnd(labelW)}  ${bar} ${pctS}  ${String(r.total).padStart(4)}  ${r.lastDate.padEnd(dateW)}  ${r.lastStatus}`;
     });
 
     return [sep, header, sep, ...lines, sep].join("\n");

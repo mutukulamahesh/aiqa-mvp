@@ -848,12 +848,13 @@ program
       }
     }
 
-    // Uptime tracking — append per-file pass/fail to rolling 30-day log
-    if (resultsDir) {
+    // Uptime tracking — always write; fall back to results/ when --out is not set
+    {
+      const uptimeDir     = resultsDir ?? path.resolve(process.cwd(), "results");
       const uptimeEntries = orderedResults
         .map((r, idx) => r ? { testFile: files[idx], passed: r.passed, durationMs: r.durationMs } : null)
         .filter((e): e is NonNullable<typeof e> => e !== null);
-      if (uptimeEntries.length > 0) new UptimeTracker(resultsDir).append(uptimeEntries);
+      if (uptimeEntries.length > 0) new UptimeTracker(uptimeDir).append(uptimeEntries);
     }
 
     console.log(`─────────────────────────────────────────\n`);

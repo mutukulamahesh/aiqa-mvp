@@ -1044,7 +1044,7 @@ Any attempt to use `anthropic`, `openai`, `nvidia`, or `gemini` with `privacy_mo
 4. **Verify with `aiqa doctor`:**
    ```
    ✅ Ollama   running — models: llama3, nomic-embed-text
-   🔒 Privacy mode  ENABLED — outbound LLM calls blocked
+   🔒 Privacy mode  ON — only ollama/mock providers permitted (no outbound LLM calls)
    ```
 
 With this setup AIQA runs entirely on your hardware. No API keys, no data egress, no external dependencies.
