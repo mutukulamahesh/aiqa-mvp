@@ -72,10 +72,33 @@ No Node.js install needed. Works on any OS, any tech stack:
 
 ```bash
 docker pull aiqa/aiqa
-docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
+docker pull aiqa/aiqa
+docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
 ```
 
-> Docker image coming soon — tracked in [DEX-03].
+Run all tests in a directory:
+
+```bash
+docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run-all /tests --headless
+```
+
+Pass API keys via environment variables — nothing is baked into the image:
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -v $(pwd)/tests:/tests \
+  -v $(pwd)/config:/app/config \
+  aiqa/aiqa run /tests/ai/translation.yaml --headless
+```
+
+Or use Docker Compose — copy `docker-compose.yml` from the repo root, set keys in `.env`, then:
+
+```bash
+docker compose run aiqa run-all /tests --headless
+```
+
+The image ships with Node 20 and Chromium pre-installed. No Node.js or npm needed on the host.
 
 ### Python wrapper
 

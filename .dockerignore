@@ -1,0 +1,10 @@
+.git
+.claude
+node_modules
+portal/node_modules
+dist
+.aiqa
+*.log
+.env
+coverage
+ARCHITECTURE.html
