@@ -1067,22 +1067,31 @@ program
       let ollamaOk     = false;
       try {
         const { request } = await import("http");
-        const body = await new Promise<string>((resolve, reject) => {
+        const { statusCode, body } = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
           const req = request(`${ollamaBase}/api/tags`, { method: "GET" }, (res) => {
             let data = "";
             res.on("data", (chunk: Buffer) => { data += chunk.toString(); });
-            res.on("end", () => resolve(data));
+            res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body: data }));
           });
           req.on("error", reject);
           req.setTimeout(3000, () => { req.destroy(); reject(new Error("timeout")); });
           req.end();
         });
-        const parsed = JSON.parse(body) as { models?: { name: string }[] };
-        const models = parsed.models ?? [];
-        ollamaOk = true;
-        ollamaStatus = models.length
-          ? `running — ${models.length} model(s): ${models.map(m => m.name).join(", ")}`
-          : `running — no models pulled yet (run: ollama pull llama3.2)`;
+        let parsed: { models?: { name: string }[] };
+        try {
+          parsed = JSON.parse(body) as { models?: { name: string }[] };
+        } catch {
+          ollamaStatus = `running but returned unexpected response (HTTP ${statusCode}) — may be a proxy or old Ollama version`;
+          ollamaOk = true;  // it IS reachable; flag as ok so ⚠️ isn't "not running"
+          parsed = {};
+        }
+        if (!ollamaStatus) {
+          const models = parsed.models ?? [];
+          ollamaOk = true;
+          ollamaStatus = models.length
+            ? `running — ${models.length} model(s): ${models.map(m => m.name).join(", ")}`
+            : `running — no models pulled yet (run: ollama pull llama3.2)`;
+        }
       } catch {
         ollamaStatus = `not running at ${ollamaBase} — start with: ollama serve`;
       }

@@ -60,12 +60,16 @@ export function createLLMProvider(config?: LLMConfig): LLMProvider {
 
   let privacyMode = false;
   try { privacyMode = getConfig().privacy_mode; } catch { /* config not loaded in tests */ }
-  if (privacyMode && resolved.provider !== "ollama" && resolved.provider !== "mock") {
-    throw new Error(
-      `[privacy_mode] Provider "${resolved.provider}" makes outbound calls. ` +
-      `Only "ollama" and "mock" are permitted when privacy_mode is true. ` +
-      `Set llm.provider: ollama in your config or disable privacy_mode.`
-    );
+  if (privacyMode) {
+    const disallowed = [resolved.provider, ...(resolved.fallback ?? [])]
+      .filter(p => p !== "ollama" && p !== "mock");
+    if (disallowed.length > 0) {
+      throw new Error(
+        `[privacy_mode] Provider(s) ${disallowed.join(", ")} make outbound calls. ` +
+        `Only "ollama" and "mock" are permitted when privacy_mode is true. ` +
+        `Remove the disallowed provider(s) from llm.provider / llm.fallback or disable privacy_mode.`
+      );
+    }
   }
 
   let primary: LLMProvider;
