@@ -607,10 +607,10 @@ Fix the friction that kills adoption before a developer sees any value.
 | DEX-08 | GitHub Actions native action — `uses: aiqa/aiqa-action@v1`; no install step in CI at all | CI teams | [x] |
 | DEX-09 | Maven plugin — `mvn aiqa:run`; Java enterprise teams; shells out to Docker or Node CLI | #2 Node.js only (Java shops) | [x] |
 | DEX-10 | Gradle plugin — `./gradlew aiqaRun`; Spring Boot / Android teams | #2 Node.js only (Java shops) | [x] |
-| DEX-11 | REST API language-native Python client — `pip install aiqa-client` calls AIQA REST API; no Node required at all | advanced, air-gapped | [ ] |
-| DEX-12 | REST API language-native Java client — Maven artifact calling AIQA REST API | advanced, Java enterprise | [ ] |
-| DEX-13 | VS Code extension MVP — right-click YAML → run, live results panel, inline failure highlighting, YAML autocomplete; depends on DEX-11 REST API client | IDE integration | [ ] |
-| DEX-14 | JetBrains plugin — same feature set as VS Code extension; targets IntelliJ IDEA, PyCharm, WebStorm | IDE integration (Java/Python shops) | [ ] |
+| DEX-11 | REST API language-native Python client — `pip install aiqa-client` calls AIQA REST API; no Node required at all | advanced, air-gapped | [x] |
+| DEX-12 | REST API language-native Java client — Maven artifact calling AIQA REST API | advanced, Java enterprise | [x] |
+| DEX-13 | VS Code extension MVP — right-click YAML → run, live results panel, inline failure highlighting, YAML autocomplete; depends on DEX-11 REST API client | IDE integration | [x] |
+| DEX-14 | JetBrains plugin — same feature set as VS Code extension; targets IntelliJ IDEA, PyCharm, WebStorm | IDE integration (Java/Python shops) | [x] |
 
 ### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
 The engineering quality is invisible until you dig in. Make it visible upfront.

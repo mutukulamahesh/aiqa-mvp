@@ -151,7 +151,7 @@ jira:
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
 - **Active:** EPIC-DEX/MON — agreed order:
-  DEX-03 ✅ → DEX-07 ✅ → DEX-06 ✅ → DEX-05 ✅ → LOCAL-02/04 ✅ → MON-01 ✅ → DEX-08/09/10 ✅ → DEX-11/12 REST API clients (last)
+  DEX-03 ✅ → DEX-07 ✅ → DEX-06 ✅ → DEX-05 ✅ → LOCAL-02/04 ✅ → MON-01 ✅ → DEX-08/09/10 ✅ → DEX-11/12/13/14 ✅ — EPIC-DEX COMPLETE
 - **Next epics after DEX:** EPIC-LOCAL, EPIC-OSS, EPIC-MON
 
 ### Phase 5 stories — ALL COMPLETE ✅

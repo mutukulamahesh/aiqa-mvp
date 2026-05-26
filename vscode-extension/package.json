@@ -1,0 +1,90 @@
+{
+  "name": "aiqa",
+  "displayName": "AIQA",
+  "description": "AI-powered QA — run YAML test suites from VS Code",
+  "version": "1.0.0",
+  "publisher": "aiqa",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mutukulamahesh/aiqa-mvp"
+  },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Testing", "Other"],
+  "keywords": ["qa", "testing", "ai", "playwright", "yaml"],
+  "icon": "images/icon.png",
+  "activationEvents": ["onLanguage:yaml"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiqa.runFile",
+        "title": "AIQA: Run Test File"
+      },
+      {
+        "command": "aiqa.runAll",
+        "title": "AIQA: Run All Tests"
+      },
+      {
+        "command": "aiqa.showResults",
+        "title": "AIQA: Show Results Panel"
+      },
+      {
+        "command": "aiqa.openSettings",
+        "title": "AIQA: Open Settings"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .yaml || resourceExtname == .yml",
+          "command": "aiqa.runFile",
+          "group": "aiqa"
+        }
+      ],
+      "editor/context": [
+        {
+          "when": "resourceExtname == .yaml || resourceExtname == .yml",
+          "command": "aiqa.runFile",
+          "group": "aiqa"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AIQA",
+      "properties": {
+        "aiqa.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:7432",
+          "description": "URL of the running AIQA server (aiqa serve)"
+        },
+        "aiqa.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "AIQA_API_KEY — leave blank if server runs with AIQA_ALLOW_OPEN_MODE=true"
+        },
+        "aiqa.headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run browser in headless mode"
+        },
+        "aiqa.pollIntervalMs": {
+          "type": "number",
+          "default": 2000,
+          "description": "How often (ms) to poll for run completion"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch":   "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node":   "^20.0.0",
+    "typescript":    "^5.3.0",
+    "@vscode/vsce":  "^2.24.0"
+  }
+}

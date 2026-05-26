@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.aiqa</groupId>
+  <artifactId>aiqa-java-client</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>AIQA Java Client</name>
+  <description>Java client for the AIQA REST API — no Node.js required</description>
+  <url>https://github.com/mutukulamahesh/aiqa-mvp</url>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/licenses/MIT</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>mutukulamahesh</id>
+      <name>Mahesh Mutukula</name>
+      <email>mmk.mutu@gmail.com</email>
+      <url>https://github.com/mutukulamahesh</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:git://github.com/mutukulamahesh/aiqa-mvp.git</connection>
+    <developerConnection>scm:git:ssh://github.com/mutukulamahesh/aiqa-mvp.git</developerConnection>
+    <url>https://github.com/mutukulamahesh/aiqa-mvp/tree/main/java-client</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <!-- Zero runtime dependencies — uses only java.net.http (Java 11+) and org.json
+       for JSON parsing. org.json is the smallest compliant JSON library with no
+       transitive deps. Teams that prefer Jackson or Gson can swap _JsonHelper. -->
+  <dependencies>
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20240303</version>
+    </dependency>
+  </dependencies>
+</project>
