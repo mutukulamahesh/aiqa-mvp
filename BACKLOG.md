@@ -604,9 +604,9 @@ Fix the friction that kills adoption before a developer sees any value.
 | DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [x] |
 | DEX-06 | Python wrapper — `pip install aiqa-runner` shells out to Node CLI; thin, honest, no re-implementation | #2 Node.js only | [x] |
 | DEX-07 | Shell script installer — `curl -fsSL https://get.aiqa.dev \| sh` installs Node + AIQA silently; targets Linux/macOS CI | #4 air-gapped CI, #2 Node.js only | [x] |
-| DEX-08 | GitHub Actions native action — `uses: aiqa/aiqa-action@v1`; no install step in CI at all | CI teams | [ ] |
-| DEX-09 | Maven plugin — `mvn aiqa:run`; Java enterprise teams; shells out to Docker or Node CLI | #2 Node.js only (Java shops) | [ ] |
-| DEX-10 | Gradle plugin — `./gradlew aiqaRun`; Spring Boot / Android teams | #2 Node.js only (Java shops) | [ ] |
+| DEX-08 | GitHub Actions native action — `uses: aiqa/aiqa-action@v1`; no install step in CI at all | CI teams | [x] |
+| DEX-09 | Maven plugin — `mvn aiqa:run`; Java enterprise teams; shells out to Docker or Node CLI | #2 Node.js only (Java shops) | [x] |
+| DEX-10 | Gradle plugin — `./gradlew aiqaRun`; Spring Boot / Android teams | #2 Node.js only (Java shops) | [x] |
 | DEX-11 | REST API language-native Python client — `pip install aiqa-client` calls AIQA REST API; no Node required at all | advanced, air-gapped | [ ] |
 | DEX-12 | REST API language-native Java client — Maven artifact calling AIQA REST API | advanced, Java enterprise | [ ] |
 | DEX-13 | VS Code extension MVP — right-click YAML → run, live results panel, inline failure highlighting, YAML autocomplete; depends on DEX-11 REST API client | IDE integration | [ ] |
