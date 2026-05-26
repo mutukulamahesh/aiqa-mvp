@@ -72,7 +72,6 @@ No Node.js install needed. Works on any OS, any tech stack:
 
 ```bash
 docker pull aiqa/aiqa
-docker pull aiqa/aiqa
 docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
 ```
 
@@ -81,6 +80,8 @@ Run all tests in a directory:
 ```bash
 docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run-all /tests --headless
 ```
+
+> Add `-v $(pwd)/config:/app/config` to any `docker run` command to use your own environment config (custom URLs, Ollama `baseUrl`, etc.). Without it the baked-in `dev` config is used.
 
 Pass API keys via environment variables — nothing is baked into the image:
 

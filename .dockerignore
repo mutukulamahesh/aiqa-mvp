@@ -2,7 +2,7 @@
 .claude
 node_modules
 portal/node_modules
-dist
+**/dist
 .aiqa
 *.log
 .env

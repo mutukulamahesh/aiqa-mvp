@@ -1,42 +1,23 @@
 FROM node:20-slim
 
-# Install system dependencies required by Playwright
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libxss1 \
-    libxtst6 \
-    xdg-utils \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Install dependencies first (layer cache)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
-# Install Playwright browsers
+# Install Playwright Chromium + all system deps in one step
+# --with-deps handles the full OS dependency list; no manual apt-get list needed
 RUN npx playwright install chromium --with-deps
 
-# Copy source
+# Prune dev dependencies after browser install (playwright is in devDeps)
+RUN npm prune --omit=dev
+
+# Copy source and hand ownership to the non-root node user
 COPY . .
+RUN chown -R node:node /app
+
+USER node
 
 # Mount point for user test files
 VOLUME ["/tests"]
