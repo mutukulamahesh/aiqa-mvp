@@ -113,14 +113,21 @@ aiqa run tests/login.yaml
 
 ### Shell script (Linux / macOS / CI)
 
-One-liner that installs everything silently — no manual Node.js setup:
+One-liner that installs Node.js (via nvm if needed), clones AIQA, and links the CLI — no manual setup:
 
 ```bash
-curl -fsSL https://get.aiqa.dev | sh
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | sh
 aiqa run tests/login.yaml
 ```
 
-> Shell installer coming soon — tracked in [DEX-07].
+**Windows (PowerShell):**
+
+```powershell
+iwr https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.ps1 | iex
+aiqa run tests\login.yaml
+```
+
+The script detects whether Node.js is already installed and skips the install if version ≥ 18 is present. Playwright Chromium is installed automatically.
 
 ---
 
