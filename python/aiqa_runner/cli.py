@@ -3,26 +3,25 @@ Entry point for the aiqa-runner Python wrapper.
 Locates the AIQA Node CLI and delegates all arguments to it.
 """
 
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
-# Known install locations produced by install.sh / npm link
+# Known install location produced by install.sh
 _CANDIDATE_SCRIPTS = [
     Path.home() / ".aiqa-runner" / "bin" / "aiqa.js",  # install.sh default
-    Path.home() / ".aiqa-runner" / "bin" / "aiqa",     # npm link symlink
 ]
 
 _MIN_NODE_MAJOR = 18
 
 
-def _find_node() -> str | None:
+def _find_node() -> Optional[str]:
     return shutil.which("node")
 
 
-def _find_aiqa_script() -> Path | None:
+def _find_aiqa_script() -> Optional[Path]:
     for candidate in _CANDIDATE_SCRIPTS:
         if candidate.exists():
             return candidate
@@ -84,15 +83,12 @@ def _die_old_node(node: str) -> None:
 
 def _die_no_aiqa() -> None:
     print(
-        "[aiqa] AIQA CLI not found. Install it with one of:\n"
+        "[aiqa] AIQA CLI not found. Install it with:\n"
         "         # shell installer (Linux/macOS)\n"
         "         curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash\n"
         "\n"
         "         # Docker (no Node.js needed)\n"
-        "         docker pull aiqa/aiqa\n"
-        "\n"
-        "         # npm global install\n"
-        "         npm install -g aiqa-mvp",
+        "         docker pull aiqa/aiqa",
         file=sys.stderr,
     )
     sys.exit(1)
