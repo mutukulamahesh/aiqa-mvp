@@ -116,6 +116,9 @@ const EnvConfigSchema = z.object({
     }).optional(),
   }).default({ enabled: false, indexPath: ".aiqa/knowledge", topK: 5, chunker: "naive", reranker: { strategy: "cosine", semanticWeight: 0.6, recencyWeight: 0.2, severityWeight: 0.1, sourceWeight: 0.1 }, connectors: [] }),
 
+  // LOCAL-04: block all outbound LLM calls — only "ollama" and "mock" are permitted when true.
+  privacy_mode: z.boolean().default(false),
+
   // db_schema — optional route→table hints used by FlowMapper to suggest db: validation steps.
   // Keys are route prefixes (e.g. "/api/users"); values declare the target table and primary key.
   // Omitting this section disables DB suggestion entirely — no runtime effect otherwise.

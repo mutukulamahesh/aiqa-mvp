@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 import { logger } from "../utils/logger";
+import { getConfig } from "../config/ConfigLoader";
 // Provider modules are lazy-loaded via require() so that missing optional dependencies
 // (e.g. no @anthropic-ai/sdk installed) only throw at runtime when that provider is
 // actually used — not at import time when another provider is configured.
@@ -56,6 +57,16 @@ export interface LLMConfig {
  */
 export function createLLMProvider(config?: LLMConfig): LLMProvider {
   const resolved = config ?? resolveFromEnv();
+
+  let privacyMode = false;
+  try { privacyMode = getConfig().privacy_mode; } catch { /* config not loaded in tests */ }
+  if (privacyMode && resolved.provider !== "ollama" && resolved.provider !== "mock") {
+    throw new Error(
+      `[privacy_mode] Provider "${resolved.provider}" makes outbound calls. ` +
+      `Only "ollama" and "mock" are permitted when privacy_mode is true. ` +
+      `Set llm.provider: ollama in your config or disable privacy_mode.`
+    );
+  }
 
   let primary: LLMProvider;
   try {

@@ -1053,6 +1053,43 @@ program
     try { require.resolve("@anthropic-ai/sdk"); sdkInstalled = true; } catch { /* ok */ }
     console.log(`${sdkInstalled ? "✅" : "⚠️ "} @anthropic-ai/sdk  ${sdkInstalled ? "installed" : "not installed → run: npm install @anthropic-ai/sdk"}`);
 
+    // Privacy mode (LOCAL-04)
+    let privacyMode = false;
+    try { privacyMode = loadConfig(_envName).privacy_mode; } catch { /* ok */ }
+    console.log(`${privacyMode ? "🔒" : "🌐"} Privacy mode  ${privacyMode ? "ON — only ollama/mock providers permitted (no outbound LLM calls)" : "OFF — outbound LLM calls allowed"}`);
+
+    // Ollama (LOCAL-02) — informational; Ollama is optional
+    {
+      const ollamaBase = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
+      const ollamaSpin = new Spinner();
+      ollamaSpin.start("Ollama — checking local instance…");
+      let ollamaStatus = "";
+      let ollamaOk     = false;
+      try {
+        const { request } = await import("http");
+        const body = await new Promise<string>((resolve, reject) => {
+          const req = request(`${ollamaBase}/api/tags`, { method: "GET" }, (res) => {
+            let data = "";
+            res.on("data", (chunk: Buffer) => { data += chunk.toString(); });
+            res.on("end", () => resolve(data));
+          });
+          req.on("error", reject);
+          req.setTimeout(3000, () => { req.destroy(); reject(new Error("timeout")); });
+          req.end();
+        });
+        const parsed = JSON.parse(body) as { models?: { name: string }[] };
+        const models = parsed.models ?? [];
+        ollamaOk = true;
+        ollamaStatus = models.length
+          ? `running — ${models.length} model(s): ${models.map(m => m.name).join(", ")}`
+          : `running — no models pulled yet (run: ollama pull llama3.2)`;
+      } catch {
+        ollamaStatus = `not running at ${ollamaBase} — start with: ollama serve`;
+      }
+      ollamaSpin.stop();
+      console.log(`${ollamaOk ? "✅" : "⚠️ "} Ollama  ${ollamaStatus}`);
+    }
+
     // Playwright browsers (slow — show spinner)
     const spin = new Spinner();
     spin.start("Playwright Chromium — launching test browser…");
