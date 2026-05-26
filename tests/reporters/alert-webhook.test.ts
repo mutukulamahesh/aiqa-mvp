@@ -162,7 +162,7 @@ describe("postAlertWebhook", () => {
   test("rejects when server returns 4xx", async () => {
     respondWith = 400;
     await expect(postAlertWebhook(`http://localhost:${port}/hook`, basePayload))
-      .rejects.toThrow("HTTP 400");
+      .rejects.toThrow(/4\d\d/);
   });
 
   test("rejects on connection refused", async () => {

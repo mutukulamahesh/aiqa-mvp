@@ -143,15 +143,14 @@ describe("UptimeTracker.formatSummary", () => {
     expect(out.indexOf("bad.yaml")).toBeLessThan(out.indexOf("good.yaml"));
   });
 
-  test("column header width adapts to long date strings", () => {
-    const dir  = makeTmpDir();
-    const now  = new Date().toLocaleString();
-    const log  = { "/abs/tests/a.yaml": [{ date: new Date().toISOString(), passed: true, durationMs: 100 }] };
-    const out  = new UptimeTracker(dir).formatSummary(log, "/abs");
-    expect(out).toContain("Last run");
-    const headerLine = out.split("\n").find(l => l.includes("Last run"))!;
-    const dataLine   = out.split("\n").find(l => l.includes("a.yaml"))!;
-    expect(dataLine.length).toBeGreaterThanOrEqual(headerLine.length - 5);
+  test("full date string appears untruncated in output", () => {
+    const dir      = makeTmpDir();
+    const isoDate  = new Date().toISOString();
+    const log      = { "/abs/tests/a.yaml": [{ date: isoDate, passed: true, durationMs: 100 }] };
+    const out      = new UptimeTracker(dir).formatSummary(log, "/abs");
+    const displayed = new Date(isoDate).toLocaleString();
+    // dynamic dateW means the date is never padded to fewer chars than its actual length
+    expect(out).toContain(displayed);
   });
 
   test("shows run count", () => {
