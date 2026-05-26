@@ -1228,6 +1228,21 @@ tests/
 
 ---
 
+## Open-core model
+
+AIQA is open-core. The engine is free and stays free.
+
+| Tier | What's included | Price |
+|---|---|---|
+| **Core** (this repo) | Full CLI, YAML DSL, Playwright runner, LLM judge, self-healing selectors, RAG knowledge layer, REST + WebSocket API, portal, all integrations, VS Code + JetBrains plugins | Free forever · Apache-2.0 |
+| **Cloud** *(roadmap)* | Hosted execution — run tests without managing infrastructure; team dashboards; parallel workers on demand; SLA-backed uptime | Paid · per seat or per minute |
+
+The Cloud tier will never gate features that exist in Core today. If it's in this repo, it stays free.
+
+If you are running AIQA on your own infrastructure, self-hosting is fully supported and always will be. The `privacy_mode` flag, Ollama integration, and local RAG index exist precisely for teams that cannot send data to a third-party cloud.
+
+---
+
 ## License
 
 Copyright 2026 Mahesh Mutukula

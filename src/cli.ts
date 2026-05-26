@@ -524,6 +524,69 @@ program
     console.log(`─────────────────────────────────────────\n`);
   });
 
+// ── badge ─────────────────────────────────────────────────────────────────────
+
+program
+  .command("badge <results>")
+  .description("Generate an embeddable Readiness Score SVG badge from a results JSON file")
+  .option("--out <file>", "Write SVG to file instead of printing to stdout")
+  .option("--label <text>", "Badge label text (default: AIQA Readiness)")
+  .action((resultsFile: string, opts: { out?: string; label?: string }) => {
+    let data;
+    try {
+      const raw = fs.readFileSync(path.resolve(process.cwd(), resultsFile), "utf-8");
+      data = JSON.parse(raw);
+    } catch (err) {
+      console.error(`❌ Could not read results file: ${(err as Error).message}`);
+      process.exit(1);
+    }
+
+    const results = Array.isArray(data) ? data : [data];
+    const scorer  = new ReadinessScorer();
+    const report  = scorer.score(results);
+    const score   = report.score;
+    const grade   = report.grade;
+
+    const colour = score >= 80 ? "#4c1" : score >= 60 ? "#dfb317" : "#e05d44";
+    const label  = opts.label ?? "AIQA Readiness";
+    const value  = `${score}/100 ${grade}`;
+
+    // Widths computed to match shields.io proportions (11px Verdana)
+    const labelW = label.length * 6.5 + 10;
+    const valueW = value.length * 6.5 + 10;
+    const totalW = labelW + valueW;
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="20">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0"  stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1"  stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="${totalW}" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="${labelW}" height="20" fill="#555"/>
+    <rect x="${labelW}" width="${valueW}" height="20" fill="${colour}"/>
+    <rect width="${totalW}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <text x="${labelW / 2}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
+    <text x="${labelW / 2}" y="14">${label}</text>
+    <text x="${labelW + valueW / 2}" y="15" fill="#010101" fill-opacity=".3">${value}</text>
+    <text x="${labelW + valueW / 2}" y="14">${value}</text>
+  </g>
+</svg>`;
+
+    if (opts.out) {
+      const outPath = path.resolve(process.cwd(), opts.out);
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      fs.writeFileSync(outPath, svg);
+      console.log(`✅ Badge written to ${outPath}`);
+      console.log(`\nEmbed in your README:`);
+      console.log(`  ![AIQA Readiness](${opts.out})`);
+    } else {
+      console.log(svg);
+    }
+  });
+
 // ── run-all ───────────────────────────────────────────────────────────────────
 
 program

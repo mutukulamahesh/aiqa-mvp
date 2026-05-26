@@ -617,11 +617,11 @@ The engineering quality is invisible until you dig in. Make it visible upfront.
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
-| OSS-01 | `CHANGELOG.md` — semantic versioning, entry per release with migration notes | #3 one contributor | [ ] |
-| OSS-02 | `CONTRIBUTING.md` — local dev setup, test conventions, PR checklist | #3 one contributor | [ ] |
-| OSS-03 | Publish open-core business model in README — "Core: forever free. Cloud: hosted execution for teams" | #8 monetisation fear | [ ] |
-| OSS-04 | GitHub Discussions enabled + pinned "Roadmap & Q3 2026 goals" thread | #3 no community signals | [ ] |
-| OSS-05 | Readiness Score badge — `[![AIQA Readiness](badge-url)](report-url)` embeddable in repo READMEs | marketing | [ ] |
+| OSS-01 | `CHANGELOG.md` — semantic versioning, entry per release with migration notes | #3 one contributor | [x] |
+| OSS-02 | `CONTRIBUTING.md` — local dev setup, test conventions, PR checklist | #3 one contributor | [x] |
+| OSS-03 | Publish open-core business model in README — "Core: forever free. Cloud: hosted execution for teams" | #8 monetisation fear | [x] |
+| OSS-04 | GitHub Discussions enabled + pinned "Roadmap & Q3 2026 goals" thread | #3 no community signals | [ ] manual — enable in GitHub repo Settings → Discussions |
+| OSS-05 | Readiness Score badge — `[![AIQA Readiness](badge-url)](report-url)` embeddable in repo READMEs | marketing | [x] |
 
 ### EPIC-LOCAL · Local-First & Privacy Mode `[HIGH PRIORITY]`
 Unlock enterprise teams that block external API calls.
