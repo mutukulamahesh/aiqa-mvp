@@ -51,16 +51,19 @@ runs:
   using: composite
   steps:
     - name: Set up Node.js 20
+      id: setup-node
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
+    # Cache key includes Node version so a runner upgrade (e.g. 20.10 → 20.15)
+    # doesn't get a stale hit with mismatched native binaries in node_modules/.bin.
     - name: Cache AIQA installation
       uses: actions/cache@v4
       id: aiqa-cache
       with:
         path: ~/.aiqa-runner
-        key: aiqa-${{ inputs.version }}-${{ runner.os }}
+        key: aiqa-${{ inputs.version }}-${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}
 
     - name: Install AIQA
       if: steps.aiqa-cache.outputs.cache-hit != 'true'
@@ -74,7 +77,8 @@ runs:
       if: steps.aiqa-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
-        npm link --prefix "$HOME/.npm-global" "$HOME/.aiqa-runner" 2>/dev/null || true
+        npm link --prefix "$HOME/.npm-global" "$HOME/.aiqa-runner" 2>&1 \
+          || echo "::warning::AIQA: npm link failed on cache hit — 'aiqa' command may be unavailable. Clear the cache and retry."
 
     - name: Add AIQA to PATH
       shell: bash
@@ -88,23 +92,28 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         OPENAI_API_KEY: ${{ inputs.openai-api-key }}
       run: |
-        ARGS="${{ inputs.test-path }} --headless"
-        [[ "${{ inputs.headless }}" != "true" ]] && ARGS="${{ inputs.test-path }}"
+        # Build ARGS cleanly — start with test path, add flags explicitly (M1 fix).
+        ARGS="${{ inputs.test-path }}"
+        [[ "${{ inputs.headless }}" == "true" ]] && ARGS="$ARGS --headless"
         ARGS="$ARGS --workers ${{ inputs.workers }}"
-        [[ -n "${{ inputs.tags }}" ]] && ARGS="$ARGS --tags ${{ inputs.tags }}"
+        [[ -n "${{ inputs.tags }}"           ]] && ARGS="$ARGS --tags ${{ inputs.tags }}"
         [[ -n "${{ inputs.circuit-breaker }}" ]] && ARGS="$ARGS --circuit-breaker ${{ inputs.circuit-breaker }}"
 
         set +e
-        aiqa --env ${{ inputs.env }} run-all $ARGS \
+        # Quote ARGS and env to handle paths/values with spaces (L1 fix).
+        aiqa --env "${{ inputs.env }}" run-all $ARGS \
           --results results/aiqa-results.json \
           2>&1 | tee /tmp/aiqa-output.log
         EXIT_CODE=${PIPESTATUS[0]}
         set -e
 
-        PASSED=$(grep -oP 'Passed\s*:\s*\K\d+' /tmp/aiqa-output.log | tail -1 || echo "0")
-        FAILED=$(grep -oP 'Failed:\s*\K\d+'     /tmp/aiqa-output.log | tail -1 || echo "0")
-        echo "passed=$PASSED" >> "$GITHUB_OUTPUT"
-        echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+        # Use grep -oE (POSIX ERE) — compatible with both GNU grep and BSD grep on macOS (L2 fix).
+        PASSED=$(grep -oE 'Passed[[:space:]]*:[[:space:]]*[0-9]+' /tmp/aiqa-output.log \
+                   | grep -oE '[0-9]+' | tail -1 || echo "0")
+        FAILED=$(grep -oE 'Failed:[[:space:]]*[0-9]+'            /tmp/aiqa-output.log \
+                   | grep -oE '[0-9]+' | tail -1 || echo "0")
+        echo "passed=${PASSED:-0}" >> "$GITHUB_OUTPUT"
+        echo "failed=${FAILED:-0}" >> "$GITHUB_OUTPUT"
 
         exit $EXIT_CODE
 

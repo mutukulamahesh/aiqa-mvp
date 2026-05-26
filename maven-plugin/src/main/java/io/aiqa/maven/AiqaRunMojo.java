@@ -146,15 +146,13 @@ public class AiqaRunMojo extends AbstractMojo {
     private static boolean isCommandAvailable(String command) {
         String pathEnv = System.getenv("PATH");
         if (pathEnv == null) return false;
-        String separator = File.pathSeparator;
-        String execSuffix = System.getProperty("os.name", "").toLowerCase().contains("win") ? ".cmd" : "";
-        for (String dir : pathEnv.split(separator)) {
-            File f = new File(dir, command + execSuffix);
-            if (f.canExecute()) return true;
-            if (execSuffix.isEmpty()) {
-                // Also check .exe on Windows
-                File exe = new File(dir, command + ".exe");
-                if (exe.canExecute()) return true;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        List<String> suffixes = isWindows
+            ? Arrays.asList(".cmd", ".exe", "")
+            : Arrays.asList("");
+        for (String dir : pathEnv.split(File.pathSeparator)) {
+            for (String suffix : suffixes) {
+                if (new File(dir, command + suffix).canExecute()) return true;
             }
         }
         return false;
