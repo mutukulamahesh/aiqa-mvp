@@ -2,6 +2,8 @@
 import { Command } from "commander";
 import * as path from "path";
 import * as fs from "fs";
+import * as http from "http";
+import * as https from "https";
 import { parseTestFile } from "./dsl/DslParser";
 import { TestRunner } from "./runner/TestRunner";
 import { AppExplorer } from "./agents/AppExplorer";
@@ -22,6 +24,7 @@ import { SelectorHealer } from "./healer/SelectorHealer";
 import { MemoryStore } from "./memory/MemoryStore";
 import { HealerAnalytics } from "./healer/HealerAnalytics";
 import { cleanArtifacts, warnLargeFile } from "./utils/StorageManager";
+import { UptimeTracker } from "./reporters/UptimeTracker";
 import { getChangedFiles, getGitRoot, isShallowClone } from "./impact/GitDiffParser";
 import { ImpactMapper } from "./impact/ImpactMapper";
 
@@ -67,6 +70,96 @@ function saveResults(results: unknown[], dir: string, label?: string): string {
   const filePath = path.join(dir, `run-${label ?? runTimestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
   return filePath;
+}
+
+interface WebhookPayload {
+  runId: string;
+  passed: number;
+  failed: number;
+  total: number;
+  failures: Array<{ testName: string; error?: string }>;
+}
+
+async function postAlertWebhook(webhookUrl: string, payload: WebhookPayload): Promise<void> {
+  const parsed = new URL(webhookUrl);
+  const { hostname } = parsed;
+  const summary = `AIQA: ${payload.failed}/${payload.total} tests failed (run ${payload.runId})`;
+  const failureLines = payload.failures
+    .map(f => `• ${f.testName}${f.error ? `: ${f.error}` : ""}`)
+    .join("\n");
+
+  let body: unknown;
+  if (hostname === "hooks.slack.com") {
+    body = {
+      text: summary,
+      attachments: [{
+        color: "danger",
+        fields: [
+          { title: "Passed",   value: String(payload.passed), short: true },
+          { title: "Failed",   value: String(payload.failed), short: true },
+          { title: "Run ID",   value: payload.runId,          short: true },
+          { title: "Failures", value: failureLines || "—",    short: false },
+        ],
+      }],
+    };
+  } else if (hostname.endsWith("webhook.office.com")) {
+    body = {
+      "@type":    "MessageCard",
+      "@context": "http://schema.org/extensions",
+      themeColor: "FF0000",
+      summary,
+      sections: [{
+        activityTitle:    summary,
+        activitySubtitle: `Passed: ${payload.passed}  Failed: ${payload.failed}  Total: ${payload.total}`,
+        facts: payload.failures.map(f => ({ name: f.testName, value: f.error ?? "failed" })),
+      }],
+    };
+  } else if (hostname === "events.pagerduty.com") {
+    const routingKey = parsed.searchParams.get("routing_key") ?? "";
+    body = {
+      routing_key:  routingKey,
+      event_action: "trigger",
+      dedup_key:    payload.runId,
+      payload: {
+        summary,
+        severity: "error",
+        source:   "aiqa",
+        custom_details: {
+          passed:   payload.passed,
+          failed:   payload.failed,
+          total:    payload.total,
+          failures: payload.failures.map(f => f.testName),
+        },
+      },
+    };
+  } else {
+    body = { status: "failed", ...payload };
+  }
+
+  const data = Buffer.from(JSON.stringify(body));
+  const lib  = parsed.protocol === "https:" ? https : http;
+
+  await new Promise<void>((resolve, reject) => {
+    const req = lib.request(
+      {
+        hostname: parsed.hostname,
+        port:     parsed.port || (parsed.protocol === "https:" ? "443" : "80"),
+        path:     parsed.pathname + parsed.search,
+        method:   "POST",
+        headers:  { "Content-Type": "application/json", "Content-Length": data.length },
+      },
+      (res) => {
+        res.resume();
+        (res.statusCode ?? 0) >= 400
+          ? reject(new Error(`Webhook returned HTTP ${res.statusCode}`))
+          : resolve();
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(10_000, () => req.destroy(new Error("Webhook timeout")));
+    req.write(data);
+    req.end();
+  });
 }
 
 // ── init ──────────────────────────────────────────────────────────────────────
@@ -446,6 +539,7 @@ program
   .option("--circuit-breaker <n>",  "Abort suite after N consecutive failures (default: from env config)")
   .option("--allure [dir]",         "Generate Allure JSON results (default dir: allure-results/)")
   .option("--slack",                "Post run summary to Slack (reads SLACK_WEBHOOK_URL from env)")
+  .option("--alert-webhook <url>",  "POST failure alert to Slack / Teams / PagerDuty / custom URL (on failures only)")
   .option("--email <recipients>",   "Email HTML report to comma-separated addresses (reads SMTP_* from env)")
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
@@ -454,7 +548,7 @@ program
   .option("--junit <file>",         "Write JUnit XML report to <file> (for CI test result parsers)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
-    allure?: string | boolean; slack?: boolean; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
+    allure?: string | boolean; slack?: boolean; alertWebhook?: string; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
     impactOnly?: string | boolean; junit?: string;
   }) => {
     const config       = cfg();
@@ -754,6 +848,15 @@ program
       }
     }
 
+    // Uptime tracking — always write; fall back to results/ when --out is not set
+    {
+      const uptimeDir     = resultsDir ?? path.resolve(process.cwd(), "results");
+      const uptimeEntries = orderedResults
+        .map((r, idx) => r ? { testFile: files[idx], passed: r.passed, durationMs: r.durationMs } : null)
+        .filter((e): e is NonNullable<typeof e> => e !== null);
+      if (uptimeEntries.length > 0) new UptimeTracker(uptimeDir).append(uptimeEntries);
+    }
+
     console.log(`─────────────────────────────────────────\n`);
     const suiteHealerReport = sharedHealer.getReport();
     if (suiteHealerReport) console.log(suiteHealerReport);
@@ -833,6 +936,16 @@ program
           }
         }
       }
+    }
+
+    // Alert webhook — fires only when there are failures
+    if (opts.alertWebhook && failed > 0) {
+      const failures = allResults
+        .filter(r => !r.passed)
+        .map(r => ({ testName: r.testName, error: r.error as string | undefined }));
+      await postAlertWebhook(opts.alertWebhook, { runId, passed, failed, total: allResults.length, failures })
+        .then(() => console.log(`   Webhook → sent to ${opts.alertWebhook}`))
+        .catch(e => console.warn(`   ⚠️  Alert webhook failed: ${(e as Error).message}`));
     }
 
     process.exit(failed > 0 ? 1 : 0);
@@ -1172,17 +1285,44 @@ program
     }
   });
 
+// ── uptime ────────────────────────────────────────────────────────────────────
+
+program
+  .command("uptime [dir]")
+  .description("Show rolling 30-day pass/fail uptime history per test file")
+  .option("--json", "Output raw uptime.json data instead of the summary table")
+  .action((dir: string | undefined, opts: { json?: boolean }) => {
+    const resultsDir = path.resolve(process.cwd(), dir ?? "results");
+    const tracker    = new UptimeTracker(resultsDir);
+    const log        = tracker.read();
+
+    if (opts.json) {
+      console.log(JSON.stringify(log, null, 2));
+      return;
+    }
+
+    const keys = Object.keys(log);
+    console.log(`\n📊 AIQA Uptime — 30-day history  [${resultsDir}]\n`);
+    if (keys.length === 0) {
+      console.log("  (no uptime history yet — run tests with --out to start tracking)\n");
+      return;
+    }
+    console.log(tracker.formatSummary(log, process.cwd()));
+    console.log();
+  });
+
 // ── schedule ──────────────────────────────────────────────────────────────────
 
 program
   .command("schedule <cron> <testPath>")
   .description('Run tests on a recurring cron schedule — e.g. aiqa schedule "*/5 * * * *" tests/smoke/')
-  .option("--headless",      "Run browser in headless mode (default: from env config)")
-  .option("--workers <n>",   "Number of parallel workers (default: from env config)")
-  .option("--max-runs <n>",  "Stop after N runs (omit for indefinite; useful for CI smoke checks)")
-  .option("--out <dir>",     "Write results under <dir>/ (default: results/scheduled/)")
+  .option("--headless",             "Run browser in headless mode (default: from env config)")
+  .option("--workers <n>",          "Number of parallel workers (default: from env config)")
+  .option("--max-runs <n>",         "Stop after N runs (omit for indefinite; useful for CI smoke checks)")
+  .option("--out <dir>",            "Write results under <dir>/ (default: results/scheduled/)")
+  .option("--alert-webhook <url>",  "POST failure alert to Slack / Teams / PagerDuty / custom URL (on failures only)")
   .action(async (cron: string, testPath: string, opts: {
-    headless?: boolean; workers?: string; maxRuns?: string; out?: string;
+    headless?: boolean; workers?: string; maxRuns?: string; out?: string; alertWebhook?: string;
   }) => {
     const { schedule: cronSchedule, validate: cronValidate } = await import("node-cron");
 
@@ -1283,9 +1423,24 @@ program
       const rptPath  = path.join(runDir, "report.html");
       new HTMLReporter().generate(allResults, rptPath, { baseUrl: path.basename(absPath) });
 
+      // Uptime tracking — write to parent outBase so history accumulates across runs
+      const uptimeEntries = orderedResults
+        .map((r, idx) => r ? { testFile: files[idx], passed: r.passed, durationMs: r.durationMs } : null)
+        .filter((e): e is NonNullable<typeof e> => e !== null);
+      if (uptimeEntries.length > 0) new UptimeTracker(outBase).append(uptimeEntries);
+
       console.log(`   Passed : ${passed}   Failed: ${failed}`);
       console.log(`   JSON  → ${jsonPath}`);
       console.log(`   HTML  → ${rptPath}`);
+
+      if (opts.alertWebhook && failed > 0) {
+        const failures = allResults
+          .filter(r => !r.passed)
+          .map(r => ({ testName: r.testName, error: r.error as string | undefined }));
+        await postAlertWebhook(opts.alertWebhook, { runId: label, passed, failed, total: allResults.length, failures })
+          .then(() => console.log(`   Webhook → sent`))
+          .catch(e => console.warn(`   ⚠️  Alert webhook failed: ${(e as Error).message}`));
+      }
     };
 
     const task = cronSchedule(cron, () => {

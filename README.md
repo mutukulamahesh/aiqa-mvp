@@ -980,6 +980,86 @@ llm_targets:
 
 ---
 
+## Data stays on-prem
+
+AIQA is designed so that sensitive data never has to leave your network. This section explains exactly what goes where and how to lock it down completely.
+
+### What never leaves your machine
+
+| Artefact | Where it lives |
+|---|---|
+| YAML test files | Your filesystem / VCS |
+| Playwright browser sessions | In-process; no external relay |
+| Screenshots & HTML reports | `results/` directory |
+| RAG knowledge index | `.aiqa/knowledge/` (local vectra store) |
+| Jira / Confluence content ingested into RAG | `.aiqa/knowledge/` — never re-uploaded |
+| Database query results (`db:` steps) | In-process; logged locally only |
+| `store:` variables captured during a run | In-process; written to `results/` JSON |
+| API response bodies (`api:` steps) | In-process; written to `results/` JSON |
+
+### What goes outbound (and when)
+
+| Call | Destination | Trigger | How to eliminate |
+|---|---|---|---|
+| LLM inference (judge, heal, generate) | Your configured `llm.provider` | Any step that invokes the LLM | Use `provider: ollama` or `provider: mock` |
+| Jira REST API reads (RAG ingest) | `jira.baseUrl` (your instance) | `aiqa knowledge ingest` | Already on-prem if self-hosted Jira |
+| Confluence REST API reads (RAG ingest) | `confluence.baseUrl` (your instance) | `aiqa knowledge ingest` | Already on-prem if self-hosted Confluence |
+| OpenAPI spec fetch | URL in `connectors[].url` | `aiqa knowledge ingest` | Point to an internal URL |
+| `navigate:` / `api:` step URLs | Your app under test | Test execution | Your app, your network |
+
+LLM calls are the only calls that can reach a third-party service. Everything else talks to systems you already own.
+
+### Full air-gap with `privacy_mode`
+
+Set `privacy_mode: true` in your environment config to enforce local-only LLM usage at startup. AIQA will refuse to start if the configured provider (or any provider in the fallback chain) makes outbound calls:
+
+```yaml
+# config/environments/prod.yaml
+privacy_mode: true
+
+llm:
+  provider: ollama          # ✅ local inference
+  fallback: [mock]          # ✅ also local
+```
+
+Any attempt to use `anthropic`, `openai`, `nvidia`, or `gemini` with `privacy_mode: true` raises a startup error listing the disallowed providers.
+
+### Running fully local with Ollama
+
+1. **Install Ollama** — [ollama.com](https://ollama.com) (macOS / Linux / Windows)
+2. **Pull a model:**
+   ```bash
+   ollama pull llama3          # general-purpose judge + healer
+   ollama pull nomic-embed-text # optional: local embeddings
+   ```
+3. **Configure AIQA:**
+   ```yaml
+   privacy_mode: true
+
+   llm:
+     provider: ollama
+     model: llama3
+     baseUrl: "http://localhost:11434"
+   ```
+4. **Verify with `aiqa doctor`:**
+   ```
+   ✅ Ollama   running — models: llama3, nomic-embed-text
+   🔒 Privacy mode  ON — only ollama/mock providers permitted (no outbound LLM calls)
+   ```
+
+With this setup AIQA runs entirely on your hardware. No API keys, no data egress, no external dependencies.
+
+### Compliance checklist
+
+- [ ] `privacy_mode: true` in `prod.yaml`
+- [ ] `llm.provider: ollama` (or `mock` for pure scripted tests)
+- [ ] No `anthropic` / `openai` / `gemini` / `nvidia` keys in `.env`
+- [ ] Jira / Confluence URLs point to your self-hosted instance
+- [ ] `results/` directory excluded from external log shippers
+- [ ] `aiqa doctor` green before first production run
+
+---
+
 ## Project Structure
 
 ```
