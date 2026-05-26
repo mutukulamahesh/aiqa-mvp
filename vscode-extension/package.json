@@ -13,7 +13,6 @@
   "categories": ["Testing", "Other"],
   "keywords": ["qa", "testing", "ai", "playwright", "yaml"],
   "icon": "images/icon.png",
-  "activationEvents": ["onLanguage:yaml"],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -68,10 +67,10 @@
           "default": true,
           "description": "Run browser in headless mode"
         },
-        "aiqa.pollIntervalMs": {
+        "aiqa.maxPollIntervalMs": {
           "type": "number",
-          "default": 2000,
-          "description": "How often (ms) to poll for run completion"
+          "default": 10000,
+          "description": "Maximum back-off interval (ms) when polling for run completion"
         }
       }
     }

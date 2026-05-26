@@ -62,7 +62,7 @@ class AiqaClient:
 
     def run_all(
         self,
-        dir: str = "tests",
+        test_dir: str = "tests",
         *,
         env: str = "dev",
         headless: bool = True,
@@ -72,7 +72,7 @@ class AiqaClient:
     ) -> RunAccepted:
         """Submit a full test suite directory."""
         return RunAccepted(run_id=self._post("/api/run-all", {
-            "dir": dir, "env": env, "headless": headless,
+            "dir": test_dir, "env": env, "headless": headless,
             "workers": workers,
             **({"tags": tags} if tags else {}),
             **({"vars": vars} if vars else {}),

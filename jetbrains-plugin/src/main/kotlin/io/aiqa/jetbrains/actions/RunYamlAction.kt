@@ -15,6 +15,8 @@ import io.aiqa.jetbrains.toolwindow.ResultsToolWindow
 
 class RunYamlAction : AnAction() {
 
+    private val client = AiqaRestClient()
+
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 
     override fun update(e: AnActionEvent) {
@@ -30,7 +32,6 @@ class RunYamlAction : AnAction() {
 
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "AIQA: Running ${file.name}", true) {
             override fun run(indicator: ProgressIndicator) {
-                val client = AiqaRestClient()
                 try {
                     indicator.text = "Submitting to AIQA server…"
                     val accepted = client.runFile(filePath)

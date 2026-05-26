@@ -74,13 +74,16 @@ export class AiqaClient {
     onProgress: (meta: RunMeta) => void,
     timeoutMs = 300_000,
   ): Promise<RunMeta> {
-    const pollMs  = cfg().get<number>("pollIntervalMs", 2000);
+    const maxMs   = cfg().get<number>("maxPollIntervalMs", 10_000);
     const deadline = Date.now() + timeoutMs;
+    let intervalMs = 2_000;
     while (Date.now() < deadline) {
       const meta = await this.getRun(runId);
       onProgress(meta);
       if (TERMINAL.has(meta.status)) return meta;
-      await new Promise(r => setTimeout(r, pollMs));
+      const remaining = deadline - Date.now();
+      await new Promise(r => setTimeout(r, Math.min(intervalMs, remaining, maxMs)));
+      intervalMs = Math.min(intervalMs * 2, maxMs);
     }
     throw new Error(`Run ${runId} did not finish within ${timeoutMs / 1000}s`);
   }

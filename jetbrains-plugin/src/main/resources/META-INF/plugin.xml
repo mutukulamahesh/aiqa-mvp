@@ -14,8 +14,7 @@
   <extensions defaultExtensionNs="com.intellij">
     <toolWindow id="AIQA"
                 anchor="bottom"
-                factoryClass="io.aiqa.jetbrains.toolwindow.ResultsToolWindowFactory"
-                icon="/icons/aiqa.svg"/>
+                factoryClass="io.aiqa.jetbrains.toolwindow.ResultsToolWindowFactory"/>
     <applicationConfigurable
         parentId="tools"
         instance="io.aiqa.jetbrains.settings.AiqaSettingsConfigurable"
@@ -29,8 +28,7 @@
     <action id="aiqa.runFile"
             class="io.aiqa.jetbrains.actions.RunYamlAction"
             text="Run with AIQA"
-            description="Run this YAML test file via the AIQA server"
-            icon="/icons/aiqa.svg">
+            description="Run this YAML test file via the AIQA server">
       <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
       <add-to-group group-id="EditorPopupMenu"      anchor="last"/>
     </action>

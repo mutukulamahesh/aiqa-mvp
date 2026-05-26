@@ -98,7 +98,7 @@ public final class AiqaClient {
 
     /** List recent runs. */
     public List<RunMeta> listRuns(int limit) {
-        JSONArray arr = new JSONArray(get("/api/runs?limit=" + limit).toString());
+        JSONArray arr = getArray("/api/runs?limit=" + limit);
         List<RunMeta> result = new ArrayList<>();
         for (int i = 0; i < arr.length(); i++) result.add(parseRunMeta(arr.getJSONObject(i)));
         return result;
@@ -168,6 +168,16 @@ public final class AiqaClient {
         return send(req.build());
     }
 
+    private JSONArray getArray(String path) {
+        HttpRequest.Builder req = HttpRequest.newBuilder()
+            .uri(URI.create(baseUrl + path))
+            .timeout(requestTimeout)
+            .header("Accept", "application/json")
+            .GET();
+        if (apiKey != null) req.header("Authorization", "Bearer " + apiKey);
+        return sendArray(req.build());
+    }
+
     private JSONObject getUnauthenticated(String path) {
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + path))
@@ -187,6 +197,24 @@ public final class AiqaClient {
                 throw new AiqaException(msg, resp.statusCode());
             }
             return json;
+        } catch (IOException e) {
+            throw new AiqaException("Cannot reach AIQA server at " + baseUrl + ": " + e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AiqaException("Request interrupted");
+        }
+    }
+
+    private JSONArray sendArray(HttpRequest req) {
+        try {
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() >= 400) {
+                String msg;
+                try { msg = new JSONObject(resp.body()).optString("error", resp.body()); }
+                catch (Exception ignored) { msg = resp.body(); }
+                throw new AiqaException(msg, resp.statusCode());
+            }
+            return new JSONArray(resp.body());
         } catch (IOException e) {
             throw new AiqaException("Cannot reach AIQA server at " + baseUrl + ": " + e.getMessage());
         } catch (InterruptedException e) {
