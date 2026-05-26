@@ -1,6 +1,6 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # AIQA installer — Linux & macOS
-# Usage: curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
 
 set -e
 
@@ -17,8 +17,12 @@ die()    { printf '\033[1;31m[aiqa]\033[0m %s\n' "$1" >&2; exit 1; }
 
 case "$(uname -s)" in
   Linux|Darwin) ;;
-  *)  die "Unsupported OS: $(uname -s). Use Docker on Windows: https://github.com/mutukulamahesh/aiqa-mvp#docker" ;;
+  *) die "Unsupported OS: $(uname -s). Use Docker on Windows: https://github.com/mutukulamahesh/aiqa-mvp#docker" ;;
 esac
+
+# ── git check ─────────────────────────────────────────────────────────────────
+
+command -v git >/dev/null 2>&1 || die "git is not installed. Install git and re-run."
 
 # ── Node.js check / install ───────────────────────────────────────────────────
 
@@ -33,15 +37,14 @@ if node_ok; then
 else
   warn "Node.js $MIN_NODE+ not found — installing via nvm"
 
-  # Install nvm if not present
-  if ! command -v nvm >/dev/null 2>&1 && [ ! -f "$HOME/.nvm/nvm.sh" ]; then
+  if [ ! -f "$HOME/.nvm/nvm.sh" ]; then
     print "Installing nvm..."
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | sh
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
   fi
 
-  # Load nvm in current shell
+  # nvm is a bash function — must be sourced, not executed as a binary
   # shellcheck disable=SC1090
-  [ -f "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"
+  . "$HOME/.nvm/nvm.sh"
 
   nvm install $MIN_NODE --silent
   nvm use $MIN_NODE --silent
@@ -57,7 +60,9 @@ command -v npm >/dev/null 2>&1 || die "npm not found. Install Node.js $MIN_NODE+
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   print "Updating existing AIQA installation..."
-  git -C "$INSTALL_DIR" pull --ff-only --quiet
+  # Reliable update for shallow clones — works even after remote force-push
+  git -C "$INSTALL_DIR" fetch origin --depth 1 --quiet
+  git -C "$INSTALL_DIR" reset --hard origin/HEAD --quiet
 else
   print "Installing AIQA to $INSTALL_DIR ..."
   git clone --depth 1 --quiet "$REPO" "$INSTALL_DIR"

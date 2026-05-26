@@ -117,7 +117,7 @@ aiqa run tests/login.yaml
 One-liner that installs Node.js (via nvm if needed), clones AIQA, and links the CLI — no manual setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
 aiqa run tests/login.yaml
 ```
 
@@ -127,6 +127,8 @@ aiqa run tests/login.yaml
 iwr https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.ps1 | iex
 aiqa run tests\login.yaml
 ```
+
+> To run the downloaded script directly instead: `Set-ExecutionPolicy -Scope Process Bypass` then `.\install.ps1`
 
 The script detects whether Node.js is already installed and skips the install if version ≥ 18 is present. Playwright Chromium is installed automatically.
 
