@@ -1,0 +1,131 @@
+name: 'AIQA'
+description: 'AI-powered QA — run YAML test suites in CI with no install step'
+author: 'AIQA'
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
+
+inputs:
+  test-path:
+    description: 'Path to test file or directory'
+    default: 'tests/'
+  headless:
+    description: 'Run browser in headless mode (recommended for CI)'
+    default: 'true'
+  workers:
+    description: 'Number of parallel workers'
+    default: '1'
+  env:
+    description: 'Environment profile: dev | staging | prod'
+    default: 'dev'
+  version:
+    description: 'AIQA git ref to install (branch, tag, or SHA). Should match the ref in your uses: pin.'
+    default: 'main'
+  anthropic-api-key:
+    description: 'Anthropic API key — enables LLM judge and self-healing. Leave blank to use mock LLM.'
+    required: false
+    default: ''
+  openai-api-key:
+    description: 'OpenAI API key'
+    required: false
+    default: ''
+  tags:
+    description: 'Only run tests whose tags include at least one of these (comma-separated)'
+    required: false
+    default: ''
+  circuit-breaker:
+    description: 'Abort suite after N consecutive failures (default: from env config)'
+    required: false
+    default: ''
+
+outputs:
+  passed:
+    description: 'Number of tests that passed'
+    value: ${{ steps.aiqa-run.outputs.passed }}
+  failed:
+    description: 'Number of tests that failed'
+    value: ${{ steps.aiqa-run.outputs.failed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js 20
+      id: setup-node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    # Cache key includes Node version so a runner upgrade (e.g. 20.10 → 20.15)
+    # doesn't get a stale hit with mismatched native binaries in node_modules/.bin.
+    - name: Cache AIQA installation
+      uses: actions/cache@v4
+      id: aiqa-cache
+      with:
+        path: ~/.aiqa-runner
+        key: aiqa-${{ inputs.version }}-${{ runner.os }}-node${{ steps.setup-node.outputs.node-version }}
+
+    - name: Install AIQA
+      if: steps.aiqa-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        curl -fsSL \
+          "https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/${{ inputs.version }}/install.sh" \
+          | bash
+
+    - name: Link cached AIQA to PATH
+      if: steps.aiqa-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        npm link --prefix "$HOME/.npm-global" "$HOME/.aiqa-runner" 2>&1 \
+          || echo "::warning::AIQA: npm link failed on cache hit — 'aiqa' command may be unavailable. Clear the cache and retry."
+
+    - name: Add AIQA to PATH
+      shell: bash
+      run: |
+        echo "$HOME/.npm-global/bin" >> "$GITHUB_PATH"
+
+    - name: Run AIQA tests
+      id: aiqa-run
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+      run: |
+        # Build ARGS cleanly — start with test path, add flags explicitly (M1 fix).
+        ARGS="${{ inputs.test-path }}"
+        [[ "${{ inputs.headless }}" == "true" ]] && ARGS="$ARGS --headless"
+        ARGS="$ARGS --workers ${{ inputs.workers }}"
+        [[ -n "${{ inputs.tags }}"           ]] && ARGS="$ARGS --tags ${{ inputs.tags }}"
+        [[ -n "${{ inputs.circuit-breaker }}" ]] && ARGS="$ARGS --circuit-breaker ${{ inputs.circuit-breaker }}"
+
+        set +e
+        # Quote ARGS and env to handle paths/values with spaces (L1 fix).
+        aiqa --env "${{ inputs.env }}" run-all $ARGS \
+          --results results/aiqa-results.json \
+          2>&1 | tee /tmp/aiqa-output.log
+        EXIT_CODE=${PIPESTATUS[0]}
+        set -e
+
+        # Use grep -oE (POSIX ERE) — compatible with both GNU grep and BSD grep on macOS (L2 fix).
+        PASSED=$(grep -oE 'Passed[[:space:]]*:[[:space:]]*[0-9]+' /tmp/aiqa-output.log \
+                   | grep -oE '[0-9]+' | tail -1 || echo "0")
+        FAILED=$(grep -oE 'Failed:[[:space:]]*[0-9]+'            /tmp/aiqa-output.log \
+                   | grep -oE '[0-9]+' | tail -1 || echo "0")
+        echo "passed=${PASSED:-0}" >> "$GITHUB_OUTPUT"
+        echo "failed=${FAILED:-0}" >> "$GITHUB_OUTPUT"
+
+        exit $EXIT_CODE
+
+    - name: Write job summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## AIQA Results" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "| | Count |" >> "$GITHUB_STEP_SUMMARY"
+        echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+        echo "| ✅ Passed | ${{ steps.aiqa-run.outputs.passed }} |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| ❌ Failed | ${{ steps.aiqa-run.outputs.failed }} |" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "_Run [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) · \`${{ inputs.test-path }}\`_" >> "$GITHUB_STEP_SUMMARY"

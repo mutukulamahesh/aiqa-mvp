@@ -1,0 +1,36 @@
+<idea-plugin>
+  <id>io.aiqa.jetbrains</id>
+  <name>AIQA</name>
+  <vendor email="mmk.mutu@gmail.com" url="https://github.com/mutukulamahesh/aiqa-mvp">AIQA</vendor>
+  <description><![CDATA[
+    AI-powered QA — run YAML test suites directly from your IDE.<br/>
+    Right-click any AIQA YAML file → Run with AIQA.<br/>
+    Results appear in the AIQA tool window.
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>org.jetbrains.plugins.yaml</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <toolWindow id="AIQA"
+                anchor="bottom"
+                factoryClass="io.aiqa.jetbrains.toolwindow.ResultsToolWindowFactory"/>
+    <applicationConfigurable
+        parentId="tools"
+        instance="io.aiqa.jetbrains.settings.AiqaSettingsConfigurable"
+        id="io.aiqa.settings"
+        displayName="AIQA"/>
+    <applicationService
+        serviceImplementation="io.aiqa.jetbrains.settings.AiqaSettingsState"/>
+  </extensions>
+
+  <actions>
+    <action id="aiqa.runFile"
+            class="io.aiqa.jetbrains.actions.RunYamlAction"
+            text="Run with AIQA"
+            description="Run this YAML test file via the AIQA server">
+      <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+      <add-to-group group-id="EditorPopupMenu"      anchor="last"/>
+    </action>
+  </actions>
+</idea-plugin>

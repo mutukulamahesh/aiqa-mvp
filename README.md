@@ -1,19 +1,111 @@
 # AIQA — Enterprise AI QA Platform
 
-A plug-and-play, AI-powered QA platform that unifies web automation, API testing, database validation, and autonomous test generation into a single config-driven system.
+Write tests in YAML. Run them anywhere. Test web apps, APIs, databases, and AI systems with one tool.
 
-> Full platform vision: see [VISION.md](VISION.md) · Full backlog: see [BACKLOG.md](BACKLOG.md) · Progress: see [PROGRESS.md](PROGRESS.md)
+> **Tests are plain YAML — no JavaScript knowledge required.** Works with Node.js, Docker, Python (`pip install aiqa-runner`), or a one-line installer for Linux, macOS, and Windows.
 
 ---
 
-## What it does
+## Get started in 30 seconds
 
-- **Init a project** in one command — folder structure, sample test, ready to run (interactive prompt or `--base-url` flag)
+**Docker (no install required):**
+
+```bash
+# 1. Create a test file
+cat > login.yaml << 'EOF'
+test:
+  name: "Login smoke test"
+  steps:
+    - navigate: "https://yourapp.com/login"
+    - fill: { target: "Email", value: "user@example.com" }
+    - fill: { target: "Password", value: "secret" }
+    - click: "Sign in"
+    - assert: { text: "Dashboard" }
+EOF
+
+# 2. Run it
+docker run --rm -v $(pwd):/tests aiqa/aiqa run /tests/login.yaml --headless
+```
+
+**Or install the CLI:**
+
+```bash
+# Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
+
+# Python teams
+pip install aiqa-runner && curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
+
+# Node.js
+git clone https://github.com/mutukulamahesh/aiqa-mvp.git && cd aiqa-mvp && npm install && npm link
+```
+
+---
+
+## What you can test
+
+| Type | What it does |
+|---|---|
+| **Web apps** | Click, fill, assert, self-heal broken selectors, auto-generate tests from any live app |
+| **APIs** | HTTP requests, status codes, response assertions, chain API → DB checks |
+| **Databases** | SQL queries, row counts, field values — PostgreSQL via Knex |
+| **AI systems** | Call any LLM, judge quality, assert consistency, detect prompt regressions |
+
+Tests are YAML files. One format for all four types:
+
+```yaml
+test:
+  name: "API + DB check"
+  steps:
+    - api:
+        method: POST
+        url: "https://api.example.com/users"
+        body: { name: "Alice" }
+        assert_status: 201
+        store_as: newUser
+    - db:
+        query: "SELECT id FROM users WHERE name = ?"
+        params: ["Alice"]
+        assert_rows: 1
+```
+
+---
+
+## Install
+
+| Method | Command | Best for |
+|---|---|---|
+| **Docker** | `docker pull aiqa/aiqa` | Any tech stack, no Node.js needed |
+| **Python** | `pip install aiqa-runner` | Python / Django / FastAPI teams |
+| **Shell** | `curl -fsSL .../install.sh \| bash` | Linux / macOS / CI pipelines |
+| **Node.js** | `git clone ... && npm install && npm link` | Node.js / frontend teams |
+| **Windows** | `iwr .../install.ps1 \| iex` | Windows PowerShell |
+
+→ [Full install instructions](#installation-details)
+
+---
+
+## Key features
+
+- **Auto-generate tests** — point AIQA at any live app; it crawls, maps flows, and writes the YAML
+- **Self-heal selectors** — broken locators are repaired automatically via LLM and cached
+- **AI evaluation** — test LLMs natively: quality scoring, consistency checks, prompt regression detection
+- **Enterprise AI** — works with Azure OpenAI, internal AI gateways, Ollama (local, no data leaves machine)
+- **CI integration** — JUnit XML output, `--impact-only` flag runs only tests affected by the current git diff
+- **HTML reports** — pass-rate trend chart, flaky test heatmap, step-by-step duration bars
+- **Jira integration** — auto-creates bugs for failures with screenshots; deduplicates on re-run
+- **Web portal** — browser UI for running tests, live progress, and result history
+
+→ [Full feature list](#full-feature-list) · [GenAI testing guide](#genai-testing) · [Enterprise AI setup](#enterprise--on-premise-ai) · [CLI reference](#cli-reference)
+
+---
+
+## Full feature list
+
+- **Init a project** in one command — folder structure, sample test, ready to run
 - **Explore any app** autonomously and map its pages and flows; **authenticated re-exploration** logs in and crawls post-login pages automatically
 - **Generate test files** per page or per flow — no manual test writing
-- **Run tests** defined in YAML — web UI, API, database, or mixed
 - **Orchestrate the full pipeline** — one command: explore → map → generate → run → score
-- **Self-heal broken selectors** — when a locator fails, AIQA repairs it via LLM and caches the fix
 - **Analytics after every run** — top unstable pages, most healed selectors, LLM calls saved
 - **Diagnose failures** automatically with AI root-cause analysis and screenshots
 - **Score readiness** — get a 0–100 grade on your test coverage
@@ -21,9 +113,7 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 - **CI-ready JUnit XML** — `--junit <file>` emits xUnit XML consumed natively by GitHub Actions, GitLab CI, and Azure DevOps test result parsers
 - **Run only impacted tests** — `--impact-only` runs only tests affected by the current git diff; targets 40%+ CI time reduction
 - **Import existing test cases** from CSV, Excel, or Gherkin — no rewrite needed
-- **DB validation** — run SQL queries, assert row counts and field values, chain API → DB checks
 - **Memory-aware retries** — flaky steps get extra wait time based on historical failure scores
-- **Test AI systems natively** — call any LLM as the system under test, judge quality with a second LLM, assert consistency across runs, and detect prompt regressions via embedding drift
 - **Plug in any LLM** (Claude, GPT-4, Gemini, NVIDIA, Ollama) or point to your **enterprise AI endpoint** (Azure OpenAI, AWS Bedrock-compatible, internal AI gateway) — no code changes needed
 - **Web Portal** — browser-based UI to trigger runs, view live progress, edit tests, and browse history
 - **REST + WebSocket API** — full API layer for portal, Chrome extension, and CI integrations
@@ -33,18 +123,86 @@ A plug-and-play, AI-powered QA platform that unifies web automation, API testing
 
 ---
 
-## Prerequisites
+## Installation details
 
-- Node.js v18 or higher
-- npm
+### Docker
 
-> **Not a JavaScript shop?** No problem. Your tests are written in plain YAML — no JavaScript knowledge required. The runtime is Node.js but you never write or read any JavaScript. If you prefer not to install Node at all, use the [Docker image](#docker) or the [Python wrapper](#python-wrapper) instead.
+No Node.js install needed. Works on any OS, any tech stack:
 
----
+```bash
+docker pull aiqa/aiqa
+docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
+```
 
-## Installation
+Run all tests in a directory:
 
-Choose the method that fits your team:
+```bash
+docker run --rm -v $(pwd)/tests:/tests aiqa/aiqa run-all /tests --headless
+```
+
+> Add `-v $(pwd)/config:/app/config` to any `docker run` command to use your own environment config (custom URLs, Ollama `baseUrl`, etc.). Without it the baked-in `dev` config is used.
+
+Pass API keys via environment variables — nothing is baked into the image:
+
+```bash
+docker run --rm \
+  -e OPENAI_API_KEY=$OPENAI_API_KEY \
+  -v $(pwd)/tests:/tests \
+  -v $(pwd)/config:/app/config \
+  aiqa/aiqa run /tests/ai/translation.yaml --headless
+```
+
+Or use Docker Compose — copy `docker-compose.yml` from the repo root, set keys in `.env`, then:
+
+```bash
+docker compose run aiqa run-all /tests --headless
+```
+
+The image ships with Node 20 and Chromium pre-installed. No Node.js or npm needed on the host.
+
+### Python wrapper
+
+For Python teams — install once, run YAML tests from your existing Python environment:
+
+```bash
+pip install aiqa-runner
+```
+
+Then install the AIQA CLI (one-time, handles Node.js automatically):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
+```
+
+Then run tests exactly as documented:
+
+```bash
+aiqa run tests/login.yaml
+aiqa run-all tests/ --headless
+aiqa --help
+```
+
+All arguments are forwarded directly to the AIQA Node CLI — no Python reimplementation. See `python/` in the repo for package source.
+
+### Shell script (Linux / macOS / CI)
+
+One-liner that installs Node.js (via nvm if needed), clones AIQA, and links the CLI — no manual setup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
+aiqa run tests/login.yaml
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.ps1 | iex
+aiqa run tests\login.yaml
+```
+
+> To run the downloaded script directly instead: `Set-ExecutionPolicy -Scope Process Bypass` then `.\install.ps1`
+
+The script detects whether Node.js is already installed and skips the install if version ≥ 18 is present. Playwright Chromium is installed automatically.
 
 ### Node.js (default)
 
@@ -66,48 +224,15 @@ aiqa --help              # aiqa <command> anywhere
 
 All examples below use `npx aiqa`. If you've run `npm link`, drop the `npx` prefix.
 
-### Docker
-
-No Node.js install needed. Works on any OS, any tech stack:
-
-```bash
-docker pull aiqa/aiqa
-docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml --headless
-```
-
-> Docker image coming soon — tracked in [DEX-03].
-
-### Python wrapper
-
-For Python teams — install once, run YAML tests from your existing Python environment:
-
-```bash
-pip install aiqa-runner
-aiqa run tests/login.yaml
-```
-
-> Python wrapper coming soon — tracked in [DEX-06].
-
-### Shell script (Linux / macOS / CI)
-
-One-liner that installs everything silently — no manual Node.js setup:
-
-```bash
-curl -fsSL https://get.aiqa.dev | sh
-aiqa run tests/login.yaml
-```
-
-> Shell installer coming soon — tracked in [DEX-07].
-
 ---
 
-## Quickstart — test any app in 4 commands
+## Auto-generate tests for any app
 
 ```bash
-npx aiqa init myproject
-npx aiqa explore https://yourapp.com --out myproject
-npx aiqa generate --out myproject --per-page
-npx aiqa run-all --out myproject --headless
+aiqa init myproject
+aiqa explore https://yourapp.com --out myproject
+aiqa generate --out myproject --per-page
+aiqa run-all --out myproject --headless
 ```
 
 This creates a complete project folder:
@@ -662,7 +787,7 @@ npm install knex pg   # only required for real DB connections
 | `assert: { value, equals }` | Assert a stored variable equals expected |
 | `assert: { element_not_visible }` | Assert an element (e.g. login form) is no longer visible — used to confirm successful login |
 | `api: { method, url, ... }` | Make an HTTP request, optionally store response |
-| `db: { query, ... }` | Execute SQL, assert rows/fields, store results |
+| `db: { query, params?, assert_rows?, assert_field?, store_as? }` | Execute SQL with optional positional `params` array; assert row counts and field values |
 | `judge: { value, prompt, pass_if }` | LLM scores a value against a natural-language criterion (0.0–1.0); `pass_if: "score >= 0.7"` |
 | `llm_eval: { target, prompt, assert_quality, baseline_key }` | Call a named target LLM, judge quality, and/or detect prompt regression via embedding drift |
 | `llm_consistency: { target, prompt, runs, assert_variance }` | Run the same prompt N times and assert the maximum pairwise cosine distance stays below threshold |

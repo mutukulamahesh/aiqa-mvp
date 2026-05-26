@@ -31,8 +31,12 @@ storage:
   maxHistory:   200   # entries retained in history.json and healer-runs.json
   maxArtifacts: 10    # artifact sets kept when using --retain-runs
 
+# Set true to block all outbound LLM calls — only ollama and mock providers are allowed.
+# Useful for air-gapped environments or strict data-sovereignty requirements.
+# privacy_mode: true
+
 # LLM provider selection.
-# provider: anthropic | openai | nvidia | gemini | mock
+# provider: anthropic | openai | nvidia | gemini | ollama | mock
 # fallback:  ordered list tried when primary fails (optional)
 # model:     override the provider default (optional)
 # API keys stay in .env — never commit them here.

@@ -1,0 +1,31 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name            = "aiqa-client"
+version         = "1.0.0"
+description     = "Python client for the AIQA REST API — run AI-powered test suites without Node.js"
+readme          = "README.md"
+requires-python = ">=3.8"
+license         = { text = "MIT" }
+authors         = [{ name = "Mahesh Mutukula", email = "mmk.mutu@gmail.com" }]
+keywords        = ["qa", "testing", "ai", "aiqa"]
+classifiers     = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Software Development :: Testing",
+]
+
+# Zero runtime dependencies — uses only stdlib urllib + json
+dependencies = []
+
+[project.urls]
+Homepage   = "https://github.com/mutukulamahesh/aiqa-mvp"
+Repository = "https://github.com/mutukulamahesh/aiqa-mvp"

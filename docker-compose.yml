@@ -1,0 +1,15 @@
+services:
+  aiqa:
+    image: aiqa/aiqa:latest
+    build: .
+    volumes:
+      - ./tests:/tests
+      - ./config:/app/config
+      - ./.aiqa:/app/.aiqa
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - AIQA_BASELINE_RECORD=${AIQA_BASELINE_RECORD:-}
+    command: ["run-all", "/tests", "--headless"]

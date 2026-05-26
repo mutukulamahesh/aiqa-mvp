@@ -62,9 +62,9 @@ function ensureDir(dir: string): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-function saveResults(results: unknown[], dir: string): string {
+function saveResults(results: unknown[], dir: string, label?: string): string {
   ensureDir(dir);
-  const filePath = path.join(dir, `run-${runTimestamp()}.json`);
+  const filePath = path.join(dir, `run-${label ?? runTimestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
   return filePath;
 }
@@ -1053,6 +1053,52 @@ program
     try { require.resolve("@anthropic-ai/sdk"); sdkInstalled = true; } catch { /* ok */ }
     console.log(`${sdkInstalled ? "✅" : "⚠️ "} @anthropic-ai/sdk  ${sdkInstalled ? "installed" : "not installed → run: npm install @anthropic-ai/sdk"}`);
 
+    // Privacy mode (LOCAL-04)
+    let privacyMode = false;
+    try { privacyMode = loadConfig(_envName).privacy_mode; } catch { /* ok */ }
+    console.log(`${privacyMode ? "🔒" : "🌐"} Privacy mode  ${privacyMode ? "ON — only ollama/mock providers permitted (no outbound LLM calls)" : "OFF — outbound LLM calls allowed"}`);
+
+    // Ollama (LOCAL-02) — informational; Ollama is optional
+    {
+      const ollamaBase = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
+      const ollamaSpin = new Spinner();
+      ollamaSpin.start("Ollama — checking local instance…");
+      let ollamaStatus = "";
+      let ollamaOk     = false;
+      try {
+        const { request } = await import("http");
+        const { statusCode, body } = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+          const req = request(`${ollamaBase}/api/tags`, { method: "GET" }, (res) => {
+            let data = "";
+            res.on("data", (chunk: Buffer) => { data += chunk.toString(); });
+            res.on("end", () => resolve({ statusCode: res.statusCode ?? 0, body: data }));
+          });
+          req.on("error", reject);
+          req.setTimeout(3000, () => { req.destroy(); reject(new Error("timeout")); });
+          req.end();
+        });
+        let parsed: { models?: { name: string }[] };
+        try {
+          parsed = JSON.parse(body) as { models?: { name: string }[] };
+        } catch {
+          ollamaStatus = `running but returned unexpected response (HTTP ${statusCode}) — may be a proxy or old Ollama version`;
+          ollamaOk = true;  // it IS reachable; flag as ok so ⚠️ isn't "not running"
+          parsed = {};
+        }
+        if (!ollamaStatus) {
+          const models = parsed.models ?? [];
+          ollamaOk = true;
+          ollamaStatus = models.length
+            ? `running — ${models.length} model(s): ${models.map(m => m.name).join(", ")}`
+            : `running — no models pulled yet (run: ollama pull llama3.2)`;
+        }
+      } catch {
+        ollamaStatus = `not running at ${ollamaBase} — start with: ollama serve`;
+      }
+      ollamaSpin.stop();
+      console.log(`${ollamaOk ? "✅" : "⚠️ "} Ollama  ${ollamaStatus}`);
+    }
+
     // Playwright browsers (slow — show spinner)
     const spin = new Spinner();
     spin.start("Playwright Chromium — launching test browser…");
@@ -1124,6 +1170,143 @@ program
     } else {
       console.log(`⚠️  ${issues.length} warning(s) — non-critical, AIQA will still run:\n   ${issues.join("\n   ")}\n`);
     }
+  });
+
+// ── schedule ──────────────────────────────────────────────────────────────────
+
+program
+  .command("schedule <cron> <testPath>")
+  .description('Run tests on a recurring cron schedule — e.g. aiqa schedule "*/5 * * * *" tests/smoke/')
+  .option("--headless",      "Run browser in headless mode (default: from env config)")
+  .option("--workers <n>",   "Number of parallel workers (default: from env config)")
+  .option("--max-runs <n>",  "Stop after N runs (omit for indefinite; useful for CI smoke checks)")
+  .option("--out <dir>",     "Write results under <dir>/ (default: results/scheduled/)")
+  .action(async (cron: string, testPath: string, opts: {
+    headless?: boolean; workers?: string; maxRuns?: string; out?: string;
+  }) => {
+    const { schedule: cronSchedule, validate: cronValidate } = await import("node-cron");
+
+    if (!cronValidate(cron)) {
+      console.error(`❌ Invalid cron expression: "${cron}"`);
+      console.error(`   Format: "min hour dom month dow"  (e.g. "*/5 * * * *" = every 5 min)`);
+      process.exit(1);
+    }
+
+    const config    = cfg();
+    const headless  = opts.headless ?? config.execution.headless;
+    const workers   = opts.workers  ? Math.max(1, parseInt(opts.workers,  10)) : config.execution.workers;
+    const maxRuns   = opts.maxRuns  ? parseInt(opts.maxRuns, 10) : undefined;
+    const outBase   = path.resolve(process.cwd(), opts.out ?? "results/scheduled");
+    const absPath   = path.resolve(process.cwd(), testPath);
+
+    if (!fs.existsSync(absPath)) {
+      console.error(`❌ Path not found: ${absPath}`);
+      process.exit(1);
+    }
+
+    console.log(`\n⏰ AIQA Scheduler  [env: ${config.environment}]`);
+    console.log(`   Schedule : ${cron}`);
+    console.log(`   Path     : ${absPath}`);
+    console.log(`   Headless : ${headless}`);
+    console.log(`   Workers  : ${workers}`);
+    if (maxRuns !== undefined) console.log(`   Max runs : ${maxRuns}`);
+    console.log(`   Out      : ${outBase}`);
+    console.log(`   Press Ctrl+C to stop\n`);
+
+    let runCount = 0;
+
+    const runOnce = async (): Promise<void> => {
+      runCount++;
+      // Capture timestamp once — used for both the directory name and the JSON filename
+      // so the two never diverge if a second boundary is crossed mid-run.
+      const label  = runTimestamp();
+      const runDir = path.join(outBase, label);
+      ensureDir(runDir);
+
+      console.log(`\n─────────────────────────────────────────`);
+      console.log(`🕐 Run #${runCount}  ${new Date().toLocaleString()}`);
+
+      let files: string[] = [];
+      const stat = fs.statSync(absPath);
+      if (stat.isDirectory()) {
+        files = fs.readdirSync(absPath)
+          .filter(f => f.endsWith(".yaml") || f.endsWith(".yml"))
+          .map(f => path.join(absPath, f));
+      } else {
+        files = [absPath];
+      }
+
+      if (files.length === 0) {
+        console.log(`⚠️  No YAML files found in ${absPath}`);
+        return;
+      }
+
+      const sharedHealer = new SelectorHealer();
+      const runnerOpts   = {
+        headless,
+        timeout:        config.timeouts.action,
+        screenshotsDir: path.join(runDir, "screenshots"),
+      };
+
+      const orderedResults: (Awaited<ReturnType<TestRunner["run"]>> | null)[] = new Array(files.length).fill(null);
+      let cursor          = 0;
+      let consecFails     = 0;
+      const cbThreshold   = config.execution.circuitBreaker;
+      let circuitOpen     = false;
+
+      const runSlot = async () => {
+        while (cursor < files.length) {
+          if (circuitOpen) { cursor++; continue; }
+          const idx = cursor++;
+          try {
+            const testDef = parseTestFile(files[idx]);
+            const result  = await new TestRunner({ ...runnerOpts, healer: sharedHealer }).run(testDef);
+            orderedResults[idx] = result;
+            if (result.passed) { consecFails = 0; }
+            else if (++consecFails >= cbThreshold) {
+              circuitOpen = true;
+              console.log(`\n⚡ Circuit breaker open — aborting run #${runCount}`);
+            }
+          } catch (err) {
+            console.error(`  ⚠️  ${path.basename(files[idx])}: ${(err as Error).message}`);
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: workers }, runSlot));
+
+      const allResults = orderedResults.filter((r): r is NonNullable<typeof r> => r !== null);
+      const passed     = allResults.filter(r => r.passed).length;
+      const failed     = allResults.length - passed;
+
+      const jsonPath = saveResults(allResults, runDir, label);
+      const rptPath  = path.join(runDir, "report.html");
+      new HTMLReporter().generate(allResults, rptPath, { baseUrl: path.basename(absPath) });
+
+      console.log(`   Passed : ${passed}   Failed: ${failed}`);
+      console.log(`   JSON  → ${jsonPath}`);
+      console.log(`   HTML  → ${rptPath}`);
+    };
+
+    const task = cronSchedule(cron, () => {
+      runOnce()
+        .then(() => {
+          if (maxRuns !== undefined && runCount >= maxRuns) {
+            console.log(`\n✅ Reached max-runs (${maxRuns}) — stopping scheduler`);
+            task.stop();
+            process.exit(0);
+          }
+        })
+        .catch(console.error);
+    });
+
+    // process.once — a single SIGINT handler per schedule invocation; avoids
+    // listener accumulation if the command is ever called programmatically.
+    process.once("SIGINT", () => {
+      console.log(`\n⏹  Scheduler stopped (${runCount} run(s) completed)`);
+      task.stop();
+      process.exit(0);
+    });
   });
 
 // ── import ────────────────────────────────────────────────────────────────────
