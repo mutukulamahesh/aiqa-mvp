@@ -150,8 +150,8 @@ jira:
 - **Tests:** 858 passing, tsc clean
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
-- **Active:** EPIC-DEX — README messaging done; full agreed order:
-  DEX-03 Docker → DEX-07 Shell script → DEX-06 Python wrapper → DEX-05 README quickstart rewrite → LOCAL-02/04 Ollama doctor + privacy mode → MON-01 Scheduled runs → DEX-08/09/10 GitHub Action + Maven/Gradle → DEX-11/12 REST API clients (last)
+- **Active:** EPIC-DEX/MON — agreed order:
+  DEX-03 ✅ → DEX-07 ✅ → DEX-06 ✅ → DEX-05 ✅ → LOCAL-02/04 ✅ → MON-01 ✅ → DEX-08/09/10 GitHub Action + Maven/Gradle → DEX-11/12 REST API clients (last)
 - **Next epics after DEX:** EPIC-LOCAL, EPIC-OSS, EPIC-MON
 
 ### Phase 5 stories — ALL COMPLETE ✅

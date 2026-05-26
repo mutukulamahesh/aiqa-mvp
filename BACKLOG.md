@@ -593,7 +593,7 @@ Files (post-spike):
 Fix the friction that kills adoption before a developer sees any value.
 
 **Agreed delivery order (2026-05-22):**
-1. README messaging ✅ → 2. DEX-03 Docker ✅ → 3. DEX-07 Shell script ✅ → 4. DEX-06 Python wrapper ✅ → 5. DEX-05 README quickstart ✅ → 5. DEX-05 README quickstart rewrite → 6. LOCAL-02/04 Ollama doctor + privacy mode → 7. MON-01 Scheduled runs → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
+1. README messaging ✅ → 2. DEX-03 Docker ✅ → 3. DEX-07 Shell script ✅ → 4. DEX-06 Python wrapper ✅ → 5. DEX-05 README quickstart ✅ → 6. LOCAL-02/04 Ollama doctor + privacy mode ✅ → 7. MON-01 Scheduled runs ✅ → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
@@ -629,16 +629,16 @@ Unlock enterprise teams that block external API calls.
 | ID | Story | Gap | Status |
 |---|---|---|---|
 | LOCAL-01 | `OllamaLLMProvider` — done above | #6 sensitive data | [x] |
-| LOCAL-02 | `aiqa doctor` Ollama check — detects running Ollama instance + pulled models | DX | [ ] |
+| LOCAL-02 | `aiqa doctor` Ollama check — detects running Ollama instance + pulled models | DX | [x] |
 | LOCAL-03 | "Data stays on-prem" documentation section — explicit about what leaves the machine and when | #6 sensitive data | [ ] |
-| LOCAL-04 | Config: `privacy_mode: true` — blocks all outbound LLM calls, forces local-only | #6 sensitive data | [ ] |
+| LOCAL-04 | Config: `privacy_mode: true` — blocks all outbound LLM calls, forces local-only | #6 sensitive data | [x] |
 
 ### EPIC-MON · Synthetic Monitoring `[MEDIUM PRIORITY]`
 DataDog alternative at near-zero cost.
 
 | ID | Story | Gap | Status |
 |---|---|---|---|
-| MON-01 | `aiqa schedule "*/5 * * * *" tests/smoke/` — cron-triggered recurring test runs | #7 synthetic monitoring | [ ] |
+| MON-01 | `aiqa schedule "*/5 * * * *" tests/smoke/` — cron-triggered recurring test runs | #7 synthetic monitoring | [x] |
 | MON-02 | `--alert-webhook <url>` — POST JSON payload to Slack/Teams/PagerDuty on failure | #7 synthetic monitoring | [ ] |
 | MON-03 | Uptime history in `results/` — rolling 30-day pass/fail log per test file | #7 synthetic monitoring | [ ] |
 
