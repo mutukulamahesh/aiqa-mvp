@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "aiqa-runner"
+version = "1.0.0"
+description = "Python wrapper for the AIQA Enterprise AI QA Platform CLI"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.8"
+keywords = ["qa", "testing", "ai", "llm", "playwright", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.scripts]
+aiqa = "aiqa_runner.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/mutukulamahesh/aiqa-mvp"
+"Bug Tracker" = "https://github.com/mutukulamahesh/aiqa-mvp/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aiqa_runner*"]

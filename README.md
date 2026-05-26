@@ -107,10 +107,23 @@ For Python teams — install once, run YAML tests from your existing Python envi
 
 ```bash
 pip install aiqa-runner
-aiqa run tests/login.yaml
 ```
 
-> Python wrapper coming soon — tracked in [DEX-06].
+Then install the AIQA CLI (one-time, handles Node.js automatically):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mutukulamahesh/aiqa-mvp/main/install.sh | bash
+```
+
+Then run tests exactly as documented:
+
+```bash
+aiqa run tests/login.yaml
+aiqa run-all tests/ --headless
+aiqa --help
+```
+
+All arguments are forwarded directly to the AIQA Node CLI — no Python reimplementation. See `python/` in the repo for package source.
 
 ### Shell script (Linux / macOS / CI)
 
