@@ -20,9 +20,10 @@ case "$(uname -s)" in
   *) die "Unsupported OS: $(uname -s). Use Docker on Windows: https://github.com/mutukulamahesh/aiqa-mvp#docker" ;;
 esac
 
-# ── git check ─────────────────────────────────────────────────────────────────
+# ── tool checks ───────────────────────────────────────────────────────────────
 
-command -v git >/dev/null 2>&1 || die "git is not installed. Install git and re-run."
+command -v curl >/dev/null 2>&1 || die "curl is not installed. Install curl and re-run."
+command -v git  >/dev/null 2>&1 || die "git is not installed. Install git and re-run."
 
 # ── Node.js check / install ───────────────────────────────────────────────────
 

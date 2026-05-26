@@ -10,7 +10,9 @@ RUN npm ci
 # --with-deps handles the full OS dependency list; no manual apt-get list needed
 RUN npx playwright install chromium --with-deps
 
-# Prune dev dependencies after browser install (playwright is in devDeps)
+# Prune dev dependencies after browser install (playwright is in devDeps).
+# If runtime features stop working in the image, check that their packages
+# haven't drifted into devDependencies by mistake.
 RUN npm prune --omit=dev
 
 # Copy source and hand ownership to the non-root node user
