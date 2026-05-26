@@ -132,6 +132,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `KnowledgeReadinessScorer` export renamed (was `ReadinessScorer` in early branch). Dynamic import path: `src/knowledge/ReadinessScorer`.
 - `HybridReranker` weights now come from config (`reranker.semanticWeight` etc.), not hardcoded.
 
+---
+
+## Release process
+
+Comparison links at the bottom of this file resolve once the corresponding git tags are pushed:
+
+```bash
+git tag v1.5.0
+git push origin v1.5.0
+```
+
+Tags are created at the point of merging a release branch to `main`. Until then the `[Unreleased]` link is the canonical reference.
+
 [Unreleased]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.5.0...HEAD
 [1.5.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.3.0...v1.4.0

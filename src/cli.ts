@@ -547,13 +547,20 @@ program
     const score   = report.score;
     const grade   = report.grade;
 
-    const colour = score >= 80 ? "#4c1" : score >= 60 ? "#dfb317" : "#e05d44";
-    const label  = opts.label ?? "AIQA Readiness";
-    const value  = `${score}/100 ${grade}`;
+    const colour   = score >= 80 ? "#4c1" : score >= 60 ? "#dfb317" : "#e05d44";
+    const rawLabel = opts.label ?? "AIQA Readiness";
+    const value    = `${score}/100 ${grade}`;
 
-    // Widths computed to match shields.io proportions (11px Verdana)
-    const labelW = label.length * 6.5 + 10;
-    const valueW = value.length * 6.5 + 10;
+    // M2: width formula (6.5px/char) holds for printable ASCII in Verdana 11.
+    // Reject non-ASCII to prevent silent width miscalculation.
+    if (/[^\x20-\x7E]/.test(rawLabel)) {
+      console.error(`❌ --label must contain only printable ASCII characters (no emoji or CJK)`);
+      process.exit(1);
+    }
+    // M1: XML-escape label before SVG interpolation to prevent broken/injected XML.
+    const label  = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const labelW = rawLabel.length * 6.5 + 10;
+    const valueW = value.length  * 6.5 + 10;
     const totalW = labelW + valueW;
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="20">
@@ -576,12 +583,14 @@ program
 </svg>`;
 
     if (opts.out) {
-      const outPath = path.resolve(process.cwd(), opts.out);
+      const outPath    = path.resolve(process.cwd(), opts.out);
+      // L1: use cwd-relative path so the snippet is correct regardless of how --out was entered
+      const snippetPath = path.relative(process.cwd(), outPath);
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
       fs.writeFileSync(outPath, svg);
       console.log(`✅ Badge written to ${outPath}`);
       console.log(`\nEmbed in your README:`);
-      console.log(`  ![AIQA Readiness](${opts.out})`);
+      console.log(`  ![AIQA Readiness](${snippetPath})`);
     } else {
       console.log(svg);
     }
