@@ -79,10 +79,14 @@ export async function runDemo(): Promise<void> {
     }
     if (ev.event === "step_result") {
       stepsDone++;
-      const tick = ev.passed ? "✓" : "✗";
-      // overwrite the last line with status
-      const col = stepLabels[ev.index]?.length ?? 0;
-      process.stdout.write(`\x1b[1A\x1b[${col}C  ${tick}\n`);
+      const tick  = ev.passed ? "✓" : "✗";
+      const col   = stepLabels[ev.index]?.length ?? 0;
+      const fits  = col < (process.stdout.columns ?? 80);
+      if (process.stdout.isTTY && fits) {
+        process.stdout.write(`\x1b[1A\x1b[${col}C  ${tick}\n`);
+      } else {
+        process.stdout.write(`  ${tick}\n`);
+      }
     }
   });
 

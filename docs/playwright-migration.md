@@ -135,7 +135,7 @@ jobs:
   aiqa:
     runs-on: ubuntu-latest
     steps:
-      - uses: aiqa/aiqa-action@v1       # zero install
+      - uses: mutukulamahesh/aiqa-mvp@main   # zero install
         with:
           test-dir: tests/
           env: staging
