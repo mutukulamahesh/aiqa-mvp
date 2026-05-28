@@ -21,4 +21,10 @@ export interface AdapterActions {
   getElementText(selector: string): Promise<string>;
   /** Return an attribute value from the first matching element; empty string if absent. */
   getElementAttribute(selector: string, attribute: string): Promise<string>;
+  /** Return a PNG screenshot as a Buffer — used by VisionAgent and VisualRegression. */
+  screenshotBuffer(): Promise<Buffer>;
+  /** Return the current viewport dimensions. */
+  getViewportSize(): Promise<{ width: number; height: number }>;
+  /** Count how many elements match a CSS selector — used by SmartLocatorEngine for DOM validation. */
+  countLocator(selector: string): Promise<number>;
 }

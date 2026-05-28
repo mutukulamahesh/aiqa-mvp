@@ -147,6 +147,21 @@ export class PlaywrightAdapter implements AdapterActions {
     await this.page.screenshot({ path: filePath, fullPage: true });
   }
 
+  async screenshotBuffer(): Promise<Buffer> {
+    if (!this.page) return Buffer.alloc(0);
+    return this.page.screenshot({ type: "png" });
+  }
+
+  async getViewportSize(): Promise<{ width: number; height: number }> {
+    const page = await this.ensureLaunched();
+    return page.viewportSize() ?? { width: 1280, height: 720 };
+  }
+
+  async countLocator(selector: string): Promise<number> {
+    const page = await this.ensureLaunched();
+    try { return await page.locator(selector).count(); } catch { return 0; }
+  }
+
   // ── Private helpers ──────────────────────────────────────────────────────
 
   /**

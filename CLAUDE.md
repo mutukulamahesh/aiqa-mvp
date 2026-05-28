@@ -152,9 +152,10 @@ jira:
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
 - **Test coverage pass:** AlertWebhook, UptimeTracker, BadgeGenerator — 54 new tests, 3 new modules in `src/reporters/`
-- **Active:** Phase 6 — EPIC-14 Vision Agent
-- **Next:** EPIC-14 Vision Agent → EPIC-15 Desktop (VisionAgent + OCR primary; WinAppDriver secondary)
-- **Parked:** DEX-02 (demo cmd), DEX-04 (PW guide), EPIC-EXT-A (Chrome extension API-backed), OSS-04 (manual GitHub Discussions)
+- **Active:** Phase 6 — EPIC-14 Vision Agent (branch: `vision`)
+- **Next:** EPIC-15 Desktop (VisionAgent + OCR primary; WinAppDriver secondary)
+- **Parked:** EPIC-EXT-A (Chrome extension API-backed), OSS-04 (manual GitHub Discussions)
+- **Vision design locked:** no `suggestedSelector` in VisionAgent output; `vision_assert` is pure detector (no action field); SmartLocatorEngine DOM-validates every selector; ObjectRepository composite key (url+title); `visual_snapshot` uses `max_diff_percent` + `sensitivity` (not conflated `threshold`)
 
 ### Phase 5 stories — ALL COMPLETE ✅
 

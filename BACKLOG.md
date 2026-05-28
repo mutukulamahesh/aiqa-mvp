@@ -649,13 +649,25 @@ DataDog alternative at near-zero cost.
 > Works on any UI with no DOM access
 
 ### EPIC-14 · Vision Agent
+> **Branch:** `vision` · **Status:** in progress
+
+**Locked design decisions:**
+- `VisionAgent`: `analyzeBuffer(buf)` (core, testable) + `analyze(page)` (thin wrapper). No `suggestedSelector` in output — only observable facts: `type`, `description`, `text`, `bbox` (0–1 normalized), `confidence`.
+- `SmartLocatorEngine`: generates selectors from OCR text + element type; validates every candidate via `page.locator(sel).count() === 1` before returning. Strategy-5 in existing `SelectorHealer` waterfall — same cache, same scoring.
+- `ObjectRepository` key: `SHA-256(normalizedUrl + "|" + pageTitle).slice(0, 16)`. Normalization: lowercase, strip default port, strip query/fragment, strip trailing slash. Composite identity from start — extensible to domHash/visualHash in Phase 2.
+- `visual_snapshot` DSL: `max_diff_percent` (pass/fail %) + `sensitivity` (pixelmatch per-pixel tolerance). Separate named params — not the same value.
+- `tesseract.js`: lazy dynamic import on first use; cached at `.aiqa/tesseract-cache/`. One-time ~25MB download documented.
+- `vision_assert` is a **pure detector** — finds element, stores `{ selector, type, description, confidence }` via `store_as`. No `action:` field. Execution always through existing `click:` / `fill:` steps. Vision augments the existing validation system — no parallel DSL, no parallel orchestrator.
+
+**Implementation order:** 14.1 → 14.2 → 14.5 → 14.3 → 14.4
+
 | ID | Story | Status |
 |---|---|---|
-| 14.1 | `VisionAgent` — screenshot → Claude Vision → detected elements, builds object repository | [ ] |
-| 14.2 | OCR pass — Tesseract for text positions, open-source, no API cost | [ ] |
-| 14.3 | `SmartLocatorEngine` — LLM-assisted locator healing, integrates with HealerAgent (EPIC-05) | [ ] |
-| 14.4 | Visual regression — screenshot diff across runs, flag changes above N% pixel threshold | [ ] |
-| 14.5 | Object repository — auto-maintained element library per app URL (`object-repository/web/<url>.json`) | [ ] |
+| 14.1 | `VisionAgent` — `analyzeBuffer(buf)` + `analyze(page)` split; Claude Vision → `DetectedElement[]`; `StubVisionAgent` for tests | [ ] |
+| 14.2 | `OcrEngine` — lazy tesseract.js; `.aiqa/tesseract-cache/`; `analyzeBuffer(buf)` → `OcrWord[]`; `StubOcrEngine` for tests | [ ] |
+| 14.5 | `ObjectRepository` — composite key (url+title); normalized URL; JSON persistence; merge strategy | [ ] |
+| 14.3 | `SmartLocatorEngine` — OCR text + type hints → selector candidates → DOM probe → cache; SelectorHealer strategy-5 | [ ] |
+| 14.4 | `VisualRegression` — `pixelmatch` + `pngjs`; `max_diff_percent` vs `sensitivity`; baselines at `.aiqa/visual-baselines/` | [ ] |
 
 ### EPIC-15 · Desktop Automation
 | ID | Story | Status |
