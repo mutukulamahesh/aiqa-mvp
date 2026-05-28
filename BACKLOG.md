@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~99%**  *(updated 2026-05-22)*
-> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (Product Surface + Enterprise + Knowledge Layer P1+P2+P3) + Phase 5 (GenAI Testing): **DONE**.
-> Remaining: Strategic epics (DEX, OSS, LOCAL, MON) + Phase 6-7 (Vision, desktop, agentic).
+> Current alignment with vision: **~99%**  *(updated 2026-05-27)*
+> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + test-coverage pass: **DONE**.
+> Remaining: Phase 6-7 (Vision, desktop, agentic). Parked: DEX-02, DEX-04, EPIC-EXT-A, OSS-04 (manual).
 
 ---
 
@@ -398,16 +398,16 @@ If logic could live in a sub-agent → it belongs there, not in the Orchestrator
 | RAG2-11 | Config: `reranker` object (strategy + 4 weight fields); `lookbackDays` on connector config | [x] |
 | — | Tests: 701 passing total; 37 new in `rag2-connectors.test.ts` | [x] |
 
-#### Phase 3 — Quality & Trust `[▶ NEXT]`
+#### Phase 3 — Quality & Trust `[✅ DONE — 2026-05-22]`
 
 > Make retrieval auditable and safe. Closes the defect-masking hole and makes AI decisions explainable.
 
 | ID | Story | Est | Status |
 |---|---|---|---|
-| RAG3-01 | `defect.category: "ui" \| "functional" \| "regression"` on `KnowledgeChunk` — set during ingest; `SelectorHealer` filters to `"ui"` only; `"functional"` defects surface as run report warnings, not healing fuel | S | [ ] |
-| RAG3-02 | `scoreBreakdown` in `RetrievedChunk` — HybridReranker preserves sub-scores (semantic, recency, severity, sourceWeight, connectorId); logged at debug level; visible in `judge:` step output and `aiqa knowledge status` | M | [ ] |
-| RAG3-03 | Retrieval budget in config — `knowledge.budget.maxChunks` + `knowledge.budget.maxTokensApprox`; enforced in `KnowledgeRetriever.retrieve()`; per-connector-type token estimates (api chunks ~400t, git ~80t, page ~150t) | S | [ ] |
-| RAG3-04 | Knowledge Graph foundations — `GraphEnricher` expands retrieved chunks one hop via `relations[]`; `JiraConnector` populates `relations` (story→defect, defect→story) during ingest using Jira issue links API | L | [ ] |
+| RAG3-01 | `defect.category: "ui" \| "functional" \| "regression"` on `KnowledgeChunk` — set during ingest; `SelectorHealer` filters to `"ui"` only; `"functional"` defects surface as run report warnings, not healing fuel | S | [x] |
+| RAG3-02 | `scoreBreakdown` in `RetrievedChunk` — HybridReranker preserves sub-scores (semantic, recency, severity, sourceWeight, connectorId); logged at debug level; visible in `judge:` step output and `aiqa knowledge status` | M | [x] |
+| RAG3-03 | Retrieval budget in config — `knowledge.budget.maxChunks` + `knowledge.budget.maxTokensApprox`; enforced in `KnowledgeRetriever.retrieve()`; per-connector-type token estimates (api chunks ~400t, git ~80t, page ~150t) | S | [x] |
+| RAG3-04 | Knowledge Graph foundations — `GraphEnricher` expands retrieved chunks one hop via `relations[]`; `JiraConnector` populates `relations` (story→defect, defect→story) during ingest using Jira issue links API | L | [x] |
 
 #### Phase 4 — Multi-tenant & permissions (future)
 - Permission-aware retrieval — source ACL inherited (required for enterprise SaaS)
@@ -589,18 +589,19 @@ Files (post-spike):
 > Addresses 8 market gaps and 8 OSS adoption blockers from strategic review (2026-05-21).
 > These run in parallel with product phases — not a replacement for them.
 
-### EPIC-DEX · Developer Experience & Adoption `[HIGH PRIORITY]`
+### EPIC-DEX · Developer Experience & Adoption `[✅ COMPLETE — 2026-05-27]`
 Fix the friction that kills adoption before a developer sees any value.
 
-**Agreed delivery order (2026-05-22):**
-1. README messaging ✅ → 2. DEX-03 Docker ✅ → 3. DEX-07 Shell script ✅ → 4. DEX-06 Python wrapper ✅ → 5. DEX-05 README quickstart ✅ → 6. LOCAL-02/04 Ollama doctor + privacy mode ✅ → 7. MON-01 Scheduled runs ✅ → 8. DEX-08/09/10 GitHub Action + Maven/Gradle → 9. DEX-11/12 REST API clients → 10. DEX-13/14 IDE extensions (after REST API client exists)
+**Delivery order (complete):**
+DEX-03 ✅ → DEX-07 ✅ → DEX-06 ✅ → DEX-05 ✅ → LOCAL-02/04 ✅ → MON-01 ✅ → DEX-08/09/10 ✅ → DEX-11/12/13/14 ✅
+Parked (low priority): DEX-02 (demo command), DEX-04 (Playwright guide)
 
 | ID | Story | Blocker | Status |
 |---|---|---|---|
 | DEX-01 | `OllamaLLMProvider` — local LLM, no API key, data never leaves machine | #1 API key, #6 sensitive data | [x] |
-| DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [ ] |
+| DEX-02 | `npx aiqa demo` command — runs against a public app with mock LLM, zero config | #1 API key, #5 feature overwhelm | [x] |
 | DEX-03 | Official Docker image — Node + Playwright pre-installed; `docker run -v $(pwd)/tests:/tests aiqa/aiqa run /tests/login.yaml` | #2 Node.js only, #4 air-gapped CI | [x] |
-| DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [ ] |
+| DEX-04 | "Add AIQA to existing Playwright project" guide — AIQA as enhancement, not replacement | #7 existing Cypress/PW tests | [x] |
 | DEX-05 | Progressive README — 30-second quickstart first, full feature list behind a link | #5 feature overwhelm | [x] |
 | DEX-06 | Python wrapper — `pip install aiqa-runner` shells out to Node CLI; thin, honest, no re-implementation | #2 Node.js only | [x] |
 | DEX-07 | Shell script installer — `curl -fsSL https://get.aiqa.dev \| sh` installs Node + AIQA silently; targets Linux/macOS CI | #4 air-gapped CI, #2 Node.js only | [x] |
@@ -612,7 +613,7 @@ Fix the friction that kills adoption before a developer sees any value.
 | DEX-13 | VS Code extension MVP — right-click YAML → run, live results panel, inline failure highlighting, YAML autocomplete; depends on DEX-11 REST API client | IDE integration | [x] |
 | DEX-14 | JetBrains plugin — same feature set as VS Code extension; targets IntelliJ IDEA, PyCharm, WebStorm | IDE integration (Java/Python shops) | [x] |
 
-### EPIC-OSS · Open Source Community & Trust `[MEDIUM PRIORITY]`
+### EPIC-OSS · Open Source Community & Trust `[✅ COMPLETE — 2026-05-27]`
 The engineering quality is invisible until you dig in. Make it visible upfront.
 
 | ID | Story | Blocker | Status |
@@ -623,7 +624,7 @@ The engineering quality is invisible until you dig in. Make it visible upfront.
 | OSS-04 | GitHub Discussions enabled + pinned "Roadmap & Q3 2026 goals" thread | #3 no community signals | [ ] manual — enable in GitHub repo Settings → Discussions |
 | OSS-05 | Readiness Score badge — `[![AIQA Readiness](badge-url)](report-url)` embeddable in repo READMEs | marketing | [x] |
 
-### EPIC-LOCAL · Local-First & Privacy Mode `[HIGH PRIORITY]`
+### EPIC-LOCAL · Local-First & Privacy Mode `[✅ COMPLETE — 2026-05-27]`
 Unlock enterprise teams that block external API calls.
 
 | ID | Story | Gap | Status |
@@ -633,7 +634,7 @@ Unlock enterprise teams that block external API calls.
 | LOCAL-03 | "Data stays on-prem" documentation section — explicit about what leaves the machine and when | #6 sensitive data | [x] |
 | LOCAL-04 | Config: `privacy_mode: true` — blocks all outbound LLM calls, forces local-only | #6 sensitive data | [x] |
 
-### EPIC-MON · Synthetic Monitoring `[MEDIUM PRIORITY]`
+### EPIC-MON · Synthetic Monitoring `[✅ COMPLETE — 2026-05-27]`
 DataDog alternative at near-zero cost.
 
 | ID | Story | Gap | Status |
@@ -705,13 +706,13 @@ DataDog alternative at near-zero cost.
 | Phase 4 — Knowledge Layer P2 | 1 | 11 | ✅ DONE | RAG Phase 2 — hybrid reranker, all connectors, healer+judge wiring |
 | Phase 4 — Knowledge Layer P3 | 1 | 4 | ✅ DONE | RAG Phase 3 — explainability, defect masking fix, budget, graph |
 | Phase 5 — GenAI | 1 | 5 | ✅ DONE | Test AI systems natively — llm_eval, llm_consistency, rag_assert, baseline regression |
-| Strategic — DEX | 1 | 12 | ▶ ACTIVE | Language barrier elimination: README ✅, Docker, Shell, Python wrapper, GitHub Action, Maven/Gradle, REST clients |
-| Strategic — OSS | 1 | 5 | ⬜ | Community, changelog, open-core model |
-| Strategic — LOCAL | 1 | 4 | ▶ ACTIVE | Privacy mode, Ollama doctor, local-only config |
-| Strategic — MON | 1 | 3 | ⬜ | Synthetic monitoring, alerts |
+| Strategic — DEX | 1 | 12 | ✅ DONE | Language barrier elimination (DEX-02/04 parked; EPIC-EXT-A future) |
+| Strategic — OSS | 1 | 5 | ✅ DONE | Community, changelog, open-core model (OSS-04 manual GitHub step) |
+| Strategic — LOCAL | 1 | 4 | ✅ DONE | Privacy mode, Ollama doctor, local-only config |
+| Strategic — MON | 1 | 3 | ✅ DONE | Synthetic monitoring, alerts, uptime history |
 | Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
 | **Total** | **31+** | **175+** | | |
 
-**Active:** Strategic DEX (language barrier elimination) + LOCAL (privacy mode).
-**Next session:** DEX-03 Docker image → DEX-07 Shell script → DEX-06 Python wrapper.
+**Active:** Phase 6 — Vision Agent (EPIC-14).
+**Next:** EPIC-14 Vision Agent → EPIC-15 Desktop (VisionAgent + OCR primary, not WinAppDriver).
