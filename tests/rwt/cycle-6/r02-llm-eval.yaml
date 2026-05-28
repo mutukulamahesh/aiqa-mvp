@@ -1,0 +1,11 @@
+test:
+  name: "RWT-R02: functional regression — llm_eval quality check"
+  tags: [rwt, regression, llm_eval]
+  retries: 1
+  steps:
+    - llm_eval:
+        target: fast
+        prompt: "What is the capital of Japan? One word."
+        assert_quality:
+          criteria: "The response is Tokyo"
+          pass_if:  "score >= 0.7"

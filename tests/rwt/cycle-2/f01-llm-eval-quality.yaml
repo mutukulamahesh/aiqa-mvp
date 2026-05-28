@@ -1,0 +1,12 @@
+test:
+  name: "RWT-F01: llm_eval quality assertion — translation task"
+  tags: [rwt, functional, llm_eval]
+  retries: 1
+  steps:
+    - llm_eval:
+        target: fast
+        prompt: "Translate the word 'hello' to French. Reply with only the translation."
+        assert_quality:
+          criteria: "The response is 'bonjour' or an equivalent French greeting"
+          pass_if:  "score >= 0.7"
+        store_as: evalResult

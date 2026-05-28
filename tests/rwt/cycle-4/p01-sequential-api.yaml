@@ -1,0 +1,24 @@
+test:
+  name: "RWT-P01: sequential API calls — latency within bounds"
+  tags: [rwt, performance, api]
+  steps:
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/1"
+        assert_status: 200
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/2"
+        assert_status: 200
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/3"
+        assert_status: 200
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/4"
+        assert_status: 200
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/5"
+        assert_status: 200

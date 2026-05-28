@@ -1,0 +1,10 @@
+test:
+  name: "RWT-R06: security regression — parameterized db query is safe"
+  tags: [rwt, regression, security, db]
+  steps:
+    - db:
+        query:       "SELECT product_name FROM products WHERE product_id = ?"
+        params:      [1]
+        assert_rows: 1
+        assert_field:
+          product_name: "Chai"

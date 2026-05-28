@@ -1,0 +1,12 @@
+test:
+  name: "RWT-I06: db join — order details with product names"
+  tags: [rwt, integration, db]
+  steps:
+    - db:
+        query: >
+          SELECT o.order_id, p.product_name, od.quantity
+          FROM orders o
+          JOIN order_details od ON od.order_id = o.order_id
+          JOIN products p ON p.product_id = od.product_id
+          WHERE o.order_id = 10248
+        assert_rows: 2

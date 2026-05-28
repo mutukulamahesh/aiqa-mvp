@@ -1,0 +1,19 @@
+test:
+  name: "RWT-P02: db query throughput — multiple queries in sequence"
+  tags: [rwt, performance, db]
+  steps:
+    - db:
+        query:       "SELECT * FROM products"
+        assert_rows: 10
+    - db:
+        query:       "SELECT * FROM customers"
+        assert_rows: 5
+    - db:
+        query:       "SELECT * FROM orders"
+        assert_rows: 5
+    - db:
+        query:       "SELECT * FROM order_details"
+        assert_rows: 10
+    - db:
+        query:       "SELECT * FROM categories"
+        assert_rows: 5

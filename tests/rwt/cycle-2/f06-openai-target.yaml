@@ -1,0 +1,12 @@
+test:
+  name: "RWT-F06: multi-provider — openai_fast target"
+  tags: [rwt, functional, llm_eval, openai]
+  retries: 1
+  steps:
+    - llm_eval:
+        target: openai_fast
+        prompt: "What colour is the sky on a clear day? One word answer."
+        assert_quality:
+          criteria: "The response is 'blue' or equivalent"
+          pass_if:  "score >= 0.7"
+        store_as: openaiResult

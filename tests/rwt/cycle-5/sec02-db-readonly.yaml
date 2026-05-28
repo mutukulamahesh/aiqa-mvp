@@ -1,0 +1,7 @@
+test:
+  name: "RWT-SEC02: db read-only — SELECT succeeds under readOnly: true"
+  tags: [rwt, security, db, readonly]
+  steps:
+    - db:
+        query:       "SELECT product_name, unit_price FROM products WHERE unit_price > 20"
+        assert_rows: 3

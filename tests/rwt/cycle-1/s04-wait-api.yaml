@@ -1,0 +1,11 @@
+test:
+  name: "RWT-S04: wait_ms and API step against public endpoint"
+  tags: [rwt, smoke, api]
+  steps:
+    - wait_ms: 200
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/todos/1"
+        assert_status: 200
+        store_as:      todo
+    - wait_ms: 100

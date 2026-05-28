@@ -1,0 +1,7 @@
+test:
+  name: "RWT-I01: db select — count all products"
+  tags: [rwt, integration, db]
+  steps:
+    - db:
+        query:       "SELECT COUNT(*) AS total FROM products WHERE discontinued = 0"
+        assert_rows: 1

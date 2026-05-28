@@ -1,0 +1,12 @@
+test:
+  name: "RWT-F04: conditional flow — if/else with stored variable"
+  tags: [rwt, functional, conditional]
+  variables:
+    env_flag: "production"
+  steps:
+    - if:
+        condition: "${env_flag} == production"
+        then:
+          - wait_ms: 50
+        else:
+          - wait_ms: 100

@@ -1,0 +1,16 @@
+test:
+  name: "RWT-S03: store variable and use in assertion"
+  tags: [rwt, smoke, variables]
+  steps:
+    - navigate: "https://www.saucedemo.com"
+    - fill:
+        target: "#user-name"
+        value:  "standard_user"
+    - fill:
+        target: "#password"
+        value:  "secret_sauce"
+    - click: "#login-button"
+    - store:
+        from: ".title"
+        as:   pageTitle
+    - assert_text_visible: "Products"

@@ -1,0 +1,9 @@
+test:
+  name: "RWT-I02: db assert_field — verify category name"
+  tags: [rwt, integration, db]
+  steps:
+    - db:
+        query:        "SELECT category_name FROM categories WHERE category_id = 1"
+        assert_rows:  1
+        assert_field:
+          category_name: "Beverages"

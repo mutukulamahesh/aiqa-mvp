@@ -1,0 +1,7 @@
+test:
+  name: "RWT-P03: wait_ms precision — cumulative delay within tolerance"
+  tags: [rwt, performance, timing]
+  steps:
+    - wait_ms: 100
+    - wait_ms: 100
+    - wait_ms: 100

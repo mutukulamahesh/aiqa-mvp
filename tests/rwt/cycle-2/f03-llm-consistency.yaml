@@ -1,0 +1,13 @@
+test:
+  name: "RWT-F03: llm_consistency — low variance on deterministic fact"
+  tags: [rwt, functional, llm_consistency]
+  retries: 1
+  steps:
+    - llm_consistency:
+        target: fast
+        prompt: "What is the chemical symbol for water? Reply with only the symbol."
+        runs:   3
+        assert_variance:
+          max:    0.15
+          metric: max
+        store_as: consistencyResult

@@ -1,0 +1,11 @@
+test:
+  name: "RWT-I03: db store_as — use row value in subsequent judge step"
+  tags: [rwt, integration, db, variables]
+  steps:
+    - db:
+        query:    "SELECT company_name FROM customers WHERE customer_id = 'ALFKI'"
+        store_as: customer
+    - judge:
+        prompt:  "Does the company name '${customer.company_name}' sound like it could be a European company?"
+        value:   "${customer.company_name}"
+        pass_if: ">= 0.5"

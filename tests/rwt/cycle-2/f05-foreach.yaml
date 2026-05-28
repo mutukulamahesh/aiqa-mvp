@@ -1,0 +1,12 @@
+test:
+  name: "RWT-F05: for_each loop — iterate items and call API"
+  tags: [rwt, functional, loops]
+  steps:
+    - for_each:
+        items: [1, 2, 3]
+        as:    itemId
+        steps:
+          - api:
+              method:        GET
+              url:           "https://jsonplaceholder.typicode.com/todos/${itemId}"
+              assert_status: 200
