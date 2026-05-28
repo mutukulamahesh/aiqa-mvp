@@ -1,0 +1,8 @@
+test:
+  name: "RWT-SEC01: SSRF guard — allowed URL succeeds"
+  tags: [rwt, security, ssrf]
+  steps:
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/todos/1"
+        assert_status: 200

@@ -1,0 +1,11 @@
+test:
+  name: "RWT-F04: conditional flow — if with stored variable"
+  tags: [rwt, functional, conditional]
+  variables:
+    env_flag: "production"
+  steps:
+    - if:
+        variable: env_flag
+        equals:   "production"
+        steps:
+          - wait_ms: 50

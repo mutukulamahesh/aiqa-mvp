@@ -55,7 +55,9 @@ export class StepInterpreter {
     );
 
     const cfg        = (() => { try { return getConfig(); } catch { return undefined; } })();
-    const llmConfig  = cfg?.llm;
+    // Default to mock when no config is loaded (unit tests, ad-hoc runs without --env).
+    // When config IS loaded the provider comes from the YAML, not env-var auto-detection.
+    const llmConfig  = cfg?.llm ?? { provider: "mock" as ProviderName, fallback: [] };
     const llmTargets = (cfg?.llm_targets ?? {}) as Record<string, { provider: ProviderName; model?: string; baseUrl?: string }>;
     const embedder   = opts.embedder ?? new Embedder();
 

@@ -1,0 +1,7 @@
+test:
+  name: "RWT-SEC04: allowlist — navigation to permitted domain works"
+  tags: [rwt, security, ssrf, allowlist]
+  steps:
+    - navigate: "https://www.saucedemo.com"
+    - assert:
+        visible: "#login-button"

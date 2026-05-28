@@ -1,0 +1,14 @@
+test:
+  name: "RWT-I05: API + db cross-validation"
+  tags: [rwt, integration, api, db]
+  steps:
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/users/1"
+        assert_status: 200
+        store_as:      apiUser
+    - db:
+        query:        "SELECT COUNT(*) AS cnt FROM customers"
+        assert_rows:  1
+        assert_field:
+          cnt: "5"

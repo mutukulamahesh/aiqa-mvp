@@ -1,0 +1,8 @@
+test:
+  name: "RWT-SEC03: parameterized query — special characters in param are safe"
+  tags: [rwt, security, db, injection]
+  steps:
+    - db:
+        query:       "SELECT company_name FROM customers WHERE customer_id = ?"
+        params:      ["ALFKI'; DROP TABLE customers; --"]
+        assert_rows: 0

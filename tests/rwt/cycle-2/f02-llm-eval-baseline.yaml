@@ -1,0 +1,14 @@
+test:
+  name: "RWT-F02: llm_eval with baseline regression"
+  tags: [rwt, functional, llm_eval, baseline]
+  retries: 1
+  steps:
+    - llm_eval:
+        target:      fast
+        prompt:      "What is 2 + 2? Reply with only the number."
+        assert_quality:
+          criteria: "The response is the number 4"
+          pass_if:  "score >= 0.8"
+        baseline_key: rwt-addition
+        max_drift:    0.2
+        store_as:     mathEval

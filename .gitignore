@@ -10,3 +10,7 @@ build/
 # Scratch / export files
 conversation_export.md
 exploration.json
+ARCHITECTURE.html
+
+# RWT runtime data — generated SQLite DB (recreated by setup-rwt-db.ts)
+rwt-data/

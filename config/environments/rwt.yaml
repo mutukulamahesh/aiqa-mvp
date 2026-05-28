@@ -1,0 +1,66 @@
+environment: rwt
+
+urls:
+  base: "https://www.saucedemo.com"
+  api:  "https://jsonplaceholder.typicode.com"
+
+timeouts:
+  action:     15000
+  navigation: 30000
+  api:        20000
+
+execution:
+  workers:        1
+  retries:        1
+  headless:       true
+  maxPages:       20
+  maxDepth:       3
+  circuitBreaker: 10
+
+screenshots:
+  onFailure: true
+  dir:       "results/rwt/screenshots"
+
+results:
+  dir: "results/rwt"
+
+features:
+  llmEnabled: true
+
+storage:
+  maxHistory:   200
+  maxArtifacts: 10
+
+llm:
+  provider: nvidia
+  model:    meta/llama-3.1-70b-instruct
+  fallback: []
+
+llm_targets:
+  fast:        { provider: nvidia, model: meta/llama-3.1-8b-instruct }
+  smart:       { provider: nvidia, model: meta/llama-3.1-70b-instruct }
+  openai_fast: { provider: nvidia, model: meta/llama-3.1-8b-instruct }
+  nvidia_fast: { provider: nvidia, model: meta/llama-3.1-8b-instruct }
+
+db:
+  readOnly: true
+
+api:
+  allowlist:
+    - "https://jsonplaceholder.typicode.com"
+    - "https://www.saucedemo.com"
+  denylist: []
+
+jira:
+  baseUrl:                "https://aiqajira.atlassian.net"
+  projectKey:             "SCRUM"
+  email:                  "mmk.mutu@gmail.com"
+  createDefectsOnFailure: false
+  xraySyncEnabled:        false
+
+knowledge:
+  enabled: false
+  indexPath: ".aiqa/knowledge"
+  topK: 5
+  chunker: naive
+  connectors: []

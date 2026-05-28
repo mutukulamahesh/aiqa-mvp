@@ -1,0 +1,16 @@
+test:
+  name: "RWT-P04: full login flow timing — page navigation round-trip"
+  tags: [rwt, performance, navigation]
+  steps:
+    - navigate: "https://www.saucedemo.com"
+    - fill:
+        target: "#user-name"
+        value:  "standard_user"
+    - fill:
+        target: "#password"
+        value:  "secret_sauce"
+    - click: "#login-button"
+    - assert:
+        url: "/inventory"
+    - assert:
+        visible: ".inventory_list"

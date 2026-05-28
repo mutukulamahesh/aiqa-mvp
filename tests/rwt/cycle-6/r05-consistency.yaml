@@ -1,0 +1,12 @@
+test:
+  name: "RWT-R05: consistency regression — low variance on stable fact"
+  tags: [rwt, regression, llm_consistency]
+  retries: 1
+  steps:
+    - llm_consistency:
+        target: fast
+        prompt: "What is the capital of France? One word."
+        runs:   3
+        assert_variance:
+          max:    0.2
+          metric: max

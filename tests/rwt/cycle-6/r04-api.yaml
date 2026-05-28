@@ -1,0 +1,8 @@
+test:
+  name: "RWT-R04: integration regression — API call returns 200"
+  tags: [rwt, regression, api]
+  steps:
+    - api:
+        method:        GET
+        url:           "https://jsonplaceholder.typicode.com/posts/1"
+        assert_status: 200

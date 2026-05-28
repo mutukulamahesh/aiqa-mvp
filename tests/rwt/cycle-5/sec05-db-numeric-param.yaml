@@ -1,0 +1,10 @@
+test:
+  name: "RWT-SEC05: db parameterized — numeric param prevents type confusion"
+  tags: [rwt, security, db]
+  steps:
+    - db:
+        query:       "SELECT product_name FROM products WHERE product_id = ?"
+        params:      [1]
+        assert_rows: 1
+        assert_field:
+          product_name: "Chai"

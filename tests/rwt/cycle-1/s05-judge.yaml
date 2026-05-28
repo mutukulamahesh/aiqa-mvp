@@ -1,0 +1,9 @@
+test:
+  name: "RWT-S05: judge step — LLM evaluates a factual claim"
+  tags: [rwt, smoke, llm]
+  retries: 1
+  steps:
+    - judge:
+        prompt:  "Is the following statement factually correct? 'The capital of France is Paris.'"
+        value:   "The capital of France is Paris."
+        pass_if: "score >= 0.7"
