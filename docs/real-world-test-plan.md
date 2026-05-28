@@ -1,6 +1,6 @@
 # AIQA Real-World Test Plan — EPIC-RWT
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Effective after:** EPIC-15 Desktop Automation complete  
 **Blocks:** Phase 7 Scale (no Phase 7 work starts until this plan completes and is signed off)  
 **Methodology:** STLC (Software Testing Life Cycle)  
@@ -10,7 +10,7 @@
 
 ## Why this plan exists
 
-All 972 AIQA unit tests run against stubs and mocks. The PlaywrightAdapter, VisionAgent, OcrEngine, and all CLI commands have never been exercised against a live web app, real API, or real database. This plan closes that gap before AIQA is positioned for production use or offered to external teams.
+All 1018 AIQA unit tests run against stubs and mocks. The PlaywrightAdapter, VisionAgent, OcrEngine, and all CLI commands have never been exercised against a live web app, real API, or real database. This plan closes that gap before AIQA is positioned for production use or offered to external teams.
 
 This is not a regression suite — it is a **validation audit**: does AIQA actually work on real systems the same way its unit tests claim it does?
 
@@ -79,6 +79,7 @@ This is not a regression suite — it is a **validation audit**: does AIQA actua
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
+| **LLM non-determinism** — `judge:`, `SelectorHealer`, `VisionAgent` all produce variable outputs across runs | **High** | **High** | Use `provider: mock` for all deterministic cycles (smoke, functional DB/healing); isolate live-key LLM tests to integration cycle only; use score-range assertions (`pass_if: ">= 0.7"` not `== 1.0`); add `retries: 1` on LLM steps; never assert on exact response text |
 | Anthropic / OpenAI API rate limits | Medium | High | Use separate billing keys; run LLM tests last; add `wait_ms:` between llm_eval runs |
 | SauceDemo / DemoQA downtime | Low | Medium | Use two fallback targets per feature area |
 | Tesseract OCR accuracy on dynamic pages | Medium | Medium | Accept ≥ 70% word-level accuracy on English text |
@@ -107,6 +108,32 @@ This is not a regression suite — it is a **validation audit**: does AIQA actua
 ## STLC Phase 3 — Test Case Development
 
 Test YAML files live in `tests/real-world/` (not committed until EPIC-RWT starts). Each story below maps to one or more YAML files.
+
+### Story × Cycle traceability matrix (L2)
+
+`●` = primary exercise in this cycle  `○` = re-run as part of full suite in regression
+
+| Story | Smoke | Functional | Integration | Perf | Security | Regression |
+|---|---|---|---|---|---|---|
+| RWT-01 Environment validation | ● | | | | | ○ |
+| RWT-02 Web smoke (SauceDemo) | ● | | | | | ○ |
+| RWT-03 API CRUD (JSONPlaceholder) | ● | | | | | ○ |
+| RWT-04 Database (PostgreSQL) | | ● | | | | ○ |
+| RWT-05 Selector healing | | ● | | | | ○ |
+| RWT-06 LLM judge | | ● | | | | ○ |
+| RWT-07 llm_eval (live Claude) | | ● | | | | ○ |
+| RWT-08 llm_consistency | | ● | | | | ○ |
+| RWT-09 vision_assert | | ● | | | | ○ |
+| RWT-10 visual_snapshot | | ● | | | | ○ |
+| RWT-11 RAG + Jira ingest | | | ● | | | ○ |
+| RWT-12 Orchestrator E2E | | | ● | ● | | ○ |
+| RWT-13 Jira sync (defect creation) | | | ● | | | ○ |
+| RWT-14 CLI + portal validation | | | | ● | ● | ○ |
+
+**Coverage notes:**
+- Vision Agent (RWT-09, RWT-10) is exercised only from functional cycle onward — smoke uses `provider: mock`
+- Security cycle focuses on RWT-14 (REST API surface) and cross-cuts RWT-04 (SQL injection via `db:`) and RWT-07 (path traversal via `baseline_key`)
+- Performance cycle covers RWT-12 (orchestrator wall-clock) and RWT-14 (`aiqa run-all` timing)
 
 ### RWT-01 — Environment setup validation
 
@@ -398,10 +425,14 @@ Portal UI checklist:
 | PostgreSQL running | `psql -c "SELECT 1"` | Dev machine |
 | Northwind schema loaded | `psql aiqa_rwt -c "\dt"` — expect ≥ 10 tables | Dev machine |
 | `.env` has live API keys | `aiqa doctor` shows LLM provider reachable | Dev machine |
+| `ANTHROPIC_API_KEY` has **vision-model scope** | Key must allow `claude-sonnet-4-6` vision calls (base64 PNG input), not text-only — verify by running `aiqa run tests/real-world/rwt-09-vision-assert.yaml` | Dev machine |
+| tesseract.js WASM pre-warmed | First `vision_assert:` step downloads ~25MB to `.aiqa/tesseract-cache/` — run once manually or pre-warm in setup: `ts-node -e "require('./src/vision/OcrEngine').OcrEngine; process.exit()"` | Dev machine (needs outbound internet) |
 | `aiqa serve` starts clean | `curl localhost:7432/api/health` → 200 | Dev machine |
 | Playwright browsers installed | `npx playwright install chromium` | Dev machine |
 | SCRUM Jira project accessible | `curl -u email:token .../rest/api/3/project/SCRUM` → 200 | Dev machine |
 | Visual baselines cleared | `rm -rf .aiqa/visual-baselines/` | Dev machine before RWT-10 first run |
+
+> **Vision cost note:** Use `StubVisionAgent` (via `provider: mock` config) in smoke and functional cycles. Switch to live `VisionAgent` only in the integration cycle (RWT-09, RWT-10). Each live `vision_assert:` step makes one Claude Vision API call — 10-step desktop or vision tests cost ~10 calls each.
 
 ### PostgreSQL setup (Northwind)
 
@@ -409,6 +440,14 @@ Portal UI checklist:
 createdb aiqa_rwt
 psql aiqa_rwt < scripts/northwind.sql   # add this script in RWT-03 story
 ```
+
+### Data isolation strategy (M3)
+
+Six cycles run against the same `aiqa_rwt` database. To prevent state accumulation from causing false failures:
+
+- **Strategy: self-cleaning tests.** All `db:` steps in RWT stories use read-only Northwind data (SELECT only). Any INSERT/UPDATE/DELETE steps must include a compensating cleanup step in the same YAML file (within an `if: failed` block or as a teardown step).
+- **Fallback before regression cycle.** Before Cycle 6, restore a clean Northwind snapshot: `psql aiqa_rwt < scripts/northwind.sql` (script is idempotent — drops and recreates all tables). This guarantees regression cycle starts from known state.
+- **No shared mutable schema.** Each RWT story that needs writable state creates a dedicated table (prefix `rwt_`) and drops it at the end of the test. The Northwind tables are never mutated.
 
 ### Config file for real-world tests
 
@@ -475,22 +514,9 @@ database:
 | RWT-12 | Orchestrator E2E | Full explore → generate → run pipeline on SauceDemo |
 | RWT-13 | Jira sync | Defect created in SCRUM with step details |
 
-### Cycle 4 — Security
+### Cycle 4 — Performance
 
-**Scope:** AIQA REST API server (`aiqa serve`) + public endpoint behavior.
-
-| Check | Method | Expected result |
-|---|---|---|
-| No default credentials in API | `curl localhost:7432/api/runs` without auth | Returns data (dev) — document this is dev-only; confirm prod needs auth layer |
-| No path traversal in BaselineStore | `api:` step with `baseline_key: "../../etc/passwd"` | Error thrown, no file read |
-| No path traversal in `store:` | YAML `store` with `as: "../../evil"` | Stored in scoped map only, not filesystem |
-| XSS in HTML reporter | Inject `<script>alert(1)</script>` as test name | HTML reporter escapes output |
-| SQL injection in `db:` | `params: ["1; DROP TABLE orders; --"]` | Parameterized query, no injection |
-| WebSocket auth | Connect to `ws://localhost:7432` without session | In dev: open. Document that `aiqa serve --auth` is Phase 7 story |
-
-### Cycle 5 — Performance
-
-**Goal:** Capture wall-clock baselines for key operations.
+**Goal:** Capture wall-clock baselines for key operations. Run before security so any performance issues (memory leaks, worker contention, slow queries) are identified and stable before auth/injection checks.
 
 | Scenario | Target | How to measure |
 |---|---|---|
@@ -501,6 +527,19 @@ database:
 | Visual snapshot compare (inventory page) | < 2 s | Step duration in report |
 
 Baseline file: `tests/perf-baselines/rwt-perf-baseline.json` — committed to repo after first run.
+
+### Cycle 5 — Security
+
+**Scope:** AIQA REST API server (`aiqa serve`) + public endpoint behavior. Run after performance so the system is stable and any resource-exhaustion vulnerabilities are distinguishable from performance issues.
+
+| Check | Method | Expected result |
+|---|---|---|
+| No default credentials in API | `curl localhost:7432/api/runs` without auth | Returns data (dev) — document this is dev-only; confirm prod needs auth layer |
+| No path traversal in BaselineStore | `api:` step with `baseline_key: "../../etc/passwd"` | Error thrown, no file read |
+| No path traversal in `store:` | YAML `store` with `as: "../../evil"` | Stored in scoped map only, not filesystem |
+| XSS in HTML reporter | Inject `<script>alert(1)</script>` as test name | HTML reporter escapes output |
+| SQL injection in `db:` | `params: ["1; DROP TABLE orders; --"]` | Parameterized query, no injection |
+| WebSocket auth | Connect to `ws://localhost:7432` without session | In dev: open. Document that `aiqa serve --auth` is Phase 7 story |
 
 ### Cycle 6 — Regression (full suite re-run)
 
@@ -515,18 +554,33 @@ After all cycles above are green:
 
 ## STLC Phase 6 — Test Cycle Closure
 
+### Sign-off definition (L3)
+
+Phase 7 is unblocked **only** when ALL of the following measurable conditions are met:
+
+| Condition | Pass threshold |
+|---|---|
+| All 6 execution cycles completed | 6/6 — no cycle skipped or partial |
+| Real-world story pass rate | ≥ 95% (≥ 14/14 stories, or 13/14 with one P3-only failure) |
+| Open P1/P2 defects | 0 |
+| `aiqa doctor` green | All checks pass on bare Node 20 and inside Docker container |
+| Performance cycle: `aiqa run-all` on 14 RWT tests | < 120 s wall-clock |
+| `aiqa score` on real-world suite | ≥ 80 |
+| Security checklist | All 6 checks documented (pass or acknowledged risk) |
+
+If any condition is not met, Phase 7 remains blocked. Partial sign-off ("we'll fix it in Phase 7") is not accepted.
+
 ### Closure checklist
 
 - [ ] All 14 RWT stories marked complete in BACKLOG.md
+- [ ] All 6 sign-off conditions met (table above)
 - [ ] All Jira defects found during RWT triaged: P1/P2 fixed, P3/P4 logged for Phase 7
 - [ ] Performance baselines committed to `tests/perf-baselines/`
 - [ ] Visual baselines committed to `.aiqa/visual-baselines/`
 - [ ] Security findings documented in `docs/security-findings-rwt.md`
-- [ ] `aiqa score` ≥ 80 on real-world suite
 - [ ] CHANGELOG.md updated with [1.7.0-rwt] entry
 - [ ] BACKLOG.md EPIC-RWT marked ✅ DONE
 - [ ] Memory file `project_backlog.md` updated
-- [ ] Team sign-off (or solo: self-review checklist complete)
 - [ ] Phase 7 formally unblocked
 
 ### Metrics to record
