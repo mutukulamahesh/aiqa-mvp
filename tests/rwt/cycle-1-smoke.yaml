@@ -1,0 +1,68 @@
+# RWT Cycle 1 — Smoke
+# Validates that every core DSL step type executes without error against a live target.
+# Target: https://www.saucedemo.com (public test site — always available)
+
+tests:
+  - test:
+      name: "RWT-S01: navigate and assert page title element"
+      tags: [rwt, smoke, navigation]
+      steps:
+        - navigate: "https://www.saucedemo.com"
+        - assert_element_visible: "#user-name"
+        - assert_element_visible: "#password"
+        - assert_element_visible: "#login-button"
+        - assert_url_contains: "saucedemo"
+
+  - test:
+      name: "RWT-S02: fill, click, assert post-login state"
+      tags: [rwt, smoke, interaction]
+      steps:
+        - navigate: "https://www.saucedemo.com"
+        - fill:
+            target: "#user-name"
+            value:  "standard_user"
+        - fill:
+            target: "#password"
+            value:  "secret_sauce"
+        - click: "#login-button"
+        - assert_url_contains: "/inventory"
+        - assert_element_visible: ".inventory_list"
+
+  - test:
+      name: "RWT-S03: store variable and use in assertion"
+      tags: [rwt, smoke, variables]
+      steps:
+        - navigate: "https://www.saucedemo.com"
+        - fill:
+            target: "#user-name"
+            value:  "standard_user"
+        - fill:
+            target: "#password"
+            value:  "secret_sauce"
+        - click: "#login-button"
+        - store:
+            from: ".title"
+            as:   pageTitle
+        - assert_text_visible: "Products"
+
+  - test:
+      name: "RWT-S04: wait_ms and API step against public endpoint"
+      tags: [rwt, smoke, api]
+      steps:
+        - wait_ms: 200
+        - api:
+            method:        GET
+            url:           "https://jsonplaceholder.typicode.com/todos/1"
+            assert_status: 200
+            store_as:      todo
+        - wait_ms: 100
+
+  - test:
+      name: "RWT-S05: judge step — LLM evaluates a factual claim"
+      tags: [rwt, smoke, llm]
+      retries: 1
+      steps:
+        - judge:
+            prompt:   "Is the following statement factually correct? 'The capital of France is Paris.'"
+            value:    "The capital of France is Paris."
+            pass_if:  ">= 0.7"

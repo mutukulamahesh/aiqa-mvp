@@ -1,17 +1,19 @@
 import { DBAdapter } from "./DBAdapter";
 import { MockDBAdapter } from "./MockDBAdapter";
 
-/**
- * Returns a real KnexDBAdapter when DB_URL is set, otherwise MockDBAdapter.
- * Mirrors the createLLMProvider() factory pattern.
- * `readOnly` defaults to true — pass false only when the test suite explicitly needs writes.
- */
 export function createDBAdapter(readOnly = true): DBAdapter {
   const dbUrl = process.env.DB_URL;
-  if (dbUrl) {
-    // Lazy import — KnexDBAdapter only loads knex when actually needed.
-    const { KnexDBAdapter } = require("./KnexDBAdapter") as typeof import("./KnexDBAdapter");
-    return new KnexDBAdapter(dbUrl, readOnly);
+  if (!dbUrl) return new MockDBAdapter();
+
+  if (dbUrl.startsWith("sqlite://")) {
+    const source = dbUrl.slice("sqlite://".length);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { SqliteDBAdapter } = require("./SqliteDBAdapter") as typeof import("./SqliteDBAdapter");
+    return new SqliteDBAdapter(source, readOnly);
   }
-  return new MockDBAdapter();
+
+  // PostgreSQL via Knex — only loaded when DB_URL is a postgres:// connection string.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { KnexDBAdapter } = require("./KnexDBAdapter") as typeof import("./KnexDBAdapter");
+  return new KnexDBAdapter(dbUrl, readOnly);
 }

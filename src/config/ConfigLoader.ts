@@ -9,7 +9,7 @@ dotenv.config();
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 const EnvConfigSchema = z.object({
-  environment: z.enum(["dev", "staging", "prod"]),
+  environment: z.enum(["dev", "staging", "prod", "rwt"]),
 
   urls: z.object({
     base: z.url("urls.base must be a valid URL"),

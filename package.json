@@ -39,6 +39,7 @@
     "pixelmatch": "^7.2.0",
     "playwright": "^1.42.1",
     "pngjs": "^7.0.0",
+    "sql.js": "^1.14.1",
     "tesseract.js": "^7.0.0",
     "vectra": "^0.12.3",
     "ws": "^8.20.0",

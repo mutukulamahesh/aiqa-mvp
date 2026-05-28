@@ -1,0 +1,84 @@
+# RWT Cycle 2 — Functional
+# Validates AI/LLM features: llm_eval, llm_consistency, conditional flow, loops.
+
+tests:
+  - test:
+      name: "RWT-F01: llm_eval quality assertion — translation task"
+      tags: [rwt, functional, llm_eval]
+      retries: 1
+      steps:
+        - llm_eval:
+            target: fast
+            prompt: "Translate the word 'hello' to French. Reply with only the translation."
+            assert_quality:
+              criteria: "The response is 'bonjour' or an equivalent French greeting"
+              pass_if:  "score >= 0.7"
+            store_as: evalResult
+
+  - test:
+      name: "RWT-F02: llm_eval with baseline regression"
+      tags: [rwt, functional, llm_eval, baseline]
+      retries: 1
+      steps:
+        - llm_eval:
+            target:       fast
+            prompt:       "What is 2 + 2? Reply with only the number."
+            assert_quality:
+              criteria: "The response is the number 4"
+              pass_if:  "score >= 0.8"
+            baseline_key: rwt-addition
+            max_drift:    0.2
+            store_as:     mathEval
+
+  - test:
+      name: "RWT-F03: llm_consistency — low variance on deterministic fact"
+      tags: [rwt, functional, llm_consistency]
+      retries: 1
+      steps:
+        - llm_consistency:
+            target: fast
+            prompt: "What is the chemical symbol for water? Reply with only the symbol."
+            runs:   3
+            assert_variance:
+              max:    0.15
+              metric: max
+            store_as: consistencyResult
+
+  - test:
+      name: "RWT-F04: conditional flow — if/else with stored variable"
+      tags: [rwt, functional, conditional]
+      variables:
+        env_flag: "production"
+      steps:
+        - if:
+            condition: "${env_flag} == production"
+            then:
+              - wait_ms: 50
+            else:
+              - wait_ms: 100
+
+  - test:
+      name: "RWT-F05: for_each loop — iterate items and call API"
+      tags: [rwt, functional, loops]
+      steps:
+        - for_each:
+            items: [1, 2, 3]
+            as:    itemId
+            steps:
+              - api:
+                  method:        GET
+                  url:           "https://jsonplaceholder.typicode.com/todos/${itemId}"
+                  assert_status: 200
+
+  - test:
+      name: "RWT-F06: multi-provider — openai_fast target"
+      tags: [rwt, functional, llm_eval, openai]
+      retries: 1
+      steps:
+        - llm_eval:
+            target: openai_fast
+            prompt: "What colour is the sky on a clear day? One word answer."
+            assert_quality:
+              criteria: "The response is 'blue' or equivalent"
+              pass_if:  "score >= 0.7"
+            store_as: openaiResult
