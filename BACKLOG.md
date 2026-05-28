@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~99%**  *(updated 2026-05-27)*
-> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + test-coverage pass: **DONE**.
-> Remaining: Phase 6-7 (Vision, desktop, agentic). Parked: DEX-02, DEX-04, EPIC-EXT-A, OSS-04 (manual).
+> Current alignment with vision: **~99%**  *(updated 2026-05-28)*
+> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + Phase 6 EPIC-14 (Vision Agent): **DONE**.
+> Remaining: EPIC-15 Desktop, Phase 7 Scale. Parked: EPIC-EXT-A, OSS-04 (manual).
 
 ---
 
@@ -648,26 +648,27 @@ DataDog alternative at near-zero cost.
 ## Phase 6 — Vision & Desktop `[SELECTOR-FREE TESTING]`
 > Works on any UI with no DOM access
 
-### EPIC-14 · Vision Agent
-> **Branch:** `vision` · **Status:** in progress
+### EPIC-14 · Vision Agent `[✅ COMPLETE — 2026-05-28]`
+> **Branch:** `vision` → merged to `main` at `b82851b` · 61 new tests, 972 total passing
 
 **Locked design decisions:**
 - `VisionAgent`: `analyzeBuffer(buf)` (core, testable) + `analyze(page)` (thin wrapper). No `suggestedSelector` in output — only observable facts: `type`, `description`, `text`, `bbox` (0–1 normalized), `confidence`.
 - `SmartLocatorEngine`: generates selectors from OCR text + element type; validates every candidate via `page.locator(sel).count() === 1` before returning. Strategy-5 in existing `SelectorHealer` waterfall — same cache, same scoring.
-- `ObjectRepository` key: `SHA-256(normalizedUrl + "|" + pageTitle).slice(0, 16)`. Normalization: lowercase, strip default port, strip query/fragment, strip trailing slash. Composite identity from start — extensible to domHash/visualHash in Phase 2.
+- `ObjectRepository` key: `SHA-256(normalizedUrl + "|" + pageTitle).slice(0, 16)`. Normalization: hostname-only lowercase, strip default port, strip query/fragment, strip trailing slash (pathname case preserved). Composite identity from start — extensible to domHash/visualHash in Phase 2.
 - `visual_snapshot` DSL: `max_diff_percent` (pass/fail %) + `sensitivity` (pixelmatch per-pixel tolerance). Separate named params — not the same value.
 - `tesseract.js`: lazy dynamic import on first use; cached at `.aiqa/tesseract-cache/`. One-time ~25MB download documented.
 - `vision_assert` is a **pure detector** — finds element, stores `{ selector, type, description, confidence }` via `store_as`. No `action:` field. Execution always through existing `click:` / `fill:` steps. Vision augments the existing validation system — no parallel DSL, no parallel orchestrator.
-
-**Implementation order:** 14.1 → 14.2 → 14.5 → 14.3 → 14.4
+- `pixelmatch` v7 is pure ESM — Jest CJS mode incompatible. Fixed via `tests/__mocks__/pixelmatch.js` CJS shim + `moduleNameMapper` in `jest.config.ts`.
 
 | ID | Story | Status |
 |---|---|---|
-| 14.1 | `VisionAgent` — `analyzeBuffer(buf)` + `analyze(page)` split; Claude Vision → `DetectedElement[]`; `StubVisionAgent` for tests | [ ] |
-| 14.2 | `OcrEngine` — lazy tesseract.js; `.aiqa/tesseract-cache/`; `analyzeBuffer(buf)` → `OcrWord[]`; `StubOcrEngine` for tests | [ ] |
-| 14.5 | `ObjectRepository` — composite key (url+title); normalized URL; JSON persistence; merge strategy | [ ] |
-| 14.3 | `SmartLocatorEngine` — OCR text + type hints → selector candidates → DOM probe → cache; SelectorHealer strategy-5 | [ ] |
-| 14.4 | `VisualRegression` — `pixelmatch` + `pngjs`; `max_diff_percent` vs `sensitivity`; baselines at `.aiqa/visual-baselines/` | [ ] |
+| 14.1 | `VisionAgent` — `analyzeBuffer(buf)` + `analyze(page)` split; Claude Vision → `DetectedElement[]`; `StubVisionAgent` for tests | [x] |
+| 14.2 | `OcrEngine` — lazy tesseract.js; `.aiqa/tesseract-cache/`; `analyzeBuffer(buf)` → `OcrWord[]`; `StubOcrEngine` for tests | [x] |
+| 14.5 | `ObjectRepository` — composite key (url+title); hostname-only normalizeUrl; JSON persistence; merge strategy | [x] |
+| 14.3 | `SmartLocatorEngine` — OCR text + type hints → selector candidates → DOM probe → cache; SelectorHealer strategy-5 | [x] |
+| 14.4 | `VisualRegression` — `pixelmatch` + `pngjs`; `max_diff_percent` vs `sensitivity`; baselines at `.aiqa/visual-baselines/` | [x] |
+| — | `VisionAssertHandler` — `vision_assert:` DSL step; pure detector; `store_as` | [x] |
+| — | `VisualSnapshotHandler` — `visual_snapshot:` DSL step; update/compare modes | [x] |
 
 ### EPIC-15 · Desktop Automation
 | ID | Story | Status |
@@ -722,9 +723,10 @@ DataDog alternative at near-zero cost.
 | Strategic — OSS | 1 | 5 | ✅ DONE | Community, changelog, open-core model (OSS-04 manual GitHub step) |
 | Strategic — LOCAL | 1 | 4 | ✅ DONE | Privacy mode, Ollama doctor, local-only config |
 | Strategic — MON | 1 | 3 | ✅ DONE | Synthetic monitoring, alerts, uptime history |
-| Phase 6 — Vision | 2 | 8 | ⬜ | Selector-free, desktop automation |
+| Phase 6 — Vision EPIC-14 | 1 | 7 | ✅ DONE | Selector-free web testing (vision_assert, visual_snapshot) |
+| Phase 6 — Desktop EPIC-15 | 1 | 3 | ⬜ | Desktop automation (VisionAgent + OCR primary) |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
 | **Total** | **31+** | **175+** | | |
 
-**Active:** Phase 6 — Vision Agent (EPIC-14).
-**Next:** EPIC-14 Vision Agent → EPIC-15 Desktop (VisionAgent + OCR primary, not WinAppDriver).
+**Active:** EPIC-15 Desktop Automation (not started).
+**Next:** VisionAgent + OCR primary strategy (EY AICV pattern); WinAppDriver as secondary fallback only.

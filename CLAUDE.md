@@ -144,18 +144,17 @@ jira:
 
 ---
 
-## Current state (2026-05-27)
+## Current state (2026-05-28)
 
-- **Branch:** `main` at `32e652a` (merged from `test-coverage`)
-- **Tests:** 912 passing, 35 suites, tsc clean
+- **Branch:** `main` at `b82851b` (merged from `vision`)
+- **Tests:** 972 passing, 42 suites, tsc clean
 - **All strategic epics complete:** EPIC-DEX ✅, EPIC-OSS ✅, EPIC-LOCAL ✅, EPIC-MON ✅
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
-- **Test coverage pass:** AlertWebhook, UptimeTracker, BadgeGenerator — 54 new tests, 3 new modules in `src/reporters/`
-- **Active:** Phase 6 — EPIC-14 Vision Agent (branch: `vision`)
-- **Next:** EPIC-15 Desktop (VisionAgent + OCR primary; WinAppDriver secondary)
+- **Phase 6 — EPIC-14 Vision Agent:** complete and merged to main (61 new tests)
+- **Active:** EPIC-15 Desktop Automation (not started — next up)
 - **Parked:** EPIC-EXT-A (Chrome extension API-backed), OSS-04 (manual GitHub Discussions)
-- **Vision design locked:** no `suggestedSelector` in VisionAgent output; `vision_assert` is pure detector (no action field); SmartLocatorEngine DOM-validates every selector; ObjectRepository composite key (url+title); `visual_snapshot` uses `max_diff_percent` + `sensitivity` (not conflated `threshold`)
+- **Vision design locked:** no `suggestedSelector` in VisionAgent output; `vision_assert` is pure detector (no action field); SmartLocatorEngine DOM-validates every selector; ObjectRepository composite key (url+title); `visual_snapshot` uses `max_diff_percent` + `sensitivity` (not conflated `threshold`); `normalizeUrl` lowercases hostname only (not full URL)
 
 ### Phase 5 stories — ALL COMPLETE ✅
 
@@ -177,6 +176,32 @@ jira:
 | `src/ai-testing/BaselineStore.ts` | Reads/writes `tests/baselines/{key}.json`; path traversal guard; async I/O |
 | `src/ai-testing/VarianceComputer.ts` | Pairwise cosine similarity via Embedder; max/mean; exports `cosineDist` |
 | `src/ai-testing/TraceParser.ts` | GEN-03 spike: normalises OpenAI + LangChain traces; depth guard; deferred |
+
+### Phase 6 — EPIC-14 Vision Agent — ALL COMPLETE ✅
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| 14.1 | `VisionAgent` — analyzeBuffer/analyze split; Claude Vision → DetectedElement[]; StubVisionAgent | S | ✅ |
+| 14.2 | `OcrEngine` — lazy tesseract.js; bbox normalization; StubOcrEngine | S | ✅ |
+| 14.5 | `ObjectRepository` — SHA-256 composite key; hostname-only normalizeUrl; atomic write; merge | M | ✅ |
+| 14.3 | `SmartLocatorEngine` — OCR proximity + type candidates; DOM count validation; SelectorHealer strategy-5 | M | ✅ |
+| 14.4 | `VisualRegression` — pixelmatch diff; max_diff_percent vs sensitivity; diff image on failure | M | ✅ |
+| — | `VisionAssertHandler` — vision_assert DSL step; pure detector; store_as | S | ✅ |
+| — | `VisualSnapshotHandler` — visual_snapshot DSL step; update/compare modes | S | ✅ |
+
+### Key Phase 6 files
+
+| File | Role |
+|---|---|
+| `src/vision/types.ts` | DetectedElement, OcrWord, BoundingBox, RepoKey, RepoEntry, VisionScanResult |
+| `src/vision/VisionAgent.ts` | IVisionAgent, VisionAgent (Anthropic SDK direct), StubVisionAgent |
+| `src/vision/OcrEngine.ts` | IOcrEngine, OcrEngine (tesseract.js lazy), StubOcrEngine |
+| `src/vision/ObjectRepository.ts` | normalizeUrl (hostname-only), ObjectRepository (SHA-256 key, atomic write) |
+| `src/vision/SmartLocatorEngine.ts` | DomValidator interface, SmartLocatorEngine.locate() |
+| `src/vision/VisualRegression.ts` | VisualRegression.snapshot/compare; pixelmatch CJS shim via moduleNameMapper |
+| `src/handlers/VisionAssertHandler.ts` | vision_assert step; pure detector; store_as |
+| `src/handlers/VisualSnapshotHandler.ts` | visual_snapshot step; update/compare modes |
+| `tests/__mocks__/pixelmatch.js` | CJS shim for pixelmatch v7 (pure ESM — incompatible with Jest CJS mode) |
 
 ---
 

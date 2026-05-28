@@ -1,8 +1,8 @@
 # AIQA — Progress Report
 
-> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-22
-> Platform alignment: **~99%** of vision  ·  Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 GenAI: **DONE**
-> **Next:** EPIC-DEX (developer experience) · EPIC-OSS (community) · EPIC-MON (synthetic monitoring)
+> Branch: `main` · Started: 2026-05-01 · Last updated: 2026-05-28
+> Platform alignment: **~99%** of vision  ·  Sprint 1–2 + Phase 2–6 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 GenAI + Strategic epics + Phase 6 Vision Agent: **DONE**
+> **Next:** EPIC-15 Desktop Automation (VisionAgent + OCR primary; WinAppDriver secondary)
 
 ---
 
@@ -1165,3 +1165,71 @@ Completes the Jira integration layer — AIQA now reads stories from Jira, creat
 | Baseline regression | ❌ | ✅ embedding drift detection, VCS-committed baselines |
 | Trace normalisation | ❌ | ✅ spike proven clean — OpenAI + LangChain schema |
 | Vision alignment | ~95% | **~99%** |
+
+---
+
+## Phase 6 — Vision Agent ✅ COMPLETE (2026-05-28)
+
+> Branch: `vision` → merged to `main` at `b82851b`. All EPIC-14 stories delivered and review-clean.
+
+### What was built
+
+| File | Purpose |
+|---|---|
+| `src/vision/types.ts` | `DetectedElement`, `OcrWord`, `BoundingBox`, `RepoKey`, `RepoEntry`, `VisionScanResult` |
+| `src/vision/VisionAgent.ts` | `IVisionAgent` interface; `VisionAgent` calls Anthropic SDK directly (bypasses text-only LLMProvider); returns `[]` on missing key or parse failure; `StubVisionAgent` test double |
+| `src/vision/OcrEngine.ts` | `IOcrEngine` interface; `OcrEngine` — lazy tesseract.js dynamic import; language data cached at `.aiqa/tesseract-cache/`; bbox normalized to 0–1 from pixel coords; `StubOcrEngine` test double |
+| `src/vision/ObjectRepository.ts` | `normalizeUrl()` — hostname-only lowercase, strip :443/:80, strip query/fragment, strip trailing slash; `ObjectRepository` — SHA-256(url+"\|"+title).slice(0,16) composite key; atomic write via `.tmp` + rename; get/set/merge |
+| `src/vision/SmartLocatorEngine.ts` | `DomValidator` interface; `SmartLocatorEngine.locate()` — vision + OCR → `bestMatch()` → `generateCandidates()` → DOM `count()` validation; OCR proximity search within 0.08 normalized radius |
+| `src/vision/VisualRegression.ts` | `VisualRegression.snapshot()` — saves/overwrites baseline; `compare()` — pixelmatch diff; `diffPercent = numDiffPixels / totalPixels * 100` vs `max_diff_percent * 100`; size mismatch → `diffPercent: 100` |
+| `src/handlers/VisionAssertHandler.ts` | `vision_assert:` DSL step; pure detector — no `action:` field; `SmartLocatorEngine` constructed once in constructor (not per-call); `store_as` stores `{ description, type, selector, confidence }` |
+| `src/handlers/VisualSnapshotHandler.ts` | `visual_snapshot:` DSL step; delegates to `VisualRegression`; update mode stores `{ match: true, diffPercent: 0 }` |
+| `src/adapter/AdapterActions.ts` | Added `screenshotBuffer()`, `getViewportSize()`, `countLocator()` |
+| `src/adapter/PlaywrightAdapter.ts` | Implemented three new methods using `this.page` / `ensureLaunched()` |
+| `src/healer/SelectorHealer.ts` | Strategy-5: after LLM returns null, try `smartLocator.locate()` — optional 4th constructor arg |
+| `src/dsl/types.ts` | `vision_assert` + `visual_snapshot` added to `StepAction` union |
+| `src/dsl/DslParser.ts` | Parsing blocks for both new step types; added to `SUPPORTED` array |
+| `src/execution/StepInterpreter.ts` | Registers `VisionAssertHandler` + `VisualSnapshotHandler` in default registry |
+| `tests/__mocks__/pixelmatch.js` | CJS shim — pixelmatch v7 is pure ESM and fails under Jest CJS mode; implements real per-channel max-delta comparison |
+| `jest.config.ts` | `moduleNameMapper` entry redirects `pixelmatch` to CJS shim |
+
+### Key design decisions
+
+- **VisionAgent bypasses LLMProvider**: the existing `LLMProvider` interface is text-only. VisionAgent needs multimodal (image + text). Fixed by calling `@anthropic-ai/sdk` directly via dynamic import — returns `[]` when SDK missing or no key, consistent with mock fallback behavior.
+- **vision_assert is a pure detector**: concern from plan review — no `action:` sub-field. Users compose with existing `click:` / `fill:` steps using `{{ stored.selector }}`. One responsibility per step.
+- **SmartLocatorEngine constructed once**: not per-execute — avoids unnecessary allocation on every `vision_assert` step. Consistent with how `VisualSnapshotHandler` constructs `VisualRegression`.
+- **normalizeUrl hostname-only**: early implementation lowercased the full URL string, which lowercased the pathname. `/Login` and `/login` are distinct resources on case-sensitive servers. Fixed in review: `u.hostname = u.hostname.toLowerCase()` only.
+
+### Review findings addressed (commit `bd86be5`)
+
+| Finding | Fix |
+|---|---|
+| M1: `normalizeUrl` lowercased full URL including pathname | `new URL(raw)` then `u.hostname = u.hostname.toLowerCase()` |
+| L1: No test for pathname case preservation | Added `normalizeUrl("https://EXAMPLE.COM/Login") → "https://example.com/Login"` |
+| L2: `SmartLocatorEngine` constructed per `execute()` call | Moved to constructor; reused as `this.engine` |
+| M2: `action: click/fill` not implemented | Rejected — design decision: `vision_assert` is a pure detector; actions go through `click:` / `fill:` |
+
+### Tests — 61 new vision tests across 7 suites
+
+| Suite | Tests | Coverage |
+|---|---|---|
+| `tests/vision/vision-agent.test.ts` | 5 | StubVisionAgent fixture/empty/bbox/shape; VisionAgent no-key returns [] |
+| `tests/vision/ocr-engine.test.ts` | 5 | StubOcrEngine fixture/empty/shape/bbox/confidence |
+| `tests/vision/object-repository.test.ts` | 14 | normalizeUrl rules (9); get/set/merge (5) |
+| `tests/vision/smart-locator-engine.test.ts` | 9 | No elements; button/input/link candidates; OCR proximity; no match |
+| `tests/vision/visual-regression.test.ts` | 9 | snapshot save/no-overwrite/update; compare identical/diff/size-mismatch/diff-file/no-diffPath |
+| `tests/vision/vision-assert-handler.test.ts` | 10 | Found/store_as/null-selector; confidence threshold; no elements; no match |
+| `tests/vision/visual-snapshot-handler.test.ts` | 9 | Update mode; compare pass/fail/store_as/no-baseline |
+
+### Platform metrics after Phase 6
+
+| Metric | After Phase 5 | After Phase 6 |
+|---|---|---|
+| Tests passing | 858 | **972** |
+| Test suites | 32 | **42** |
+| Vision step types | 0 | **2** (`vision_assert`, `visual_snapshot`) |
+| Selector healing strategies | 4 | **5** (+ SmartLocatorEngine vision fallback) |
+| Screenshot-based testing | ❌ | ✅ element detection + pixel regression |
+| Selector-free testing | ❌ | ✅ describe elements in plain English |
+| Visual baselines | ❌ | ✅ `.aiqa/visual-baselines/` |
+| ESM/CJS shim pattern | ❌ | ✅ pixelmatch CJS shim + moduleNameMapper |

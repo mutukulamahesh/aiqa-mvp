@@ -10,6 +10,28 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.6.0] — 2026-05-28
+
+### Added — Phase 6: EPIC-14 Vision Agent
+
+- `vision_assert:` DSL step — screenshot-based element detection via Claude Vision; pure detector (no action field); stores `{ description, type, selector, confidence }` via `store_as`; composes with existing `click:` / `fill:` steps
+- `visual_snapshot:` DSL step — pixel-level visual regression; `update: true` captures baseline; compare mode diffs against baseline with configurable `max_diff_percent` and per-pixel `sensitivity`; diff image written to `.aiqa/visual-baselines/<name>.diff.png` on failure
+- `VisionAgent` — calls Claude Vision API directly (bypasses text-only LLMProvider); returns `[]` gracefully when no API key; `StubVisionAgent` for tests
+- `OcrEngine` — lazy tesseract.js dynamic import; language data cached at `.aiqa/tesseract-cache/`; bbox normalized to 0–1; `StubOcrEngine` for tests
+- `ObjectRepository` — per-page element cache; SHA-256 composite key from normalized URL + page title; hostname-only URL normalization (pathname case preserved); atomic write via tmp + rename; get/set/merge
+- `SmartLocatorEngine` — selector-free locator generation; OCR proximity + element type hints → CSS candidates; DOM-validates every candidate via `count() === 1`; plugged into `SelectorHealer` as strategy-5
+- `VisualRegression` — pixelmatch pixel diff; `max_diff_percent` (pass/fail threshold) kept separate from `sensitivity` (pixelmatch per-pixel tolerance)
+- `AdapterActions` extended with `screenshotBuffer()`, `getViewportSize()`, `countLocator()` — vision handlers work through existing adapter abstraction
+- `SelectorHealer` strategy-5 — SmartLocatorEngine fallback after all four existing strategies fail; uses `confidence: 0.7, source: "semantic"` in cache
+- Jest `moduleNameMapper` for pixelmatch — v7 is pure ESM; CJS shim at `tests/__mocks__/pixelmatch.js` enables compare tests in Jest CJS mode
+
+### Tests
+
+- 61 new vision tests across 7 suites; 972 total passing, 42 suites, tsc clean
+- Suites: `vision-agent`, `ocr-engine`, `object-repository`, `smart-locator-engine`, `visual-regression`, `vision-assert-handler`, `visual-snapshot-handler`
+
+---
+
 ## [1.5.0] — 2026-05-26
 
 ### Added — EPIC-OSS
@@ -145,7 +167,8 @@ git push origin v1.5.0
 
 Tags are created at the point of merging a release branch to `main`. Until then the `[Unreleased]` link is the canonical reference.
 
-[Unreleased]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/mutukulamahesh/aiqa-mvp/compare/v1.2.0...v1.3.0

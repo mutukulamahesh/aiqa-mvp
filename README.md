@@ -50,6 +50,7 @@ git clone https://github.com/mutukulamahesh/aiqa-mvp.git && cd aiqa-mvp && npm i
 | **APIs** | HTTP requests, status codes, response assertions, chain API → DB checks |
 | **Databases** | SQL queries, row counts, field values — PostgreSQL via Knex |
 | **AI systems** | Call any LLM, judge quality, assert consistency, detect prompt regressions |
+| **Visual UI** | Screenshot-based element detection and pixel-level visual regression — no selectors needed |
 
 Tests are YAML files. One format for all four types:
 
@@ -88,7 +89,8 @@ test:
 ## Key features
 
 - **Auto-generate tests** — point AIQA at any live app; it crawls, maps flows, and writes the YAML
-- **Self-heal selectors** — broken locators are repaired automatically via LLM and cached
+- **Self-heal selectors** — broken locators are repaired automatically via LLM and cached; vision-based strategy-5 fallback when all else fails
+- **Vision testing** — assert elements by description using Claude Vision, no CSS selectors required; pixel-level visual regression with configurable diff thresholds
 - **AI evaluation** — test LLMs natively: quality scoring, consistency checks, prompt regression detection
 - **Enterprise AI** — works with Azure OpenAI, internal AI gateways, Ollama (local, no data leaves machine)
 - **CI integration** — JUnit XML output, `--impact-only` flag runs only tests affected by the current git diff
@@ -792,6 +794,8 @@ npm install knex pg   # only required for real DB connections
 | `llm_eval: { target, prompt, assert_quality, baseline_key }` | Call a named target LLM, judge quality, and/or detect prompt regression via embedding drift |
 | `llm_consistency: { target, prompt, runs, assert_variance }` | Run the same prompt N times and assert the maximum pairwise cosine distance stays below threshold |
 | `rag_assert: { query, min_chunks, min_score }` | Assert the knowledge index returns relevant chunks for a query — validates RAG retrieval quality |
+| `vision_assert: { description, min_confidence?, store_as? }` | Detect a UI element by natural-language description using Claude Vision; stores `{ description, type, selector, confidence }` via `store_as`; compose with `click:` / `fill:` for actions |
+| `visual_snapshot: { name, update?, max_diff_percent?, sensitivity?, store_as? }` | Capture or compare a screenshot baseline; `update: true` records; compare mode fails if pixel diff exceeds `max_diff_percent`; `sensitivity` controls per-pixel color tolerance |
 | `wait_for_element: <selector>` | Wait for an element to appear |
 | `wait_ms: <n>` | Wait N milliseconds |
 | `wait_for_url: <pattern>` | Wait until URL matches |
@@ -845,6 +849,53 @@ Record a baseline on first run, then CI diffs against it automatically:
 AIQA_BASELINE_RECORD=true npx aiqa run tests/ai/translation.yaml   # record
 npx aiqa run tests/ai/translation.yaml                              # subsequent CI runs diff vs baseline
 ```
+
+### Vision testing
+
+Test any UI by describing what you see — no CSS selectors, XPath, or DOM knowledge required. Works on web apps, embedded UIs, and any interface that can be screenshotted.
+
+```yaml
+test:
+  name: "Login — vision-based"
+  steps:
+    - navigate: "https://yourapp.com/login"
+
+    # Detect and store the email field using Claude Vision
+    - vision_assert:
+        description: "Email input field"
+        min_confidence: 0.7
+        store_as: emailField
+
+    # Use the resolved selector from vision in a normal fill step
+    - fill:
+        target: "{{ emailField.selector }}"
+        value: "user@example.com"
+
+    # Visual regression — capture baseline on first run
+    - visual_snapshot:
+        name: login-page-baseline
+        update: true        # omit this on subsequent runs to compare
+
+    # Compare against baseline — fail if more than 0.5% of pixels change
+    - visual_snapshot:
+        name: login-page-baseline
+        max_diff_percent: 0.005
+        sensitivity: 0.1
+        store_as: visualResult
+```
+
+**How vision_assert works:**
+1. Captures a screenshot of the current page
+2. Sends it to Claude Vision with a detection prompt (no selectors, no DOM)
+3. Matches the best detected element against your `description`
+4. Attempts selector resolution via OCR text proximity + DOM validation
+5. Stores `{ description, type, selector, confidence }` — use `selector` in subsequent steps
+
+**Visual regression thresholds:**
+- `max_diff_percent` — what percentage of pixels may differ before the test fails (e.g. `0.01` = 1%)
+- `sensitivity` — per-pixel color tolerance passed to pixelmatch (e.g. `0.1` = 10% color channel delta)
+
+Baseline images are stored in `.aiqa/visual-baselines/` and diff images written alongside them on failure.
 
 ### Template variables
 
@@ -1106,13 +1157,22 @@ src/
     ConsistencyHandler.ts ← llm_consistency: N runs + pairwise variance assertion
     RagAssertHandler.ts  ← rag_assert: retrieval quality assertion
     AgentTraceHandler.ts ← agent_trace: OpenAI Assistants + LangChain trace assertion
+    VisionAssertHandler.ts ← vision_assert: screenshot-based element detection; pure detector
+    VisualSnapshotHandler.ts ← visual_snapshot: pixel-level visual regression baseline/compare
     judgeUtils.ts        ← shared scoreByCriteria, parsePassIf, formatACContext
     WaitHandler.ts       ← wait_for_element, wait_ms, wait_for_url
     ConditionHandler.ts  ← if: branching
     LoopHandler.ts       ← for_each: iteration with depth guard
     StoreHandler.ts      ← store: capture page text/attribute
+  vision/
+    types.ts             ← DetectedElement, OcrWord, BoundingBox, RepoEntry
+    VisionAgent.ts       ← Claude Vision API; analyzeBuffer(buf); StubVisionAgent
+    OcrEngine.ts         ← tesseract.js lazy-load; bbox normalized 0–1; StubOcrEngine
+    ObjectRepository.ts  ← SHA-256 composite key; hostname-only normalizeUrl; atomic write
+    SmartLocatorEngine.ts ← OCR proximity + type hints → DOM-validated CSS candidates
+    VisualRegression.ts  ← pixelmatch diff; max_diff_percent vs sensitivity; diff image on fail
   adapter/
-    AdapterActions.ts    ← Browser adapter interface
+    AdapterActions.ts    ← Browser adapter interface (includes screenshotBuffer, countLocator)
     PlaywrightAdapter.ts ← Playwright + transparent selector healing
   db/
     DBAdapter.ts          ← DBAdapter interface + QueryResult type
@@ -1143,6 +1203,8 @@ src/
     FallbackLLMProvider.ts ← Provider chain with retryable-error classification
   ai-testing/
     BaselineStore.ts      ← Reads/writes tests/baselines/{key}.json for prompt regression
+  tests/__mocks__/
+    pixelmatch.js         ← CJS shim for pixelmatch v7 (pure ESM); wired via jest moduleNameMapper
     VarianceComputer.ts   ← Pairwise cosine distance (max or mean) across N LLM responses
     TraceParser.ts        ← Normalises OpenAI Assistants + LangChain traces to AgentTrace
   agents/
@@ -1225,6 +1287,8 @@ tests/
 - [Commander.js](https://github.com/tj/commander.js) — CLI interface
 - [ExcelJS](https://github.com/exceljs/exceljs) — Excel test case import
 - [Knex](https://knexjs.org/) *(optional)* — PostgreSQL adapter; install with `npm install knex pg`
+- [tesseract.js](https://github.com/naptha/tesseract.js) *(optional)* — OCR engine for vision testing; lazy-loaded on first use
+- [pngjs](https://github.com/lukeapage/pngjs) + [pixelmatch](https://github.com/mapbox/pixelmatch) — PNG encode/decode and pixel diff for visual regression
 
 ---
 
