@@ -2,8 +2,8 @@
 import { Command } from "commander";
 import * as path from "path";
 import * as fs from "fs";
-import * as http from "http";
-import * as https from "https";
+import { postAlertWebhook, WebhookPayload } from "./reporters/AlertWebhook";
+import { generateBadgeSvg } from "./reporters/BadgeGenerator";
 import { parseTestFile } from "./dsl/DslParser";
 import { TestRunner } from "./runner/TestRunner";
 import { AppExplorer } from "./agents/AppExplorer";
@@ -72,95 +72,6 @@ function saveResults(results: unknown[], dir: string, label?: string): string {
   return filePath;
 }
 
-interface WebhookPayload {
-  runId: string;
-  passed: number;
-  failed: number;
-  total: number;
-  failures: Array<{ testName: string; error?: string }>;
-}
-
-async function postAlertWebhook(webhookUrl: string, payload: WebhookPayload): Promise<void> {
-  const parsed = new URL(webhookUrl);
-  const { hostname } = parsed;
-  const summary = `AIQA: ${payload.failed}/${payload.total} tests failed (run ${payload.runId})`;
-  const failureLines = payload.failures
-    .map(f => `• ${f.testName}${f.error ? `: ${f.error}` : ""}`)
-    .join("\n");
-
-  let body: unknown;
-  if (hostname === "hooks.slack.com") {
-    body = {
-      text: summary,
-      attachments: [{
-        color: "danger",
-        fields: [
-          { title: "Passed",   value: String(payload.passed), short: true },
-          { title: "Failed",   value: String(payload.failed), short: true },
-          { title: "Run ID",   value: payload.runId,          short: true },
-          { title: "Failures", value: failureLines || "—",    short: false },
-        ],
-      }],
-    };
-  } else if (hostname.endsWith("webhook.office.com")) {
-    body = {
-      "@type":    "MessageCard",
-      "@context": "http://schema.org/extensions",
-      themeColor: "FF0000",
-      summary,
-      sections: [{
-        activityTitle:    summary,
-        activitySubtitle: `Passed: ${payload.passed}  Failed: ${payload.failed}  Total: ${payload.total}`,
-        facts: payload.failures.map(f => ({ name: f.testName, value: f.error ?? "failed" })),
-      }],
-    };
-  } else if (hostname === "events.pagerduty.com") {
-    const routingKey = parsed.searchParams.get("routing_key") ?? "";
-    body = {
-      routing_key:  routingKey,
-      event_action: "trigger",
-      dedup_key:    payload.runId,
-      payload: {
-        summary,
-        severity: "error",
-        source:   "aiqa",
-        custom_details: {
-          passed:   payload.passed,
-          failed:   payload.failed,
-          total:    payload.total,
-          failures: payload.failures.map(f => f.testName),
-        },
-      },
-    };
-  } else {
-    body = { status: "failed", ...payload };
-  }
-
-  const data = Buffer.from(JSON.stringify(body));
-  const lib  = parsed.protocol === "https:" ? https : http;
-
-  await new Promise<void>((resolve, reject) => {
-    const req = lib.request(
-      {
-        hostname: parsed.hostname,
-        port:     parsed.port || (parsed.protocol === "https:" ? "443" : "80"),
-        path:     parsed.pathname + parsed.search,
-        method:   "POST",
-        headers:  { "Content-Type": "application/json", "Content-Length": data.length },
-      },
-      (res) => {
-        res.resume();
-        (res.statusCode ?? 0) >= 400
-          ? reject(new Error(`Webhook returned HTTP ${res.statusCode}`))
-          : resolve();
-      },
-    );
-    req.on("error", reject);
-    req.setTimeout(10_000, () => req.destroy(new Error("Webhook timeout")));
-    req.write(data);
-    req.end();
-  });
-}
 
 // ── init ──────────────────────────────────────────────────────────────────────
 
@@ -544,55 +455,25 @@ program
     const results = Array.isArray(data) ? data : [data];
     const scorer  = new ReadinessScorer();
     const report  = scorer.score(results);
-    const score   = report.score;
-    const grade   = report.grade;
 
-    const colour   = score >= 80 ? "#4c1" : score >= 60 ? "#dfb317" : "#e05d44";
-    const rawLabel = opts.label ?? "AIQA Readiness";
-    const value    = `${score}/100 ${grade}`;
-
-    // M2: width formula (6.5px/char) holds for printable ASCII in Verdana 11.
-    // Reject non-ASCII to prevent silent width miscalculation.
-    if (/[^\x20-\x7E]/.test(rawLabel)) {
-      console.error(`❌ --label must contain only printable ASCII characters (no emoji or CJK)`);
+    let badge: ReturnType<typeof generateBadgeSvg>;
+    try {
+      badge = generateBadgeSvg({ score: report.score, grade: report.grade, label: opts.label });
+    } catch (err) {
+      console.error(`❌ ${(err as Error).message}`);
       process.exit(1);
     }
-    // M1: XML-escape label before SVG interpolation to prevent broken/injected XML.
-    const label  = rawLabel.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    const labelW = rawLabel.length * 6.5 + 10;
-    const valueW = value.length  * 6.5 + 10;
-    const totalW = labelW + valueW;
-
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="20">
-  <linearGradient id="s" x2="0" y2="100%">
-    <stop offset="0"  stop-color="#bbb" stop-opacity=".1"/>
-    <stop offset="1"  stop-opacity=".1"/>
-  </linearGradient>
-  <clipPath id="r"><rect width="${totalW}" height="20" rx="3" fill="#fff"/></clipPath>
-  <g clip-path="url(#r)">
-    <rect width="${labelW}" height="20" fill="#555"/>
-    <rect x="${labelW}" width="${valueW}" height="20" fill="${colour}"/>
-    <rect width="${totalW}" height="20" fill="url(#s)"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
-    <text x="${labelW / 2}" y="15" fill="#010101" fill-opacity=".3">${label}</text>
-    <text x="${labelW / 2}" y="14">${label}</text>
-    <text x="${labelW + valueW / 2}" y="15" fill="#010101" fill-opacity=".3">${value}</text>
-    <text x="${labelW + valueW / 2}" y="14">${value}</text>
-  </g>
-</svg>`;
 
     if (opts.out) {
-      const outPath    = path.resolve(process.cwd(), opts.out);
-      // L1: use cwd-relative path so the snippet is correct regardless of how --out was entered
+      const outPath     = path.resolve(process.cwd(), opts.out);
       const snippetPath = path.relative(process.cwd(), outPath);
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
-      fs.writeFileSync(outPath, svg);
+      fs.writeFileSync(outPath, badge.svg);
       console.log(`✅ Badge written to ${outPath}`);
       console.log(`\nEmbed in your README:`);
       console.log(`  ![AIQA Readiness](${snippetPath})`);
     } else {
-      console.log(svg);
+      console.log(badge.svg);
     }
   });
 
