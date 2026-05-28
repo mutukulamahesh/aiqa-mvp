@@ -3,6 +3,7 @@ import { LLMProvider, createLLMProvider } from "../llm/LLMProvider";
 import { HealerCache }                    from "./HealerCache";
 import { contextHash, pageContextKey }    from "./contextKey";
 import { KnowledgeRetriever }             from "../knowledge/KnowledgeRetriever";
+import type { SmartLocatorEngine }        from "../vision/SmartLocatorEngine";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,15 +33,22 @@ export interface HealerEvent {
 // ── SelectorHealer ────────────────────────────────────────────────────────────
 
 export class SelectorHealer {
-  private readonly llm:       LLMProvider;
-  readonly cache:             HealerCache;
-  private readonly retriever?: KnowledgeRetriever;
-  private readonly events:    HealerEvent[] = [];
+  private readonly llm:          LLMProvider;
+  readonly cache:                HealerCache;
+  private readonly retriever?:   KnowledgeRetriever;
+  private readonly smartLocator?: SmartLocatorEngine;
+  private readonly events:       HealerEvent[] = [];
 
-  constructor(llm?: LLMProvider, cacheFile?: string, retriever?: KnowledgeRetriever) {
-    this.llm       = llm ?? createLLMProvider();
-    this.cache     = new HealerCache(cacheFile);
-    this.retriever = retriever;
+  constructor(
+    llm?:          LLMProvider,
+    cacheFile?:    string,
+    retriever?:    KnowledgeRetriever,
+    smartLocator?: SmartLocatorEngine,
+  ) {
+    this.llm          = llm ?? createLLMProvider();
+    this.cache        = new HealerCache(cacheFile);
+    this.retriever    = retriever;
+    this.smartLocator = smartLocator;
   }
 
   // ── Cache helpers ──────────────────────────────────────────────────────────
@@ -87,7 +95,23 @@ export class SelectorHealer {
     ]);
     if (!candidates.length) return null;
 
-    const selector = await this.queryLLM(descriptor, pageUrl, candidates, pageTitle, defectContext);
+    let selector = await this.queryLLM(descriptor, pageUrl, candidates, pageTitle, defectContext);
+
+    // Strategy-5: vision-based locator (only if SmartLocatorEngine is injected and LLM failed)
+    if (!selector && this.smartLocator) {
+      const probe = {
+        screenshot:  () => page.screenshot({ type: "png" }) as Promise<Buffer>,
+        count: (sel: string) => page.locator(sel).count().catch(() => 0),
+      };
+      selector = await this.smartLocator.locate(descriptor, probe);
+      if (selector) {
+        this.emit({ type: "healed", descriptor, selector, confidence: 0.7, source: "semantic", pageUrl, pageTitle });
+        const contextKey = await this.extractContextKey(page);
+        this.cache.set(pageUrl, descriptor, selector, { confidence: 0.7, source: "semantic", contextKey: contextKey || undefined });
+        return selector;
+      }
+    }
+
     if (!selector) {
       this.emit({ type: "rejected", descriptor, pageUrl, pageTitle });
       return null;

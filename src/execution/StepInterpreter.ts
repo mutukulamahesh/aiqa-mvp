@@ -14,7 +14,11 @@ import { LoopHandler } from "../handlers/LoopHandler";
 import { JudgeHandler }        from "../handlers/JudgeHandler";
 import { LLMEvalHandler }       from "../handlers/LLMEvalHandler";
 import { ConsistencyHandler }   from "../handlers/ConsistencyHandler";
-import { RagAssertHandler }     from "../handlers/RagAssertHandler";
+import { RagAssertHandler }       from "../handlers/RagAssertHandler";
+import { VisionAssertHandler }    from "../handlers/VisionAssertHandler";
+import { VisualSnapshotHandler }  from "../handlers/VisualSnapshotHandler";
+import { VisionAgent }            from "../vision/VisionAgent";
+import { OcrEngine }              from "../vision/OcrEngine";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "./ExecutionContext";
 import { AdapterActions } from "../adapter/AdapterActions";
@@ -67,7 +71,9 @@ export class StepInterpreter {
       .register(new JudgeHandler(createLLMProvider(llmConfig), opts.retriever))
       .register(new LLMEvalHandler(createLLMProvider(llmConfig), opts.retriever, llmTargets, embedder, new BaselineStore()))
       .register(new ConsistencyHandler(embedder, llmTargets))
-      .register(new RagAssertHandler(opts.retriever));
+      .register(new RagAssertHandler(opts.retriever))
+      .register(new VisionAssertHandler(new VisionAgent(), new OcrEngine()))
+      .register(new VisualSnapshotHandler());
   }
 
   async execute(

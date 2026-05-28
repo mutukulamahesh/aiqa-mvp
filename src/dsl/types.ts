@@ -78,6 +78,20 @@ export type StepAction =
       min_score?:  number;   // minimum chunk relevance score (0.0–1.0); default 0.0
       min_chunks?: number;   // minimum chunks meeting min_score; default 1
       store_as?:   string;   // stores RetrievedChunk[] (only chunks that passed)
+    }
+  | {
+      action:          "vision_assert";
+      description:     string;   // natural language — e.g. "Login button"
+      min_confidence?: number;   // fail if best detection confidence < this (default 0.5)
+      store_as?:       string;   // stores { description, type, selector, confidence }
+    }
+  | {
+      action:            "visual_snapshot";
+      name:              string;   // baseline key (filename-safe string)
+      max_diff_percent?: number;   // fail if diffPercent > this × 100 (default 0.02 = 2%)
+      sensitivity?:      number;   // pixelmatch per-pixel color tolerance 0–1 (default 0.1)
+      update?:           boolean;  // true = overwrite baseline (record mode)
+      store_as?:         string;   // stores { match, diffPercent, diffPath? }
     };
 
 export interface TestDefinition {

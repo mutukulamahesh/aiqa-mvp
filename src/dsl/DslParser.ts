@@ -361,6 +361,46 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // vision_assert
+  if ("vision_assert" in raw) {
+    const v = raw.vision_assert as Record<string, unknown> | undefined;
+    if (!v) throw new Error(`Step[${idx}] vision_assert: empty`);
+    if (typeof v.description !== "string") throw new Error(`Step[${idx}] vision_assert: missing "description"`);
+    if (v.min_confidence !== undefined &&
+        (typeof v.min_confidence !== "number" || v.min_confidence < 0 || v.min_confidence > 1)) {
+      throw new Error(`Step[${idx}] vision_assert: "min_confidence" must be a number between 0 and 1`);
+    }
+    return {
+      action:      "vision_assert",
+      description: v.description,
+      ...(typeof v.min_confidence === "number" ? { min_confidence: v.min_confidence } : {}),
+      ...(typeof v.store_as       === "string" ? { store_as:       v.store_as       } : {}),
+    };
+  }
+
+  // visual_snapshot
+  if ("visual_snapshot" in raw) {
+    const s = raw.visual_snapshot as Record<string, unknown> | undefined;
+    if (!s) throw new Error(`Step[${idx}] visual_snapshot: empty`);
+    if (typeof s.name !== "string") throw new Error(`Step[${idx}] visual_snapshot: missing "name"`);
+    if (s.max_diff_percent !== undefined &&
+        (typeof s.max_diff_percent !== "number" || s.max_diff_percent < 0 || s.max_diff_percent > 1)) {
+      throw new Error(`Step[${idx}] visual_snapshot: "max_diff_percent" must be a number between 0 and 1`);
+    }
+    if (s.sensitivity !== undefined &&
+        (typeof s.sensitivity !== "number" || s.sensitivity < 0 || s.sensitivity > 1)) {
+      throw new Error(`Step[${idx}] visual_snapshot: "sensitivity" must be a number between 0 and 1`);
+    }
+    return {
+      action: "visual_snapshot",
+      name:   s.name,
+      ...(typeof s.max_diff_percent === "number"  ? { max_diff_percent: s.max_diff_percent } : {}),
+      ...(typeof s.sensitivity      === "number"  ? { sensitivity:      s.sensitivity      } : {}),
+      ...(typeof s.update           === "boolean" ? { update:           s.update           } : {}),
+      ...(typeof s.store_as         === "string"  ? { store_as:         s.store_as         } : {}),
+    };
+  }
+
   // api
   if ("api" in raw) {
     const api = raw.api as Record<string, unknown> | undefined;
@@ -396,6 +436,8 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     "llm_eval",
     "llm_consistency",
     "rag_assert",
+    "vision_assert",
+    "visual_snapshot",
   ] as const;
   throw new Error(
     `Step[${idx}]: unknown action. Supported: ${SUPPORTED.join(", ")}. Got: ${JSON.stringify(raw)}`

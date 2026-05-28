@@ -23,6 +23,9 @@ function makeAdapter(): AdapterActions {
     waitForUrl:           async () => {},
     getElementText:       async () => "",
     getElementAttribute:  async () => "",
+    screenshotBuffer:     async () => Buffer.alloc(0),
+    getViewportSize:      async () => ({ width: 1280, height: 720 }),
+    countLocator:         async () => 0,
   };
 }
 
