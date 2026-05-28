@@ -185,6 +185,10 @@ export function resetConfig(): void {
   _loaded = null;
 }
 
+export function injectConfig(config: EnvConfig): void {
+  _loaded = config;
+}
+
 function availableEnvs(): string[] {
   if (!fs.existsSync(CONFIG_DIR)) return [];
   return fs.readdirSync(CONFIG_DIR)

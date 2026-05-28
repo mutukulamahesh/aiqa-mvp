@@ -38,7 +38,8 @@ program
   .description("Enterprise AI QA Platform")
   .version("1.0.0")
   .option("--env <environment>", "Environment profile to load (dev | staging | prod)", "dev")
-  .hook("preAction", (thisCommand) => {
+  .hook("preAction", (thisCommand, actionCommand) => {
+    if ((actionCommand as { name(): string }).name() === "demo") return;
     _envName = (thisCommand.opts() as { env: string }).env ?? "dev";
     try {
       loadConfig(_envName);
@@ -125,6 +126,16 @@ program
     console.log(`   aiqa generate --out ${project} --per-page`);
     console.log(`   aiqa run-all --out ${project} --headless`);
     console.log();
+  });
+
+// ── demo ──────────────────────────────────────────────────────────────────────
+
+program
+  .command("demo")
+  .description("Run a built-in demo against saucedemo.com — zero config, no API key needed")
+  .action(async () => {
+    const { runDemo } = await import("./demo/DemoRunner");
+    await runDemo();
   });
 
 // ── run ───────────────────────────────────────────────────────────────────────

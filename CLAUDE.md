@@ -144,15 +144,17 @@ jira:
 
 ---
 
-## Current state (2026-05-22)
+## Current state (2026-05-27)
 
-- **Branch:** `main` (merged from `genaieval` — Phase 5 complete)
-- **Tests:** 858 passing, tsc clean
+- **Branch:** `main` at `32e652a` (merged from `test-coverage`)
+- **Tests:** 912 passing, 35 suites, tsc clean
+- **All strategic epics complete:** EPIC-DEX ✅, EPIC-OSS ✅, EPIC-LOCAL ✅, EPIC-MON ✅
 - **EPIC-RAG Phase 1 + Phase 2 + Phase 3:** complete and merged to main
 - **Phase 5 — GenAI Testing:** complete and merged to main
-- **Active:** EPIC-DEX/MON — agreed order:
-  DEX-03 ✅ → DEX-07 ✅ → DEX-06 ✅ → DEX-05 ✅ → LOCAL-02/04 ✅ → MON-01 ✅ → DEX-08/09/10 ✅ → DEX-11/12/13/14 ✅ — EPIC-DEX COMPLETE
-- **Next epics after DEX:** EPIC-LOCAL, EPIC-OSS, EPIC-MON
+- **Test coverage pass:** AlertWebhook, UptimeTracker, BadgeGenerator — 54 new tests, 3 new modules in `src/reporters/`
+- **Active:** Phase 6 — EPIC-14 Vision Agent
+- **Next:** EPIC-14 Vision Agent → EPIC-15 Desktop (VisionAgent + OCR primary; WinAppDriver secondary)
+- **Parked:** DEX-02 (demo cmd), DEX-04 (PW guide), EPIC-EXT-A (Chrome extension API-backed), OSS-04 (manual GitHub Discussions)
 
 ### Phase 5 stories — ALL COMPLETE ✅
 
