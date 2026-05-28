@@ -12,7 +12,7 @@ timeouts:
 execution:
   workers:        1
   retries:        1
-  headless:       true
+  headless:       false
   maxPages:       20
   maxDepth:       3
   circuitBreaker: 10
