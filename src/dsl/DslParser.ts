@@ -38,6 +38,7 @@ type RawStep =
 interface RawTestFile {
   test: {
     name:            string;
+    mode?:           string;
     tags?:           string | string[];
     retries?:        number;
     variables?:      Record<string, string>;
@@ -68,6 +69,9 @@ function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
   if (!raw.test.name) {
     throw new Error(`Invalid test (${location}): missing "test.name"`);
   }
+  if (raw.test.mode !== undefined && raw.test.mode !== "web" && raw.test.mode !== "desktop") {
+    throw new Error(`Invalid test (${location}): "mode" must be "web" or "desktop", got "${raw.test.mode}"`);
+  }
   if (!Array.isArray(raw.test.steps) || raw.test.steps.length === 0) {
     throw new Error(`Invalid test (${location}): "test.steps" must be a non-empty array`);
   }
@@ -97,6 +101,7 @@ function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
 
   return {
     name:      raw.test.name,
+    ...(raw.test.mode === "desktop" ? { mode: "desktop" as const } : {}),
     tags,
     retries,
     variables: raw.test.variables ?? {},
@@ -418,11 +423,84 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     };
   }
 
+  // ── Desktop steps (mode: desktop only) ──────────────────────────────────────
+
+  if ("desktop_launch" in raw) {
+    if (typeof raw.desktop_launch !== "string") throw new Error(`Step[${idx}] desktop_launch: must be a string path`);
+    return { action: "desktop_launch", appPath: raw.desktop_launch };
+  }
+
+  if ("desktop_wait_for_window" in raw) {
+    const w = raw.desktop_wait_for_window;
+    if (typeof w === "string") return { action: "desktop_wait_for_window", pattern: w };
+    if (w && typeof w === "object") {
+      const wr = w as Record<string, unknown>;
+      if (typeof wr.pattern !== "string") throw new Error(`Step[${idx}] desktop_wait_for_window: missing "pattern"`);
+      return {
+        action:  "desktop_wait_for_window",
+        pattern: wr.pattern,
+        ...(typeof wr.timeout === "number" ? { timeout: wr.timeout } : {}),
+      };
+    }
+    throw new Error(`Step[${idx}] desktop_wait_for_window: must be a string or object with "pattern"`);
+  }
+
+  if ("desktop_click" in raw) {
+    const dc = raw.desktop_click;
+    if (typeof dc === "string") {
+      return { action: "desktop_click", description: dc };
+    }
+    if (dc && typeof dc === "object") {
+      const d = dc as Record<string, unknown>;
+      if (typeof d.description !== "string") throw new Error(`Step[${idx}] desktop_click: missing "description"`);
+      return {
+        action:      "desktop_click",
+        description: d.description,
+        ...(typeof d.min_confidence === "number" ? { min_confidence: d.min_confidence } : {}),
+      };
+    }
+    throw new Error(`Step[${idx}] desktop_click: must be a description string or object with "description"`);
+  }
+
+  if ("desktop_fill" in raw) {
+    const f = raw.desktop_fill as Record<string, unknown> | undefined;
+    if (!f || typeof f !== "object") throw new Error(`Step[${idx}] desktop_fill: expected an object with target/value`);
+    if (typeof f.target !== "string") throw new Error(`Step[${idx}] desktop_fill: missing "target"`);
+    if (typeof f.value  !== "string") throw new Error(`Step[${idx}] desktop_fill: missing "value"`);
+    return {
+      action: "desktop_fill",
+      target: f.target,
+      value:  f.value,
+      ...(typeof f.expected_window === "string" ? { expected_window: f.expected_window } : {}),
+      ...(typeof f.min_confidence  === "number" ? { min_confidence:  f.min_confidence  } : {}),
+    };
+  }
+
+  if ("desktop_assert" in raw) {
+    const a = raw.desktop_assert as Record<string, unknown> | undefined;
+    if (!a || typeof a !== "object") throw new Error(`Step[${idx}] desktop_assert: expected an object`);
+    if (a.visible === undefined && a.element === undefined && a.expected_window === undefined) {
+      throw new Error(`Step[${idx}] desktop_assert: must have at least one of "visible", "element", or "expected_window"`);
+    }
+    return {
+      action: "desktop_assert",
+      ...(typeof a.visible          === "string" ? { visible:          a.visible          } : {}),
+      ...(typeof a.element          === "string" ? { element:          a.element          } : {}),
+      ...(typeof a.expected_window  === "string" ? { expected_window:  a.expected_window  } : {}),
+      ...(typeof a.min_confidence   === "number" ? { min_confidence:   a.min_confidence   } : {}),
+    };
+  }
+
+  if ("desktop_key" in raw) {
+    if (typeof raw.desktop_key !== "string") throw new Error(`Step[${idx}] desktop_key: must be a key name string`);
+    return { action: "desktop_key", key: raw.desktop_key };
+  }
+
+  if ("desktop_close" in raw) {
+    return { action: "desktop_close" };
+  }
+
   // Keep this list in sync with HandlerRegistry registrations.
-  // All handler action names: navigate, click, fill (UIActionHandler) |
-  //   assert (AssertionHandler) | api (APIActionHandler) | db (DBActionHandler) |
-  //   wait_for_element, wait_ms, wait_for_url (WaitHandler) | store (StoreHandler) |
-  //   if (ConditionHandler) | for_each (LoopHandler) | judge (JudgeHandler)
   const SUPPORTED = [
     "navigate", "click", "fill",
     "assert",
@@ -438,6 +516,8 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
     "rag_assert",
     "vision_assert",
     "visual_snapshot",
+    "desktop_launch", "desktop_wait_for_window", "desktop_click",
+    "desktop_fill", "desktop_assert", "desktop_key", "desktop_close",
   ] as const;
   throw new Error(
     `Step[${idx}]: unknown action. Supported: ${SUPPORTED.join(", ")}. Got: ${JSON.stringify(raw)}`

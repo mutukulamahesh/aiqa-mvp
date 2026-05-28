@@ -1,5 +1,10 @@
 import * as path from "path";
+import * as fs   from "fs";
 import { PlaywrightAdapter } from "../adapter/PlaywrightAdapter";
+import { DesktopAdapter }    from "../desktop/DesktopAdapter";
+import { DesktopHandler }    from "../handlers/DesktopHandler";
+import { VisionAgent }       from "../vision/VisionAgent";
+import { OcrEngine }         from "../vision/OcrEngine";
 import { ExecutionContext } from "../execution/ExecutionContext";
 import { StepInterpreter } from "../execution/StepInterpreter";
 import { workerStorage, wlog, wwrite, WorkerStore } from "../execution/WorkerContext";
@@ -193,6 +198,8 @@ export class TestRunner {
   // ── Single attempt ────────────────────────────────────────────────────────
 
   private async _attempt(test: TestDefinition, testId: string, attempt: number): Promise<TestResult> {
+    if (test.mode === "desktop") return this._attemptDesktop(test, testId, attempt);
+
     let config;
     try { config = getConfig(); } catch { config = null; }
 
@@ -280,6 +287,96 @@ export class TestRunner {
             stepResults,
             debugResult,
             screenshotPath,
+          };
+          onEvent?.({ event: "test_done", testName: test.name, passed: false, durationMs: result.durationMs });
+          return result;
+        }
+      }
+
+      const totalDurationMs = Date.now() - totalStart;
+      onEvent?.({ event: "test_done", testName: test.name, passed: true, durationMs: totalDurationMs });
+      return {
+        testId,
+        testName:   test.name,
+        tags:       test.tags ?? [],
+        passed:     true,
+        durationMs: totalDurationMs,
+        retryCount: attempt,
+        stepResults,
+      };
+
+    } finally {
+      await adapter.close();
+    }
+  }
+
+  // ── Desktop execution path ────────────────────────────────────────────────
+
+  private async _attemptDesktop(test: TestDefinition, testId: string, attempt: number): Promise<TestResult> {
+    let config;
+    try { config = getConfig(); } catch { config = null; }
+
+    const adapter = new DesktopAdapter();
+    const handler = new DesktopHandler(adapter, new VisionAgent(), new OcrEngine());
+    const ctx     = new ExecutionContext(test.variables ?? {}, config);
+    const stepResults: StepResult[] = [];
+    const totalStart = Date.now();
+
+    try {
+      const onEvent = workerStorage.getStore()?.onEvent;
+
+      for (let i = 0; i < test.steps.length; i++) {
+        const step      = test.steps[i];
+        const stepStart = Date.now();
+        const label     = `[${i + 1}/${test.steps.length}]`;
+
+        onEvent?.({ event: "step", index: i, action: step.action, target: stepTarget(step) });
+        wwrite(`${label} `);
+
+        try {
+          await handler.execute(step, ctx);
+          wlog("");
+          const durationMs = Date.now() - stepStart;
+          onEvent?.({ event: "step_result", index: i, passed: true, durationMs });
+          stepResults.push({ index: i, action: step.action, passed: true, durationMs });
+
+        } catch (err) {
+          const error     = err as Error;
+          const msg       = error.message;
+          const retryable = isRetryable(error);
+          wlog(`\n  ✗ FAILED: ${msg}`);
+
+          let screenshotPath: string | undefined;
+          if (this.opts.screenshotsDir) {
+            try {
+              const buf      = await adapter.screenshot();
+              const safeName = test.name.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+              const attemptSuffix = attempt > 0 ? `-attempt${attempt + 1}` : "";
+              const fileName = `${safeName}-${testId}${attemptSuffix}-step-${i + 1}-fail.png`;
+              screenshotPath = path.join(this.opts.screenshotsDir, fileName);
+              await fs.promises.writeFile(screenshotPath, buf);
+              wlog(`  📸 Screenshot → ${screenshotPath}`);
+            } catch {
+              screenshotPath = undefined;
+            }
+          }
+
+          const durationMs = Date.now() - stepStart;
+          onEvent?.({ event: "step_result", index: i, passed: false, durationMs, error: msg });
+          stepResults.push({
+            index: i, action: step.action, passed: false,
+            durationMs, error: msg, errorClass: error.name, retryable, screenshotPath,
+          });
+
+          const result: TestResult = {
+            testId,
+            testName:   test.name,
+            tags:       test.tags ?? [],
+            passed:     false,
+            durationMs: Date.now() - totalStart,
+            retryCount: attempt,
+            error:      `Step ${i + 1} (${step.action}) failed: ${msg}`,
+            stepResults,
           };
           onEvent?.({ event: "test_done", testName: test.name, passed: false, durationMs: result.durationMs });
           return result;

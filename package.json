@@ -44,6 +44,9 @@
     "ws": "^8.20.0",
     "zod": "^4.4.2"
   },
+  "optionalDependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6"
+  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",

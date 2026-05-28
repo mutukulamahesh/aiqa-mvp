@@ -92,10 +92,31 @@ export type StepAction =
       sensitivity?:      number;   // pixelmatch per-pixel color tolerance 0–1 (default 0.1)
       update?:           boolean;  // true = overwrite baseline (record mode)
       store_as?:         string;   // stores { match, diffPercent, diffPath? }
-    };
+    }
+  // ── Desktop steps (mode: desktop only — Windows, EPIC-15) ─────────────────
+  | { action: "desktop_launch";          appPath: string }
+  | { action: "desktop_wait_for_window"; pattern: string; timeout?: number }
+  | { action: "desktop_click";           description: string; min_confidence?: number }
+  | {
+      action:           "desktop_fill";
+      target:           string;
+      value:            string;
+      expected_window?: string;
+      min_confidence?:  number;
+    }
+  | {
+      action:           "desktop_assert";
+      visible?:         string;
+      element?:         string;
+      expected_window?: string;
+      min_confidence?:  number;
+    }
+  | { action: "desktop_key";   key: string }
+  | { action: "desktop_close" };
 
 export interface TestDefinition {
   name:            string;
+  mode?:           "web" | "desktop";  // defaults to "web" when absent
   tags?:           string[];
   retries?:        number;   // max retry attempts on transient failures (timeout/locator)
   variables?:      Record<string, string>;

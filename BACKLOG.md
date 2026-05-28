@@ -1,8 +1,8 @@
 # AIQA — Production Readiness Backlog
 
 > Current alignment with vision: **~99%**  *(updated 2026-05-28)*
-> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + Phase 6 EPIC-14 (Vision Agent): **DONE**.
-> Remaining: EPIC-15 Desktop, Phase 7 Scale. Parked: EPIC-EXT-A, OSS-04 (manual).
+> Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + Phase 6 EPIC-14 (Vision Agent) + Phase 6 EPIC-15 (Desktop Automation): **DONE**.
+> Remaining: EPIC-RWT (Real-World Validation pause), Phase 7 Scale. Parked: EPIC-EXT-A, OSS-04 (manual).
 
 ---
 
@@ -670,12 +670,66 @@ DataDog alternative at near-zero cost.
 | — | `VisionAssertHandler` — `vision_assert:` DSL step; pure detector; `store_as` | [x] |
 | — | `VisualSnapshotHandler` — `visual_snapshot:` DSL step; update/compare modes | [x] |
 
-### EPIC-15 · Desktop Automation
+### EPIC-15 · Desktop Automation `[✅ COMPLETE — 2026-05-28]`
+> **Branch:** `desktop` · 38 new tests, 1010 total passing · tsc clean
+
+**Locked design decisions:**
+- Primary strategy: VisionAgent + OCR (no WinAppDriver). `@nut-tree-fork/nut-js` v4.2.6 in `optionalDependencies` (omit in Docker/CI with `--omit=optional`).
+- `desktop_fill` has a higher confidence floor (0.85 vs 0.8 for click) — typing into wrong coordinates on desktop is unrecoverable.
+- Window guard in `desktop_fill`: `expected_window:` verified before locate and after click-to-focus. Emits warning if omitted.
+- Screenshot coordinate formula: full-screen capture → `x = (bbox.x + bbox.w/2) * screenWidth`, `y = (bbox.y + bbox.h/2) * screenHeight`.
+- Ambiguity gate: two candidates within 0.1 confidence → `AmbiguousElementError` (AssertionError, not retryable). Never silently picks one.
+- `ElementNotFoundError` in action steps (click/fill) → `TransientError` (retryable). Same error in `desktop_assert` → `AssertionError`.
+
 | ID | Story | Status |
 |---|---|---|
-| 15.1 | `DesktopAdapter` — WinAppDriver for Windows native apps, mirrors PlaywrightAdapter interface | [ ] |
-| 15.2 | Vision fallback for desktop — when WinAppDriver fails, use VisionAgent | [ ] |
-| 15.3 | `DesktopHandler` — `desktop_click`, `desktop_fill`, `desktop_assert` DSL steps | [ ] |
+| 15.1 | `DesktopAdapter` — `IDesktopAdapter` interface; lazy `@nut-tree-fork/nut-js`; PowerShell Win32 for `getWindowTitle`; `StubDesktopAdapter` records all calls | [x] |
+| 15.2 | `DesktopVisionLocator` — full-screen screenshot → VisionAgent → OCR fallback; uniqueness gate; bbox→pixel coords; `AmbiguousElementError` / `ElementNotFoundError` | [x] |
+| 15.3 | `DesktopHandler` — 7 DSL steps (`desktop_launch`, `desktop_wait_for_window`, `desktop_click`, `desktop_fill`, `desktop_assert`, `desktop_key`, `desktop_close`); `DslParser` + `TestRunner` wired | [x] |
+
+---
+
+## EPIC-RWT · Real-World Validation `[PAUSE — STLC]`
+> **After EPIC-15, take a full pause.** All features have been built and unit-tested in isolation.
+> This epic validates the entire platform against real applications, real APIs, and real infrastructure
+> following a formal STLC process. Nothing proceeds to Phase 7 until this epic is complete and signed off.
+> Full plan: `docs/real-world-test-plan.md`
+
+### Why this pause matters
+- 972 unit/integration tests pass — but all run against mocks and stubs
+- No YAML test suite has ever run against a real live web app in this build cycle
+- Vision (tesseract.js + Claude Vision), Jira screenshot attachment, RAG ingest, and the Portal have never been exercised end-to-end
+- Security surface (API auth, path traversal, SSRF) has not been penetration-tested
+
+### Target applications
+| App | URL | Tests |
+|---|---|---|
+| SauceDemo | https://www.saucedemo.com | Web automation, self-healing, visual regression |
+| JSONPlaceholder | https://jsonplaceholder.typicode.com | API step testing, chained assertions |
+| DemoQA | https://demoqa.com | Vision testing — forms, buttons, inputs |
+| Petstore (Swagger) | https://petstore.swagger.io | OpenAPI RAG connector |
+| AIQA Portal | http://localhost:7432 | Portal E2E dogfooding |
+| Jira | https://aiqajira.atlassian.net | Jira integration, SCRUM project |
+| Claude / OpenAI | API | Real LLM calls for llm_eval, llm_consistency |
+| Local PostgreSQL | localhost:5432 | DB step testing |
+
+### Stories
+| ID | Story | Phase | Status |
+|---|---|---|---|
+| RWT-01 | **Environment setup** — real accounts, API keys in `.env`, PostgreSQL spun up, all `aiqa doctor` checks green | Setup | [ ] |
+| RWT-02 | **Smoke suite** — 1 test per major feature; all must pass before proceeding | Smoke | [ ] |
+| RWT-03 | **Web automation E2E** — SauceDemo login → inventory → add to cart → checkout; self-healing fires on broken selector | Functional | [ ] |
+| RWT-04 | **API testing E2E** — JSONPlaceholder CRUD chain; `store_as` threading; `assert_status` 201/404; DB side-effect check | Functional | [ ] |
+| RWT-05 | **AI/LLM testing** — `llm_eval` + `llm_consistency` with real Claude and GPT; baseline record → CI diff | Functional | [ ] |
+| RWT-06 | **Vision testing on real pages** — `vision_assert` on DemoQA form elements; `visual_snapshot` baseline + compare on SauceDemo | Functional | [ ] |
+| RWT-07 | **Self-healing validation** — intentionally break a SauceDemo selector; confirm healer fires strategy 1→5; cache persists across runs | Integration | [ ] |
+| RWT-08 | **RAG/Knowledge E2E** — ingest live SCRUM Jira project; `rag_assert` returns relevant chunks; `judge:` uses AC context | Integration | [ ] |
+| RWT-09 | **Jira integration E2E** — run failing SauceDemo test; auto-create SCRUM defect; screenshot attached; re-run deduplicates | Integration | [ ] |
+| RWT-10 | **Portal E2E** — `aiqa serve`; trigger orchestrate via UI; watch live WS stream; view results; edit YAML inline | Integration | [ ] |
+| RWT-11 | **Security validation** — API auth enforcement; path traversal on `/api/tests/*`; SSRF allowlist; SQL injection via `params:` | Security | [ ] |
+| RWT-12 | **Performance validation** — SauceDemo suite at `--workers 4`; circuit breaker at 3 consecutive failures; `--impact-only` on git diff | Performance | [ ] |
+| RWT-13 | **Regression suite** — every bug found in RWT-03 to RWT-12 gets a YAML regression test added to `tests/regression/` | Regression | [ ] |
+| RWT-14 | **Defect fix cycle** — all Jira defects found during RWT closed and regression-verified before sign-off | Closure | [ ] |
 
 ---
 
@@ -724,9 +778,10 @@ DataDog alternative at near-zero cost.
 | Strategic — LOCAL | 1 | 4 | ✅ DONE | Privacy mode, Ollama doctor, local-only config |
 | Strategic — MON | 1 | 3 | ✅ DONE | Synthetic monitoring, alerts, uptime history |
 | Phase 6 — Vision EPIC-14 | 1 | 7 | ✅ DONE | Selector-free web testing (vision_assert, visual_snapshot) |
-| Phase 6 — Desktop EPIC-15 | 1 | 3 | ⬜ | Desktop automation (VisionAgent + OCR primary) |
+| Phase 6 — Desktop EPIC-15 | 1 | 3 | ✅ DONE | Desktop automation (VisionAgent + OCR primary) |
+| EPIC-RWT — Real-World Validation | 1 | 14 | ⬜ | Full STLC pass on real apps before Phase 7 |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **31+** | **175+** | | |
+| **Total** | **32+** | **189+** | | |
 
-**Active:** EPIC-15 Desktop Automation (not started).
-**Next:** VisionAgent + OCR primary strategy (EY AICV pattern); WinAppDriver as secondary fallback only.
+**Active:** EPIC-RWT Real-World Validation (not started — EPIC-15 complete).
+**Next:** EPIC-RWT pause (STLC). Phase 7 formally blocked until RWT sign-off.
