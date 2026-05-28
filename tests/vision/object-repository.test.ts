@@ -42,6 +42,10 @@ describe("normalizeUrl", () => {
     expect(normalizeUrl("https://example.com/path#section")).not.toContain("#");
   });
 
+  test("preserves pathname case — /Login and /login are distinct", () => {
+    expect(normalizeUrl("https://EXAMPLE.COM/Login")).toBe("https://example.com/Login");
+  });
+
   test("strips trailing slash from pathname", () => {
     expect(normalizeUrl("https://example.com/path/")).toBe("https://example.com/path");
   });

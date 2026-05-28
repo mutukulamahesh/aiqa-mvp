@@ -11,7 +11,8 @@ const REPO_DIR = path.resolve(process.cwd(), "object-repository", "web");
 //   3. Strip query string and fragment
 //   4. Strip trailing slash from pathname (preserve root "/")
 export function normalizeUrl(raw: string): string {
-  const u = new URL(raw.toLowerCase());
+  const u = new URL(raw);
+  u.hostname = u.hostname.toLowerCase();
   if ((u.protocol === "https:" && u.port === "443") ||
       (u.protocol === "http:"  && u.port === "80")) {
     u.port = "";

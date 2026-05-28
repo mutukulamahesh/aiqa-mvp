@@ -12,10 +12,14 @@ import type { DetectedElement }    from "../vision/types";
 export class VisionAssertHandler implements StepHandler {
   readonly handles = ["vision_assert"];
 
+  private readonly engine: SmartLocatorEngine;
+
   constructor(
     private readonly vision: IVisionAgent,
     private readonly ocr:    IOcrEngine,
-  ) {}
+  ) {
+    this.engine = new SmartLocatorEngine(vision, ocr);
+  }
 
   async execute(step: StepAction, adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
     if (step.action !== "vision_assert") return;
@@ -42,7 +46,7 @@ export class VisionAssertHandler implements StepHandler {
     }
 
     // Attempt selector resolution via SmartLocatorEngine
-    const engine    = new SmartLocatorEngine(this.vision, this.ocr);
+    const engine    = this.engine;
     const validator = {
       screenshot:   () => Promise.resolve(buf),
       count: (sel: string) => adapter.countLocator(sel),
