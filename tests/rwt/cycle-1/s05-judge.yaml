@@ -6,4 +6,4 @@ test:
     - judge:
         prompt:  "Is the following statement factually correct? 'The capital of France is Paris.'"
         value:   "The capital of France is Paris."
-        pass_if: ">= 0.7"
+        pass_if: "score >= 0.7"

@@ -11,6 +11,7 @@ test:
         value:  "secret_sauce"
     - click: "#login-button"
     - store:
-        from: ".title"
-        as:   pageTitle
-    - assert_text_visible: "Products"
+        selector: ".title"
+        as:       pageTitle
+    - assert:
+        text: "Products"

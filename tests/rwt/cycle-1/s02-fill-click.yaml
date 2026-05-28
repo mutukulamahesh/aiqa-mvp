@@ -10,5 +10,7 @@ test:
         target: "#password"
         value:  "secret_sauce"
     - click: "#login-button"
-    - assert_url_contains: "/inventory"
-    - assert_element_visible: ".inventory_list"
+    - assert:
+        url: "/inventory"
+    - assert:
+        visible: ".inventory_list"

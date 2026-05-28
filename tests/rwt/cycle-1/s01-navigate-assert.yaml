@@ -3,7 +3,11 @@ test:
   tags: [rwt, smoke, navigation]
   steps:
     - navigate: "https://www.saucedemo.com"
-    - assert_element_visible: "#user-name"
-    - assert_element_visible: "#password"
-    - assert_element_visible: "#login-button"
-    - assert_url_contains: "saucedemo"
+    - assert:
+        visible: "#user-name"
+    - assert:
+        visible: "#password"
+    - assert:
+        visible: "#login-button"
+    - assert:
+        url: "saucedemo"

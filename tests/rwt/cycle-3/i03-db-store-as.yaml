@@ -8,4 +8,4 @@ test:
     - judge:
         prompt:  "Does the company name '${customer.company_name}' sound like it could be a European company?"
         value:   "${customer.company_name}"
-        pass_if: ">= 0.5"
+        pass_if: "score >= 0.5"

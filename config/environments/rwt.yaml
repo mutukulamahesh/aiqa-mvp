@@ -32,15 +32,15 @@ storage:
   maxArtifacts: 10
 
 llm:
-  provider: anthropic
-  model:    claude-haiku-4-5-20251001
-  fallback: [openai]
+  provider: nvidia
+  model:    meta/llama-3.1-70b-instruct
+  fallback: []
 
 llm_targets:
-  fast:        { provider: anthropic, model: claude-haiku-4-5-20251001 }
-  smart:       { provider: anthropic, model: claude-sonnet-4-6 }
-  openai_fast: { provider: openai,    model: gpt-4o-mini }
-  nvidia_fast: { provider: nvidia,    model: meta/llama-3.1-8b-instruct }
+  fast:        { provider: nvidia, model: meta/llama-3.1-8b-instruct }
+  smart:       { provider: nvidia, model: meta/llama-3.1-70b-instruct }
+  openai_fast: { provider: nvidia, model: meta/llama-3.1-8b-instruct }
+  nvidia_fast: { provider: nvidia, model: meta/llama-3.1-8b-instruct }
 
 db:
   readOnly: true
