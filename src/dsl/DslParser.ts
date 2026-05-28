@@ -446,8 +446,20 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   }
 
   if ("desktop_click" in raw) {
-    if (typeof raw.desktop_click !== "string") throw new Error(`Step[${idx}] desktop_click: must be a description string`);
-    return { action: "desktop_click", description: raw.desktop_click };
+    const dc = raw.desktop_click;
+    if (typeof dc === "string") {
+      return { action: "desktop_click", description: dc };
+    }
+    if (dc && typeof dc === "object") {
+      const d = dc as Record<string, unknown>;
+      if (typeof d.description !== "string") throw new Error(`Step[${idx}] desktop_click: missing "description"`);
+      return {
+        action:      "desktop_click",
+        description: d.description,
+        ...(typeof d.min_confidence === "number" ? { min_confidence: d.min_confidence } : {}),
+      };
+    }
+    throw new Error(`Step[${idx}] desktop_click: must be a description string or object with "description"`);
   }
 
   if ("desktop_fill" in raw) {

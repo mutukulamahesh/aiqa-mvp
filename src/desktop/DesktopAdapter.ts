@@ -33,9 +33,10 @@ const GET_TITLE_SCRIPT = [
 ].join("; ");
 
 export class DesktopAdapter implements IDesktopAdapter {
-  private proc: ChildProcess | null = null;
+  private proc:        ChildProcess | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private nut: any = null;
+  private nut:         any = null;
+  private _screenSize: { width: number; height: number } | null = null;
 
   private async loadNut(): Promise<any> {
     if (this.nut) return this.nut;
@@ -80,6 +81,8 @@ export class DesktopAdapter implements IDesktopAdapter {
     const nut = await this.loadNut();
     const { PNG } = require("pngjs") as typeof import("pngjs");
     const img = await nut.screen.grab();
+    // Cache dimensions from the grab so getScreenSize() avoids a second capture (M1 fix)
+    this._screenSize = { width: img.width as number, height: img.height as number };
     const png = new PNG({ width: img.width, height: img.height });
     // nut-js returns BGRA on Windows; swap channels for PNG (RGBA)
     const src = Buffer.from(img.data as Uint8Array);
@@ -93,10 +96,11 @@ export class DesktopAdapter implements IDesktopAdapter {
   }
 
   async getScreenSize(): Promise<{ width: number; height: number }> {
+    if (this._screenSize) return this._screenSize;
     const nut = await this.loadNut();
-    // screen.grab() is the guaranteed API across nut-js v4.x versions
     const img = await nut.screen.grab();
-    return { width: img.width as number, height: img.height as number };
+    this._screenSize = { width: img.width as number, height: img.height as number };
+    return this._screenSize;
   }
 
   async click(x: number, y: number): Promise<void> {
@@ -149,18 +153,23 @@ export class DesktopAdapter implements IDesktopAdapter {
 
 export class StubDesktopAdapter implements IDesktopAdapter {
   readonly calls: Array<{ method: string; args: unknown[] }> = [];
-  private _screenSize:  { width: number; height: number };
-  private _windowTitle: string;
-  private _screenshot:  Buffer;
+  private _screenSize:    { width: number; height: number };
+  private _windowTitle:   string;
+  private _screenshot:    Buffer;
+  private _titleSequence: string[];
+  private _titleCallIdx = 0;
 
   constructor(opts: {
-    screenSize?:  { width: number; height: number };
-    windowTitle?: string;
-    screenshot?:  Buffer;
+    screenSize?:     { width: number; height: number };
+    windowTitle?:    string;
+    screenshot?:     Buffer;
+    // Successive getWindowTitle() calls cycle through this list; falls back to windowTitle when exhausted (L2 fix)
+    titleSequence?:  string[];
   } = {}) {
-    this._screenSize   = opts.screenSize  ?? { width: 1920, height: 1080 };
-    this._windowTitle  = opts.windowTitle ?? "";
-    this._screenshot   = opts.screenshot  ?? Buffer.alloc(0);
+    this._screenSize    = opts.screenSize    ?? { width: 1920, height: 1080 };
+    this._windowTitle   = opts.windowTitle   ?? "";
+    this._screenshot    = opts.screenshot    ?? Buffer.alloc(0);
+    this._titleSequence = opts.titleSequence ?? [];
   }
 
   async launch(appPath: string): Promise<void>                              { this.calls.push({ method: "launch",         args: [appPath]   }); }
@@ -169,7 +178,13 @@ export class StubDesktopAdapter implements IDesktopAdapter {
   async getScreenSize(): Promise<{ width: number; height: number }>         { this.calls.push({ method: "getScreenSize",  args: []          }); return this._screenSize; }
   async click(x: number, y: number): Promise<void>                          { this.calls.push({ method: "click",         args: [x, y]      }); }
   async typeText(text: string): Promise<void>                               { this.calls.push({ method: "typeText",      args: [text]      }); }
-  async pressKey(key: string): Promise<void>                                { this.calls.push({ method: "pressKey",     args: [key]       }); }
-  async getWindowTitle(): Promise<string>                                    { this.calls.push({ method: "getWindowTitle", args: []        }); return this._windowTitle; }
+  async pressKey(key: string): Promise<void>                                { this.calls.push({ method: "pressKey",      args: [key]       }); }
+  async getWindowTitle(): Promise<string> {
+    this.calls.push({ method: "getWindowTitle", args: [] });
+    if (this._titleCallIdx < this._titleSequence.length) {
+      return this._titleSequence[this._titleCallIdx++];
+    }
+    return this._windowTitle;
+  }
   async close(): Promise<void>                                               { this.calls.push({ method: "close",         args: []          }); }
 }

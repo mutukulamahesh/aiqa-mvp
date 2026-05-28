@@ -5,6 +5,7 @@ import { StubOcrEngine }         from "../../src/vision/OcrEngine";
 import { ExecutionContext }       from "../../src/execution/ExecutionContext";
 import { AssertionError, TransientError } from "../../src/errors";
 import type { DetectedElement }  from "../../src/vision/types";
+import { parseTestDefinition }   from "../../src/dsl/DslParser";
 
 const SCREEN = { width: 1920, height: 1080 };
 
@@ -94,6 +95,24 @@ describe("DesktopHandler", () => {
     ).rejects.toBeInstanceOf(AssertionError);
   });
 
+  test("desktop_fill throws AssertionError when focus shifts after click (post-click guard)", async () => {
+    // Calls: 1=pre-locate guard (Login ✓), 2=post-click guard (Popup ✗)
+    const adapter = new StubDesktopAdapter({
+      screenSize: SCREEN,
+      titleSequence: ["Login", "Popup"],
+    });
+    const handler = new DesktopHandler(adapter, new StubVisionAgent([loginBtn()]), new StubOcrEngine());
+    const ctx     = new ExecutionContext({}, null);
+    await expect(
+      handler.execute({
+        action: "desktop_fill", target: "Login button", value: "x",
+        expected_window: "Login",
+      }, ctx)
+    ).rejects.toBeInstanceOf(AssertionError);
+    // typeText must NOT have been called — focus shifted before typing
+    expect(adapter.calls.some(c => c.method === "typeText")).toBe(false);
+  });
+
   test("desktop_fill throws TransientError when element not found", async () => {
     const { handler, ctx } = makeHandler({ windowTitle: "Login" });
     await expect(
@@ -154,5 +173,44 @@ describe("DesktopHandler", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handler.execute({ action: "navigate" as any, target: "https://x.com" }, ctx)
     ).rejects.toThrow(/not a desktop step/);
+  });
+});
+
+// DslParser — desktop_click object form (L1 fix)
+describe("DslParser desktop_click", () => {
+  const wrap = (step: unknown) =>
+    `test:\n  name: t\n  steps:\n    - desktop_click:\n        description: "${(step as Record<string,unknown>).description}"\n        min_confidence: ${(step as Record<string,unknown>).min_confidence ?? 0.8}`;
+
+  test("accepts plain string shorthand", () => {
+    const def = parseTestDefinition("test:\n  name: t\n  steps:\n    - desktop_click: \"Login button\"");
+    expect(def.steps[0]).toMatchObject({ action: "desktop_click", description: "Login button" });
+  });
+
+  test("accepts object form with description and min_confidence (L1)", () => {
+    const yaml =
+      "test:\n  name: t\n  steps:\n    - desktop_click:\n        description: \"Login button\"\n        min_confidence: 0.9";
+    const def = parseTestDefinition(yaml);
+    expect(def.steps[0]).toMatchObject({ action: "desktop_click", description: "Login button", min_confidence: 0.9 });
+  });
+
+  test("object form without min_confidence omits the field", () => {
+    const yaml =
+      "test:\n  name: t\n  steps:\n    - desktop_click:\n        description: \"Save\"";
+    const def = parseTestDefinition(yaml);
+    const step = def.steps[0] as { min_confidence?: number };
+    expect(step.min_confidence).toBeUndefined();
+  });
+
+  test("mode: desktop passes through TestDefinition", () => {
+    const yaml =
+      "test:\n  name: t\n  mode: desktop\n  steps:\n    - desktop_close:";
+    const def = parseTestDefinition(yaml);
+    expect(def.mode).toBe("desktop");
+  });
+
+  test("invalid mode value throws", () => {
+    const yaml =
+      "test:\n  name: t\n  mode: web3\n  steps:\n    - desktop_close:";
+    expect(() => parseTestDefinition(yaml)).toThrow(/mode/);
   });
 });

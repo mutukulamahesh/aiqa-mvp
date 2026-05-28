@@ -43,10 +43,13 @@ export class DesktopVisionLocator {
   // Full-screen screenshot → Vision → OCR fallback.
   // Throws ElementNotFoundError or AmbiguousElementError — callers map to assertion/transient.
   async locate(description: string, minConfidence = this.defaultMinConfidence): Promise<LocatedElement> {
-    const [buf, size] = await Promise.all([
-      this.adapter.screenshot(),
-      this.adapter.getScreenSize(),
-    ]);
+    if (!description.trim()) {
+      throw new Error("[DesktopVisionLocator] locate(): description must not be empty");
+    }
+    // Sequential: screenshot() caches screen dimensions so getScreenSize() reads from cache.
+    // This avoids two concurrent screen.grab() calls (M1 fix).
+    const buf  = await this.adapter.screenshot();
+    const size = await this.adapter.getScreenSize();
 
     const elements = await this.vision.analyzeBuffer(buf);
     const visionHit = this.pickBestVision(elements, description, size, minConfidence);

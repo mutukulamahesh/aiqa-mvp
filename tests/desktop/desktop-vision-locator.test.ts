@@ -105,4 +105,14 @@ describe("DesktopVisionLocator", () => {
     const result = await locator.locate("Username field");
     expect(result.source).toBe("ocr");
   });
+
+  test("throws immediately with clear error when description is empty (L3)", async () => {
+    const { locator } = makeLocator();
+    await expect(locator.locate("")).rejects.toThrow(/description must not be empty/);
+  });
+
+  test("throws immediately with clear error when description is whitespace-only (L3)", async () => {
+    const { locator } = makeLocator();
+    await expect(locator.locate("   ")).rejects.toThrow(/description must not be empty/);
+  });
 });
