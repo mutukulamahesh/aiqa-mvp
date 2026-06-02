@@ -52,12 +52,19 @@ describe("SqliteDBAdapter", () => {
     expect(result.rowCount).toBe(0);
   });
 
-  test("DML returns empty rows and rowCount 0", async () => {
+  test("DML returns empty rows and rowCount 0 when readOnly=false", async () => {
     const adapter2 = new SqliteDBAdapter(":memory:", false);
     await adapter2.seed("CREATE TABLE t (x INT);");
     const result = await adapter2.query("INSERT INTO t VALUES (42)");
     expect(result.rows).toEqual([]);
     expect(result.rowCount).toBe(0);
+    await adapter2.close();
+  });
+
+  test("DML throws when readOnly=true (M1 fix)", async () => {
+    const adapter2 = new SqliteDBAdapter(":memory:", true);
+    await adapter2.seed("CREATE TABLE t (x INT);");
+    await expect(adapter2.query("INSERT INTO t VALUES (42)")).rejects.toThrow(/read-only mode/);
     await adapter2.close();
   });
 

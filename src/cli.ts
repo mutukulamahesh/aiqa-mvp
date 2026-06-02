@@ -150,7 +150,8 @@ program
   .action(async (file: string, opts: { headless?: boolean; slowMo?: string; out?: string; report?: string }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
-    const slowMo       = opts.slowMo ? Math.max(0, parseInt(opts.slowMo, 10)) : 0;
+    const _slowMoMs    = parseInt(opts.slowMo ?? "", 10);
+    const slowMo       = Number.isFinite(_slowMoMs) ? Math.max(0, _slowMoMs) : 0;
     const testFilePath = path.resolve(process.cwd(), file);
     const outRoot      = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
@@ -521,7 +522,8 @@ program
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
-    const slowMo       = opts.slowMo ? Math.max(0, parseInt(opts.slowMo, 10)) : 0;
+    const _slowMoMs    = parseInt(opts.slowMo ?? "", 10);
+    const slowMo       = Number.isFinite(_slowMoMs) ? Math.max(0, _slowMoMs) : 0;
     const workers      = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
     const cbThreshold  = opts.circuitBreaker ? Math.max(1, parseInt(opts.circuitBreaker, 10)) : config.execution.circuitBreaker;
     const outRoot  = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;

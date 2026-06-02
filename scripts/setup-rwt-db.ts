@@ -3,7 +3,7 @@ import * as path from "path";
 
 async function main(): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const initSqlJs = require("sql.js") as () => Promise<{ Database: new () => unknown }>;
+  const initSqlJs = require("sql.js") as (opts?: unknown) => Promise<{ Database: new (data?: Uint8Array) => unknown }>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const SQL: any = await initSqlJs();
 
