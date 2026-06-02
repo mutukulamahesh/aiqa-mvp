@@ -10,5 +10,5 @@ test:
         steps:
           - api:
               method:        GET
-              url:           "https://jsonplaceholder.typicode.com/todos/1"
+              url:           "https://jsonplaceholder.typicode.com/todos/{{ itemId }}"
               assert_status: 200

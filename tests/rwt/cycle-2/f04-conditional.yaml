@@ -5,7 +5,7 @@ test:
     env_flag: "production"
   steps:
     - if:
-        variable: env_flag
+        variable: "{{ env_flag }}"
         equals:   "production"
         steps:
           - wait_ms: 50
