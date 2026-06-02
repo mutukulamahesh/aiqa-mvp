@@ -17,7 +17,7 @@
   .header-left p { margin-top: 6px; font-size: 0.875rem; color: #94a3b8; }
   .header-badge { background: #1e293b; border-radius: 8px; padding: 8px 16px;
                   text-align: center; }
-  .header-badge .grade { font-size: 2rem; font-weight: 800; color: #f59e0b; line-height: 1; }
+  .header-badge .grade { font-size: 2rem; font-weight: 800; color: #22c55e; line-height: 1; }
   .header-badge .grade-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase;
                                 letter-spacing: .06em; margin-top: 2px; }
 
@@ -28,13 +28,13 @@
   .card .value { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: 4px; }
   .card .label { font-size: 0.8rem; color: #64748b; text-transform: uppercase;
                  letter-spacing: .05em; }
-  .card.score  { border-top: 4px solid #f59e0b; }
+  .card.score  { border-top: 4px solid #22c55e; }
   .card.pass   { border-top: 4px solid #22c55e; }
   .card.fail   { border-top: 4px solid #ef4444; }
   .card.time   { border-top: 4px solid #6366f1; }
 
   .progress-bar { background: #e2e8f0; border-radius: 999px; height: 6px; margin-top: 8px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 999px; background: #f59e0b; width: 100%; }
+  .progress-fill { height: 100%; border-radius: 999px; background: #22c55e; width: 100%; }
 
   .coverage { background: #fff; border-radius: 10px; padding: 16px 20px;
               margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
@@ -133,15 +133,15 @@
 <div class="header">
   <div class="header-left">
     <h1>AIQA Test Report</h1>
-    <p>Generated: 2/6/2026, 5:56:09 pm &nbsp;·&nbsp; tests/rwt/cycle-3/</p>
+    <p>Generated: 2/6/2026, 6:05:59 pm &nbsp;·&nbsp; tests/rwt/cycle-6/</p>
     <div class="progress-bar" style="margin-top:12px;width:200px">
       <div class="progress-fill"></div>
     </div>
     <p style="font-size:.75rem;color:#94a3b8;margin-top:4px">100% pass rate</p>
   </div>
   <div class="header-badge">
-    <div class="grade">70<span style="font-size:1rem">/100</span></div>
-    <div class="grade-label">Score (C)</div>
+    <div class="grade">92<span style="font-size:1rem">/100</span></div>
+    <div class="grade-label">Score (A)</div>
   </div>
 </div>
 
@@ -157,11 +157,11 @@
     <div class="label">Failed</div>
   </div>
   <div class="card time">
-    <div class="value" style="color:#6366f1">3.4s</div>
+    <div class="value" style="color:#6366f1">10.1s</div>
     <div class="label">Duration</div>
   </div>
   <div class="card score">
-    <div class="value" style="color:#f59e0b">6</div>
+    <div class="value" style="color:#22c55e">6</div>
     <div class="label">Total Tests</div>
   </div>
   
@@ -169,9 +169,9 @@
 
 <div class="coverage">
   <h2>Coverage</h2>
-  <span class="cov-badge">API</span>
+  <span class="cov-badge">UI</span> <span class="cov-badge">API</span> <span class="cov-badge">Assertions</span>
   
-  <div class="reco"><strong>Recommendation:</strong> Moderate coverage. Add UI tests to improve confidence.</div>
+  <div class="reco"><strong>Recommendation:</strong> Excellent coverage. System appears production-ready.</div>
 </div>
 
 
@@ -183,8 +183,8 @@
   <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I01: db select — count all products<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">db</span></span></span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 52ms</span>
+      <span class="test-name">✅ RWT-R01: smoke regression — login and inventory page<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">smoke</span></span></span>
+      <span class="test-meta">6 steps &nbsp;·&nbsp; 4456ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -192,61 +192,9 @@
       <div class="step-row">
         <span class="step-idx">1</span>
         <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#64748b">db</span>
+        <span class="step-action" style="background:#3b82f6">navigate</span>
         <div class="step-detail">
-          <div class="step-duration">52ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-      
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header pass">
-      <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I02: db assert_field — verify category name<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">db</span></span></span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 3ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#64748b">db</span>
-        <div class="step-detail">
-          <div class="step-duration">3ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-      
-    </div>
-  </details>
-</div>
-<div class="test">
-  <details>
-    <summary class="test-header pass">
-      <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I03: db store_as — use row value in subsequent judge step<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">db</span><span class="tag">variables</span></span></span>
-      <span class="test-meta">2 steps &nbsp;·&nbsp; 3276ms</span>
-      <span class="chevron">▶</span>
-    </summary>
-    <div class="steps">
-      <div class="step">
-      <div class="step-row">
-        <span class="step-idx">1</span>
-        <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#64748b">db</span>
-        <div class="step-detail">
-          <div class="step-duration">3ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:0%"></span></span></div>
+          <div class="step-duration">2428ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
           
         </div>
       </div>
@@ -257,9 +205,61 @@
       <div class="step-row">
         <span class="step-idx">2</span>
         <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#64748b">judge</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
         <div class="step-detail">
-          <div class="step-duration">3273ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
+          <div class="step-duration">697ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:29%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">3</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#0ea5e9">fill</span>
+        <div class="step-detail">
+          <div class="step-duration">534ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:22%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">4</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#8b5cf6">click</span>
+        <div class="step-detail">
+          <div class="step-duration">770ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:32%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">5</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">6ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:0%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+<div class="step">
+      <div class="step-row">
+        <span class="step-idx">6</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#10b981">assert</span>
+        <div class="step-detail">
+          <div class="step-duration">21ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:1%"></span></span></div>
           
         </div>
       </div>
@@ -274,8 +274,34 @@
   <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I04: db parameterized query — products by category<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">db</span></span></span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 3ms</span>
+      <span class="test-name">✅ RWT-R02: functional regression — llm_eval quality check<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">llm_eval</span></span></span>
+      <span class="test-meta">1 steps &nbsp;·&nbsp; 1784ms</span>
+      <span class="chevron">▶</span>
+    </summary>
+    <div class="steps">
+      <div class="step">
+      <div class="step-row">
+        <span class="step-idx">1</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#64748b">llm_eval</span>
+        <div class="step-detail">
+          <div class="step-duration">1784ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
+    </div>
+  </details>
+</div>
+<div class="test">
+  <details>
+    <summary class="test-header pass">
+      <span class="status-dot pass"></span>
+      <span class="test-name">✅ RWT-R03: integration regression — db select with assertion<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">db</span></span></span>
+      <span class="test-meta">1 steps &nbsp;·&nbsp; 37ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -285,7 +311,7 @@
         <span class="step-badge pass">PASS</span>
         <span class="step-action" style="background:#64748b">db</span>
         <div class="step-detail">
-          <div class="step-duration">2ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
+          <div class="step-duration">37ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
           
         </div>
       </div>
@@ -300,8 +326,8 @@
   <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I05: API + db cross-validation<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">api</span><span class="tag">db</span></span></span>
-      <span class="test-meta">2 steps &nbsp;·&nbsp; 59ms</span>
+      <span class="test-name">✅ RWT-R04: integration regression — API call returns 200<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">api</span></span></span>
+      <span class="test-meta">1 steps &nbsp;·&nbsp; 66ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -311,20 +337,7 @@
         <span class="step-badge pass">PASS</span>
         <span class="step-action" style="background:#f59e0b">api</span>
         <div class="step-detail">
-          <div class="step-duration">59ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
-          
-        </div>
-      </div>
-      
-      
-    </div>
-<div class="step">
-      <div class="step-row">
-        <span class="step-idx">2</span>
-        <span class="step-badge pass">PASS</span>
-        <span class="step-action" style="background:#64748b">db</span>
-        <div class="step-detail">
-          <div class="step-duration">0ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:0%"></span></span></div>
+          <div class="step-duration">66ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
           
         </div>
       </div>
@@ -339,8 +352,34 @@
   <details>
     <summary class="test-header pass">
       <span class="status-dot pass"></span>
-      <span class="test-name">✅ RWT-I06: db join — order details with product names<span class="tags"><span class="tag">rwt</span><span class="tag">integration</span><span class="tag">db</span></span></span>
-      <span class="test-meta">1 steps &nbsp;·&nbsp; 2ms</span>
+      <span class="test-name">✅ RWT-R05: consistency regression — low variance on stable fact<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">llm_consistency</span></span></span>
+      <span class="test-meta">1 steps &nbsp;·&nbsp; 3752ms</span>
+      <span class="chevron">▶</span>
+    </summary>
+    <div class="steps">
+      <div class="step">
+      <div class="step-row">
+        <span class="step-idx">1</span>
+        <span class="step-badge pass">PASS</span>
+        <span class="step-action" style="background:#64748b">llm_consistency</span>
+        <div class="step-detail">
+          <div class="step-duration">3752ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
+          
+        </div>
+      </div>
+      
+      
+    </div>
+      
+    </div>
+  </details>
+</div>
+<div class="test">
+  <details>
+    <summary class="test-header pass">
+      <span class="status-dot pass"></span>
+      <span class="test-name">✅ RWT-R06: security regression — parameterized db query is safe<span class="tags"><span class="tag">rwt</span><span class="tag">regression</span><span class="tag">security</span><span class="tag">db</span></span></span>
+      <span class="test-meta">1 steps &nbsp;·&nbsp; 1ms</span>
       <span class="chevron">▶</span>
     </summary>
     <div class="steps">
@@ -350,7 +389,7 @@
         <span class="step-badge pass">PASS</span>
         <span class="step-action" style="background:#64748b">db</span>
         <div class="step-detail">
-          <div class="step-duration">2ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
+          <div class="step-duration">1ms<span class="dur-bar-wrap"><span class="dur-bar" style="width:100%"></span></span></div>
           
         </div>
       </div>

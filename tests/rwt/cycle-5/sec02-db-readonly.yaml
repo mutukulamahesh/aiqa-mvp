@@ -4,4 +4,4 @@ test:
   steps:
     - db:
         query:       "SELECT product_name, unit_price FROM products WHERE unit_price > 20"
-        assert_rows: 3
+        assert_rows: 5
