@@ -92,13 +92,74 @@ test:
 - **Self-heal selectors** — broken locators are repaired automatically via LLM and cached; vision-based strategy-5 fallback when all else fails
 - **Vision testing** — assert elements by description using Claude Vision, no CSS selectors required; pixel-level visual regression with configurable diff thresholds
 - **AI evaluation** — test LLMs natively: quality scoring, consistency checks, prompt regression detection
+- **Human validation gates** — pause any test for human review; automation measures, humans decide
 - **Enterprise AI** — works with Azure OpenAI, internal AI gateways, Ollama (local, no data leaves machine)
 - **CI integration** — JUnit XML output, `--impact-only` flag runs only tests affected by the current git diff
 - **HTML reports** — pass-rate trend chart, flaky test heatmap, step-by-step duration bars
 - **Jira integration** — auto-creates bugs for failures with screenshots; deduplicates on re-run
 - **Web portal** — browser UI for running tests, live progress, and result history
 
-→ [Full feature list](#full-feature-list) · [GenAI testing guide](#genai-testing) · [Enterprise AI setup](#enterprise--on-premise-ai) · [CLI reference](#cli-reference)
+→ [Full feature list](#full-feature-list) · [GenAI testing guide](#genai-testing) · [Human validation](#human-validation) · [Enterprise AI setup](#enterprise--on-premise-ai) · [CLI reference](#cli-reference)
+
+---
+
+## Human Validation
+
+AIQA automates measurement. Humans own the decisions.
+
+A judge score of `0.8` tells you the response probably meets the criteria. It does not tell you whether those criteria were the right ones to write. That call belongs to a person.
+
+### The principle
+
+```
+Automation owns          Human owns
+────────────────         ──────────────────────────────
+Measuring                Deciding what to measure
+Detecting breakage       Deciding what matters
+Suggesting fixes         Approving fixes
+Running test cycles      Signing off on cycles
+Scoring LLM responses    Setting the score thresholds
+Recording baselines      Approving what "correct" means
+Creating PRs             Merging PRs
+```
+
+### `human_approve:` step *(coming in POL-10)*
+
+Pause any test flow and require a human decision before continuing:
+
+```yaml
+steps:
+  - navigate: "https://app.com/checkout"
+  - click: "#complete-order"
+  - human_approve:
+      message: "Order confirmation page — does the layout and total look correct?"
+      screenshot: true
+      notify:
+        slack: "#qa-review"
+      timeout_hours: 24
+      on_timeout: fail   # or: skip, warn
+  - assert:
+      url: "/confirmation"
+```
+
+The test pauses, takes a screenshot, notifies the team, and waits. A real person reviews it in the portal and clicks Approve or Reject. Only then does the test continue.
+
+### Three hardcoded human gates
+
+These are never bypassed, regardless of automation level:
+
+**Gate 1 — Baseline approval**
+When a new LLM baseline is recorded (`AIQA_BASELINE_RECORD=true`), it does not activate automatically. A Jira story is created for human review. A person inspects the response, decides it represents correct behaviour, and approves it. Only then does CI use it for drift comparison.
+
+**Gate 2 — Auto-patch review**
+When `DepHealerAgent` generates a fix for a broken adapter (e.g. a Jira API endpoint change), it opens a pull request — it never auto-merges. The agent is a junior developer making a suggestion. A human engineer reviews and merges.
+
+**Gate 3 — Cycle sign-off**
+At the end of a full RWT cycle or a release gate, AIQA produces a 7-condition evidence dashboard. A human reads it, makes a risk judgement, and signs off. No autonomous sign-off, no matter how green the results are.
+
+### Why this matters
+
+Self-healing selectors, automated baselines, and LLM-generated patches are all productivity tools. They reduce toil. They do not replace engineering judgement about whether a system is correct, safe, or ready to ship. AIQA is designed with this separation as a first principle — not as an afterthought.
 
 ---
 

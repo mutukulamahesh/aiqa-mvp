@@ -799,6 +799,17 @@ aiqa schedule (nightly) → dephealth probe fails
 | POL-09a | Complete adapter coverage audit — every external library import must be inside exactly one adapter file. No `require('@playwright/test')` outside `PlaywrightAdapter.ts`, no Jira HTTP calls outside `JiraClient.ts`, etc. Add lint rule or grep check to CI that enforces one-file-per-dependency. | M | [ ] |
 | POL-09b | `DepHealerAgent` — nightly dep probe → LLM diagnosis using adapter source + npm changelog → patch generation → tsc + jest verification → auto PR on pass, Jira defect + Slack alert on fail. Builds on existing `DebuggerAgent` pattern, `JiraAdapter.createDefect()`, `--alert-webhook`, and `aiqa schedule`. | L | [ ] |
 
+### Sprint 6 — Human Validation (automation measures, humans decide)
+
+> Design principle: AIQA automates measurement. Humans own the decisions.
+> No score, no agent, no auto-fix ever bypasses human judgement on whether a system is correct, safe, or ready to ship.
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-10 | `human_approve:` DSL step — pauses test execution, takes screenshot, notifies via Slack/portal, waits for explicit Approve/Reject from a named reviewer before continuing. `timeout_hours` + `on_timeout: fail\|skip\|warn`. Portal shows pending approvals dashboard. | L | [ ] |
+| POL-11 | Baseline approval workflow — when `AIQA_BASELINE_RECORD=true` records a new baseline, create a Jira story for human review instead of auto-activating. Baseline only becomes active in CI after a human marks the Jira story "Approved". Prevents silently encoding wrong behaviour as "correct". | M | [ ] |
+| POL-12 | Cycle sign-off dashboard — after a full RWT cycle or release gate run, generate a 7-condition evidence report (pass rate, healer activity, judge scores, variance, baseline drift, security results, coverage). Requires an explicit human sign-off action in the portal before the gate is marked "passed". No autonomous sign-off ever. | M | [ ] |
+
 ---
 
 ## Phase 7 — Platform & Scale `[PRODUCT]`
@@ -848,7 +859,7 @@ aiqa schedule (nightly) → dephealth probe fails
 | Phase 6 — Vision EPIC-14 | 1 | 7 | ✅ DONE | Selector-free web testing (vision_assert, visual_snapshot) |
 | Phase 6 — Desktop EPIC-15 | 1 | 3 | ✅ DONE | Desktop automation (VisionAgent + OCR primary) |
 | EPIC-RWT — Real-World Validation | 1 | 14 | 🔄 Wave 1+2 complete | Full STLC pass — Wave 1 (32/32 ✅), Wave 2 AI+OPS (11/11 ✅), Vision+Desktop pending |
-| EPIC-POLISH — Platform Polish | 1 | 10 | ⬜ | Post-RWT findings: onboarding, cost, guardrails, reach, self-healing deps |
+| EPIC-POLISH — Platform Polish | 1 | 13 | ⬜ | Post-RWT findings: onboarding, cost, guardrails, reach, self-healing deps, human gates |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
 | **Total** | **33+** | **199+** | | |
 
