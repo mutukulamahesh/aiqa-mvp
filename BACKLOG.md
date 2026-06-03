@@ -1,8 +1,9 @@
 # AIQA — Production Readiness Backlog
 
-> Current alignment with vision: **~99%**  *(updated 2026-05-28)*
+> Current alignment with vision: **~99%**  *(updated 2026-06-03)*
 > Sprint 1–2 + Phase 2–5 + Pre-Phase 4 hardening + Phase 4 (all) + Phase 5 (GenAI Testing) + Strategic (DEX/OSS/LOCAL/MON) + Phase 6 EPIC-14 (Vision Agent) + Phase 6 EPIC-15 (Desktop Automation): **DONE**.
-> Remaining: EPIC-RWT (Real-World Validation pause), Phase 7 Scale. Parked: EPIC-EXT-A, OSS-04 (manual).
+> EPIC-RWT Wave 1 (32/32 ✅) + Wave 2 AI+OPS (11/11 ✅) complete. Vision + Desktop pending.
+> Remaining: EPIC-RWT Vision+Desktop, EPIC-POLISH (8 stories from post-RWT assessment), Phase 7 Scale. Parked: EPIC-EXT-A, OSS-04 (manual).
 
 ---
 
@@ -733,6 +734,40 @@ DataDog alternative at near-zero cost.
 
 ---
 
+## EPIC-POLISH · Platform Polish & Trust `[POST-RWT ASSESSMENT]`
+> Items raised by the honest platform assessment after EPIC-RWT Wave 1 + Wave 2.
+> Sequenced into 4 sprints. None require architectural changes — all are additive or corrective.
+
+### Sprint 1 — Onboarding (highest adoption friction)
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-01 | `aiqa init` full scaffolding — extends existing basic prompt (DEX-13.6) to generate: `config/environments/dev.yaml`, `.env.example`, `tests/example.yaml`, `README-quickstart.md`. One command to a working project. | M | [ ] |
+| POL-02 | DSL validator — rejects old `${var}` template syntax with actionable error: `"Did you mean {{ var }}? AIQA uses double-curly syntax."` Catches `desktop_click` string vs object confusion and `if:` condition vs variable/equals mismatch. | S | [ ] |
+
+### Sprint 2 — Cost Visibility (enterprise trust)
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-03 | `--dry-run --show-cost` flag — scans test files, counts LLM steps by type (judge, llm_eval, llm_consistency, vision_assert), estimates token usage per step type, prints cost table using configurable per-token price. No browser launched, no API calls made. | M | [ ] |
+| POL-04 | Cross-run judge cache — persist `JudgeHandler.resultCache` to `.aiqa/judge-cache.json` between runs. Same SHA-256 key (value+prompt+acContext). Configurable TTL (default 24h). Saves repeated CI runs on the same content from calling the LLM every time. | M | [ ] |
+
+### Sprint 3 — Runtime Guardrails (reduce footguns)
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-05 | Step context warnings — detect semantically invalid step sequences at runtime. Initial cases: (1) `assert: { text: }` or `assert: { visible: }` with no prior `navigate:` in the test emits a warning; (2) `store:` with no prior `navigate:` emits a warning. Does not throw — warns and continues. | S | [ ] |
+| POL-06 | sql.js WASM singleton — share one WASM module instance per process across all `SqliteDBAdapter` instantiations. `SqliteDBAdapterFactory` holds the singleton promise; parallel workers each load it independently today (~1.2MB per load). Matters at 4+ workers × 20+ db steps. | S | [ ] |
+
+### Sprint 4 — Platform Reach (long, platform-level)
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-07 | Desktop cross-platform — `getWindowTitle()` currently uses PowerShell Win32 (Windows-only). macOS: `osascript -e 'tell application "System Events"...'` via Accessibility API. Linux: `xdotool getactivewindow getwindowname`. Gate behind runtime platform detection — same interface, different impl per `process.platform`. | L | [ ] |
+| POL-08 | Plugin ecosystem audit — verify Maven plugin, Gradle plugin, Python client, Java client (DEX-09 through DEX-12) are complete and installable. Produce a test that runs `mvn aiqa:run` and `pip install aiqa-client` against a real endpoint. Do not claim ecosystem completeness in the readiness report until this passes. | M | [ ] |
+
+---
+
 ## Phase 7 — Platform & Scale `[PRODUCT]`
 > From tool to SaaS platform
 
@@ -779,9 +814,10 @@ DataDog alternative at near-zero cost.
 | Strategic — MON | 1 | 3 | ✅ DONE | Synthetic monitoring, alerts, uptime history |
 | Phase 6 — Vision EPIC-14 | 1 | 7 | ✅ DONE | Selector-free web testing (vision_assert, visual_snapshot) |
 | Phase 6 — Desktop EPIC-15 | 1 | 3 | ✅ DONE | Desktop automation (VisionAgent + OCR primary) |
-| EPIC-RWT — Real-World Validation | 1 | 14 | ⬜ | Full STLC pass on real apps before Phase 7 |
+| EPIC-RWT — Real-World Validation | 1 | 14 | 🔄 Wave 1+2 complete | Full STLC pass — Wave 1 (32/32 ✅), Wave 2 AI+OPS (11/11 ✅), Vision+Desktop pending |
+| EPIC-POLISH — Platform Polish | 1 | 8 | ⬜ | Post-RWT assessment findings: onboarding, cost, guardrails, reach |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **32+** | **189+** | | |
+| **Total** | **33+** | **197+** | | |
 
-**Active:** EPIC-RWT Real-World Validation (not started — EPIC-15 complete).
-**Next:** EPIC-RWT pause (STLC). Phase 7 formally blocked until RWT sign-off.
+**Active:** EPIC-RWT Wave 2 (Vision + Desktop pending Anthropic credits + VS Build Tools).
+**Next after RWT:** EPIC-POLISH Sprint 1 (POL-01 aiqa init + POL-02 DSL validator). Phase 7 blocked until full RWT sign-off.
