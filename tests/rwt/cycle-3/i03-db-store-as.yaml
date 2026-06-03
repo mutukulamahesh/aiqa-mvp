@@ -6,6 +6,6 @@ test:
         query:    "SELECT company_name FROM customers WHERE customer_id = 'ALFKI'"
         store_as: customer
     - judge:
-        prompt:  "Does the company name '${customer.company_name}' sound like it could be a European company?"
-        value:   "${customer.company_name}"
+        prompt:  "Does the company name '{{ customer.company_name }}' sound like it could be a European company?"
+        value:   "{{ customer.company_name }}"
         pass_if: "score >= 0.5"

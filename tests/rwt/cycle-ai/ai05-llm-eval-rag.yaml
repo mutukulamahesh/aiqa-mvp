@@ -1,0 +1,12 @@
+test:
+  name: "RWT-AI05: llm_eval with knowledge-aware quality assertion"
+  tags: [rwt, ai, llm_eval, rag]
+  retries: 1
+  steps:
+    - llm_eval:
+        target: fast
+        prompt: "Name three common types of software testing. One sentence each."
+        assert_quality:
+          criteria: "The response lists at least three distinct types of software testing such as unit, integration, end-to-end, regression, or performance testing"
+          pass_if:  "score >= 0.6"
+        store_as: evalResult

@@ -1,0 +1,11 @@
+test:
+  name: "RWT-OPS05: portal issues WebSocket auth token"
+  tags: [rwt, ops, portal, websocket]
+  steps:
+    - api:
+        method:        POST
+        url:           "http://localhost:7432/api/ws-token"
+        headers:
+          Authorization: "Bearer rwt-local-dev-key"
+        assert_status: 200
+        store_as:      wsToken

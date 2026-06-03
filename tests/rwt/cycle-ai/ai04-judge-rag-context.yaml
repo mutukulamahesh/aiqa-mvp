@@ -1,0 +1,9 @@
+test:
+  name: "RWT-AI04: judge with RAG context — evaluates claim against knowledge base"
+  tags: [rwt, ai, judge, rag]
+  retries: 1
+  steps:
+    - judge:
+        prompt:  "Does AIQA support database validation steps in its DSL?"
+        value:   "Yes, AIQA supports db: steps that can run SQL queries and assert row counts and field values against a database."
+        pass_if: "score >= 0.7"

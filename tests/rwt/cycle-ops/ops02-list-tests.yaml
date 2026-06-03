@@ -1,0 +1,11 @@
+test:
+  name: "RWT-OPS02: portal lists test files from tests directory"
+  tags: [rwt, ops, portal]
+  steps:
+    - api:
+        method:        GET
+        url:           "http://localhost:7432/api/tests"
+        headers:
+          Authorization: "Bearer rwt-local-dev-key"
+        assert_status: 200
+        store_as:      testList

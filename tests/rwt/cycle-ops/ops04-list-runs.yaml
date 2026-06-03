@@ -1,0 +1,11 @@
+test:
+  name: "RWT-OPS04: portal lists runs"
+  tags: [rwt, ops, portal]
+  steps:
+    - api:
+        method:        GET
+        url:           "http://localhost:7432/api/runs"
+        headers:
+          Authorization: "Bearer rwt-local-dev-key"
+        assert_status: 200
+        store_as:      runList

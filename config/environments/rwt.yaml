@@ -12,7 +12,7 @@ timeouts:
 execution:
   workers:        1
   retries:        1
-  headless:       true
+  headless:       false
   maxPages:       20
   maxDepth:       3
   circuitBreaker: 10
@@ -49,6 +49,7 @@ api:
   allowlist:
     - "https://jsonplaceholder.typicode.com"
     - "https://www.saucedemo.com"
+    - "http://localhost:7432"
   denylist: []
 
 jira:
@@ -59,8 +60,12 @@ jira:
   xraySyncEnabled:        false
 
 knowledge:
-  enabled: false
-  indexPath: ".aiqa/knowledge"
+  enabled: true
+  indexPath: ".aiqa/rwt-knowledge"
   topK: 5
   chunker: naive
-  connectors: []
+  connectors:
+    - type: git
+      lookbackDays: 90
+    - type: jira
+      projectKey: SCRUM

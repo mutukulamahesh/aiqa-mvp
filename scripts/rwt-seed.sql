@@ -58,18 +58,18 @@ INSERT INTO products VALUES (2,  'Chang',                   1, 19.00,  17, 0);
 INSERT INTO products VALUES (3,  'Aniseed Syrup',           2, 10.00,  13, 0);
 INSERT INTO products VALUES (4,  'Chef Anton''s Mix',       2, 22.00,  53, 0);
 INSERT INTO products VALUES (5,  'Grandma''s Boysen Jam',   2, 25.00,  12, 0);
-INSERT INTO products VALUES (6,  'Uncle Bob''s Organic',    7,  4.50,  15, 0);
+INSERT INTO products VALUES (6,  'Uncle Bob''s Organic',    5,  4.50,  15, 0);
 INSERT INTO products VALUES (7,  'Queso Cabrales',          4, 21.00,  22, 0);
 INSERT INTO products VALUES (8,  'Queso Manchego',          4, 38.00,  86, 0);
-INSERT INTO products VALUES (9,  'Konbu',                   8, 6.00,   24, 0);
-INSERT INTO products VALUES (10, 'Tofu',                    7, 23.25,  35, 0);
+INSERT INTO products VALUES (9,  'Konbu',                   3,  6.00,  24, 0);
+INSERT INTO products VALUES (10, 'Tofu',                    5, 23.25,  35, 0);
 
 -- Orders
-INSERT INTO orders VALUES (10248, 'VINET', '2024-07-04', 32.38);
-INSERT INTO orders VALUES (10249, 'TOMSP', '2024-07-05', 11.61);
-INSERT INTO orders VALUES (10250, 'HANAR', '2024-07-08', 65.83);
-INSERT INTO orders VALUES (10251, 'VICTE', '2024-07-08', 41.34);
-INSERT INTO orders VALUES (10252, 'SUPRD', '2024-07-09', 51.30);
+INSERT INTO orders VALUES (10248, 'ALFKI', '2024-07-04', 32.38);
+INSERT INTO orders VALUES (10249, 'ANATR', '2024-07-05', 11.61);
+INSERT INTO orders VALUES (10250, 'BONAP', '2024-07-08', 65.83);
+INSERT INTO orders VALUES (10251, 'CONSH', '2024-07-08', 41.34);
+INSERT INTO orders VALUES (10252, 'EASTC', '2024-07-09', 51.30);
 
 -- Order Details
 INSERT INTO order_details VALUES (10248, 1,  14.00, 12, 0);

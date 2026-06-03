@@ -143,12 +143,15 @@ program
 program
   .command("run <file>")
   .description("Run a single DSL test file")
-  .option("--headless", "Run browser in headless mode (default: from env config)")
-  .option("--out <folder>", "Project folder — saves screenshots, results JSON, and HTML report here")
-  .option("--report <file>", "Explicit HTML report output path (overrides --out)")
-  .action(async (file: string, opts: { headless?: boolean; out?: string; report?: string }) => {
+  .option("--headless",          "Run browser in headless mode (default: from env config)")
+  .option("--slow-mo <ms>",      "Slow down Playwright actions by <ms> milliseconds (default: 0)")
+  .option("--out <folder>",      "Project folder — saves screenshots, results JSON, and HTML report here")
+  .option("--report <file>",     "Explicit HTML report output path (overrides --out)")
+  .action(async (file: string, opts: { headless?: boolean; slowMo?: string; out?: string; report?: string }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
+    const _slowMoMs    = parseInt(opts.slowMo ?? "", 10);
+    const slowMo       = Number.isFinite(_slowMoMs) ? Math.max(0, _slowMoMs) : 0;
     const testFilePath = path.resolve(process.cwd(), file);
     const outRoot      = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
 
@@ -177,6 +180,7 @@ program
 
     const runner = new TestRunner({
       headless,
+      slowMo,
       timeout:        config.timeouts.action,
       screenshotsDir: outRoot ? path.join(outRoot, "screenshots") : undefined,
       knowledgeStore: knowledgeStoreForRun,
@@ -494,6 +498,7 @@ program
   .command("run-all [dir]")
   .description("Run every YAML test file in a directory and generate an HTML report")
   .option("--headless",        "Run browser in headless mode (default: from env config)")
+  .option("--slow-mo <ms>",    "Slow down Playwright actions by <ms> milliseconds (default: 0)")
   .option("--out <folder>",    "Project folder — runs <folder>/tests/, saves results to <folder>/results/")
   .option("--report <file>",   "Explicit HTML report output path (overrides --out)")
   .option("--results <file>",  "Explicit JSON results output path (overrides --out)")
@@ -511,12 +516,14 @@ program
   .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main). Requires a full clone (fetch-depth: 0 in CI).")
   .option("--junit <file>",         "Write JUnit XML report to <file> (for CI test result parsers)")
   .action(async (dir: string | undefined, opts: {
-    headless?: boolean; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
+    headless?: boolean; slowMo?: string; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
     allure?: string | boolean; slack?: boolean; alertWebhook?: string; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
     impactOnly?: string | boolean; junit?: string;
   }) => {
     const config       = cfg();
     const headless     = opts.headless ?? config.execution.headless;
+    const _slowMoMs    = parseInt(opts.slowMo ?? "", 10);
+    const slowMo       = Number.isFinite(_slowMoMs) ? Math.max(0, _slowMoMs) : 0;
     const workers      = opts.workers ? Math.max(1, parseInt(opts.workers, 10)) : config.execution.workers;
     const cbThreshold  = opts.circuitBreaker ? Math.max(1, parseInt(opts.circuitBreaker, 10)) : config.execution.circuitBreaker;
     const outRoot  = opts.out ? path.resolve(process.cwd(), opts.out) : undefined;
@@ -656,7 +663,7 @@ program
       } catch { /* non-fatal */ }
     }
 
-    const runnerOpts = { headless, timeout: config.timeouts.action, screenshotsDir, memory: sharedMemory, knowledgeStore: sharedKnowledgeStore };
+    const runnerOpts = { headless, slowMo, timeout: config.timeouts.action, screenshotsDir, memory: sharedMemory, knowledgeStore: sharedKnowledgeStore };
 
     console.log(`   Circuit: stop after ${cbThreshold} consecutive failures`);
     console.log(`─────────────────────────────────────────\n`);

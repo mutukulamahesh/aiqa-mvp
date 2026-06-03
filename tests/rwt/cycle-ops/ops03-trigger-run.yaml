@@ -1,0 +1,15 @@
+test:
+  name: "RWT-OPS03: portal accepts POST /api/run and returns runId"
+  tags: [rwt, ops, portal]
+  steps:
+    - api:
+        method:        POST
+        url:           "http://localhost:7432/api/run"
+        headers:
+          Authorization: "Bearer rwt-local-dev-key"
+        body:
+          file:     "tests/rwt/cycle-1/s04-wait-api.yaml"
+          env:      "rwt"
+          headless: true
+        assert_status: 202
+        store_as:      runResponse

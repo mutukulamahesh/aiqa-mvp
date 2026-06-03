@@ -42,6 +42,14 @@ export class SqliteDBAdapter implements DBAdapter {
       return { rows, rowCount: rows.length };
     }
 
+    if (this.readOnly) {
+      throw new Error(
+        `SqliteDBAdapter: read-only mode — only SELECT queries are allowed. ` +
+        `Got: "${sql.slice(0, 60)}${sql.length > 60 ? "…" : ""}". ` +
+        `Construct the adapter with readOnly=false to allow writes.`
+      );
+    }
+
     // DML — run without returning rows
     this.db.run(sql, params ?? []);
     return { rows: [], rowCount: 0 };

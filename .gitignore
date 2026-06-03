@@ -14,3 +14,6 @@ ARCHITECTURE.html
 
 # RWT runtime data — generated SQLite DB (recreated by setup-rwt-db.ts)
 rwt-data/
+
+# Runtime results — logs, uptime, screenshots (not source artefacts)
+results/
