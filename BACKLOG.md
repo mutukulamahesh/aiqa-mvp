@@ -764,7 +764,40 @@ DataDog alternative at near-zero cost.
 | ID | Story | Size | Status |
 |---|---|---|---|
 | POL-07 | Desktop cross-platform — `getWindowTitle()` currently uses PowerShell Win32 (Windows-only). macOS: `osascript -e 'tell application "System Events"...'` via Accessibility API. Linux: `xdotool getactivewindow getwindowname`. Gate behind runtime platform detection — same interface, different impl per `process.platform`. | L | [ ] |
-| POL-08 | Plugin ecosystem audit — verify Maven plugin, Gradle plugin, Python client, Java client (DEX-09 through DEX-12) are complete and installable. Produce a test that runs `mvn aiqa:run` and `pip install aiqa-client` against a real endpoint. Do not claim ecosystem completeness in the readiness report until this passes. | M | [ ] |
+| POL-08 | Plugin ecosystem audit + `aiqa dephealth` command — verify Maven plugin, Gradle plugin, Python client, Java client (DEX-09 through DEX-12) are complete and installable. `aiqa dephealth` probes each external adapter in isolation (Playwright, Anthropic SDK, sql.js, tesseract.js, Jira, OpenAI, nut-js) and reports status — catches breaking dependency changes before any test fails. | M | [ ] |
+
+### Sprint 5 — Self-Healing Dependencies (autonomous maintenance)
+
+> Extends the selector self-healing pattern (SelectorHealer) one level up to external dependency adapters.
+> Same loop: detect breakage → diagnose via LLM → patch → verify → PR or defect.
+
+**Architecture:**
+```
+aiqa schedule (nightly) → dephealth probe fails
+  → DepHealerAgent.analyze(error, adapterSource, npmChangelog)
+      → LLM: "what changed, what is the minimal fix?"
+      → apply patch to adapter file
+      → npx tsc --noEmit (type check)
+      → npx jest <adapter.test.ts> (unit tests)
+  → if tests pass  → git branch + PR (auto)
+  → if tests fail  → Jira defect + Slack alert (with suggested fix attached)
+```
+
+**What it can fix autonomously:**
+
+| Change type | Autonomous |
+|---|---|
+| URL / endpoint rename | ✅ e.g. `/search` → `/search/jql` |
+| Response field rename | ✅ e.g. `results[]` → `issues[]` |
+| New required parameter | ✅ e.g. missing `accountId` |
+| Auth header change | ✅ e.g. `X-API-Key` → `Bearer` |
+| Major API redesign | ⚠️ suggests approach, flags for human review |
+| Native build failure | ❌ requires human (e.g. nut-js compile) |
+
+| ID | Story | Size | Status |
+|---|---|---|---|
+| POL-09a | Complete adapter coverage audit — every external library import must be inside exactly one adapter file. No `require('@playwright/test')` outside `PlaywrightAdapter.ts`, no Jira HTTP calls outside `JiraClient.ts`, etc. Add lint rule or grep check to CI that enforces one-file-per-dependency. | M | [ ] |
+| POL-09b | `DepHealerAgent` — nightly dep probe → LLM diagnosis using adapter source + npm changelog → patch generation → tsc + jest verification → auto PR on pass, Jira defect + Slack alert on fail. Builds on existing `DebuggerAgent` pattern, `JiraAdapter.createDefect()`, `--alert-webhook`, and `aiqa schedule`. | L | [ ] |
 
 ---
 
@@ -815,9 +848,9 @@ DataDog alternative at near-zero cost.
 | Phase 6 — Vision EPIC-14 | 1 | 7 | ✅ DONE | Selector-free web testing (vision_assert, visual_snapshot) |
 | Phase 6 — Desktop EPIC-15 | 1 | 3 | ✅ DONE | Desktop automation (VisionAgent + OCR primary) |
 | EPIC-RWT — Real-World Validation | 1 | 14 | 🔄 Wave 1+2 complete | Full STLC pass — Wave 1 (32/32 ✅), Wave 2 AI+OPS (11/11 ✅), Vision+Desktop pending |
-| EPIC-POLISH — Platform Polish | 1 | 8 | ⬜ | Post-RWT assessment findings: onboarding, cost, guardrails, reach |
+| EPIC-POLISH — Platform Polish | 1 | 10 | ⬜ | Post-RWT findings: onboarding, cost, guardrails, reach, self-healing deps |
 | Phase 7 — Scale | 3 | 7 | ⬜ | SaaS product |
-| **Total** | **33+** | **197+** | | |
+| **Total** | **33+** | **199+** | | |
 
 **Active:** EPIC-RWT Wave 2 (Vision + Desktop pending Anthropic credits + VS Build Tools).
 **Next after RWT:** EPIC-POLISH Sprint 1 (POL-01 aiqa init + POL-02 DSL validator). Phase 7 blocked until full RWT sign-off.
