@@ -112,6 +112,11 @@ function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
 }
 
 function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
+  // ── Early validator — catch ${var} before any step parses it silently ─────────
+  const rawStr = JSON.stringify(raw);
+  if (/\$\{[^}]+\}/.test(rawStr))
+    throw new Error(`Step[${idx}]: found \${...} template syntax — AIQA uses {{ var }} (double curly braces). Replace all \${...} with {{ ... }}.`);
+
   // navigate
   if ("navigate" in raw && typeof raw.navigate === "string") {
     return { action: "navigate", target: raw.navigate };
@@ -218,6 +223,8 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   if ("store" in raw) {
     const s = raw.store as Record<string, unknown> | undefined;
     if (!s) throw new Error(`Step[${idx}] store: empty`);
+    if (s && "from" in s)
+      throw new Error(`Step[${idx}] store: "from" is not valid — use "selector" instead:\n  - store:\n      selector: ".my-element"\n      as: myVar`);
     if (typeof s.selector !== "string") throw new Error(`Step[${idx}] store: missing "selector"`);
     if (typeof s.as !== "string")       throw new Error(`Step[${idx}] store: missing "as"`);
     return {
@@ -232,6 +239,10 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   if ("if" in raw) {
     const c = raw.if as Record<string, unknown> | undefined;
     if (!c) throw new Error(`Step[${idx}] if: empty`);
+    if ("condition" in c)
+      throw new Error(`Step[${idx}] if: "condition" is not valid. Use variable + operator:\n  - if:\n      variable: "{{ myVar }}"\n      equals: "expected"\n      steps: [...]`);
+    if ("then" in c)
+      throw new Error(`Step[${idx}] if: "then/else" is not valid — use "steps". Else branches are not supported; use two separate if steps with inverted conditions.`);
     if (typeof c.variable !== "string") throw new Error(`Step[${idx}] if: missing "variable"`);
     if (!Array.isArray(c.steps))        throw new Error(`Step[${idx}] if: missing "steps" array`);
 
@@ -263,6 +274,8 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   if ("for_each" in raw) {
     const f = raw.for_each as Record<string, unknown> | undefined;
     if (!f) throw new Error(`Step[${idx}] for_each: empty`);
+    if (f && "items" in f)
+      throw new Error(`Step[${idx}] for_each: "items" is not valid — use "over" with a variable name:\n  variables:\n    myList: [1, 2, 3]\n  steps:\n    - for_each:\n        over: myList\n        as: item\n        steps: [...]`);
     if (typeof f.over !== "string") throw new Error(`Step[${idx}] for_each: missing "over"`);
     if (typeof f.as   !== "string") throw new Error(`Step[${idx}] for_each: missing "as"`);
     if (!Array.isArray(f.steps))    throw new Error(`Step[${idx}] for_each: missing "steps" array`);
@@ -499,6 +512,17 @@ function parseStep(raw: Record<string, unknown>, idx: number): StepAction {
   if ("desktop_close" in raw) {
     return { action: "desktop_close" };
   }
+
+  // ── DSL validator — catch remaining flat assertion syntax mistakes ──────────────
+
+  if ("assert_element_visible" in raw)
+    throw new Error(`Step[${idx}]: "assert_element_visible" is not a valid step. Use:\n  - assert:\n      visible: "${raw.assert_element_visible}"`);
+  if ("assert_element_not_visible" in raw)
+    throw new Error(`Step[${idx}]: "assert_element_not_visible" is not a valid step. Use:\n  - assert:\n      element_not_visible: "${raw.assert_element_not_visible}"`);
+  if ("assert_text_visible" in raw)
+    throw new Error(`Step[${idx}]: "assert_text_visible" is not a valid step. Use:\n  - assert:\n      text: "${raw.assert_text_visible}"`);
+  if ("assert_url_contains" in raw)
+    throw new Error(`Step[${idx}]: "assert_url_contains" is not a valid step. Use:\n  - assert:\n      url: "${raw.assert_url_contains}"`);
 
   // Keep this list in sync with HandlerRegistry registrations.
   const SUPPORTED = [

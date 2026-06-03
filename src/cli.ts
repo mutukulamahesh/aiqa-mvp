@@ -97,35 +97,129 @@ program
     const baseUrl    = opts.baseUrl ?? "https://example.com";
     const root       = path.resolve(process.cwd(), project);
     const testsDir   = path.join(root, "tests");
+    const configDir  = path.join(root, "config", "environments");
     const resultsDir = path.join(root, "results");
-    const screensDir = path.join(root, "screenshots");
+    const screensDir = path.join(root, "results", "screenshots");
 
-    [root, testsDir, resultsDir, screensDir].forEach(ensureDir);
+    [root, testsDir, configDir, resultsDir, screensDir].forEach(ensureDir);
 
-    const sampleYaml = [
+    // ── tests/smoke.yaml ────────────────────────────────────────────────────────
+    fs.writeFileSync(path.join(testsDir, "smoke.yaml"), [
       `test:`,
-      `  name: "Sample — Page Load"`,
+      `  name: "Smoke — page load"`,
       `  tags: [smoke]`,
       `  steps:`,
       `    - navigate: "${baseUrl}"`,
       `    - assert:`,
-      `        text: "Example Domain"`,
+      `        url: "${new URL(baseUrl).hostname}"`,
       ``,
-    ].join("\n");
+    ].join("\n"));
 
-    const samplePath = path.join(testsDir, "sample.yaml");
-    fs.writeFileSync(samplePath, sampleYaml);
+    // ── config/environments/dev.yaml ────────────────────────────────────────────
+    fs.writeFileSync(path.join(configDir, "dev.yaml"), [
+      `environment: dev`,
+      ``,
+      `urls:`,
+      `  base: "${baseUrl}"`,
+      `  api:  "${baseUrl}/api"`,
+      ``,
+      `timeouts:`,
+      `  action:     10000`,
+      `  navigation: 30000`,
+      `  api:        15000`,
+      ``,
+      `execution:`,
+      `  workers:  1`,
+      `  retries:  0`,
+      `  headless: false`,
+      ``,
+      `screenshots:`,
+      `  onFailure: true`,
+      `  dir:       "results/screenshots"`,
+      ``,
+      `results:`,
+      `  dir: "results"`,
+      ``,
+      `# LLM provider — set to mock for free local runs, or anthropic/openai/nvidia for real evaluation`,
+      `llm:`,
+      `  provider: mock`,
+      `  fallback: []`,
+      ``,
+      `# API allowlist — add your app's API base URL here`,
+      `api:`,
+      `  allowlist:`,
+      `    - "${baseUrl}"`,
+      `  denylist: []`,
+      ``,
+      `# Jira integration — fill in when connecting to a real project`,
+      `# jira:`,
+      `#   baseUrl:    "https://your-org.atlassian.net"`,
+      `#   projectKey: "PROJ"`,
+      `#   email:      "you@example.com"`,
+      `#   createDefectsOnFailure: false`,
+      ``,
+      `# RAG knowledge layer — enable after running: aiqa knowledge ingest`,
+      `knowledge:`,
+      `  enabled: false`,
+      `  indexPath: ".aiqa/knowledge"`,
+      `  topK: 5`,
+      `  chunker: naive`,
+      `  connectors: []`,
+      ``,
+    ].join("\n"));
 
-    console.log(`\n✅ Project created: ${root}`);
-    console.log(`   ${project}/tests/         ← put your YAML test files here`);
-    console.log(`   ${project}/results/        ← run results and HTML reports saved here`);
-    console.log(`   ${project}/screenshots/    ← failure screenshots saved here`);
-    console.log(`   ${project}/tests/sample.yaml  ← starter test`);
-    console.log(`\nNext steps:`);
-    console.log(`   aiqa explore ${baseUrl} --out ${project}`);
-    console.log(`   aiqa generate --out ${project} --per-page`);
-    console.log(`   aiqa run-all --out ${project} --headless`);
-    console.log();
+    // ── .env.example ─────────────────────────────────────────────────────────────
+    fs.writeFileSync(path.join(root, ".env.example"), [
+      `# AIQA environment variables — copy to .env and fill in your values`,
+      `# Never commit .env to version control`,
+      ``,
+      `# LLM provider API keys — uncomment the one you use`,
+      `# ANTHROPIC_API_KEY=sk-ant-...`,
+      `# OPENAI_API_KEY=sk-proj-...`,
+      `# NVIDIA_API_KEY=nvapi-...`,
+      `# GEMINI_API_KEY=...`,
+      ``,
+      `# Jira integration (optional — only needed for defect creation / story import)`,
+      `# JIRA_API_TOKEN=...`,
+      ``,
+      `# Portal authentication`,
+      `# AIQA_API_KEY=your-secret-key          # set a key to require Bearer auth on the API`,
+      `# AIQA_ALLOW_OPEN_MODE=true             # or allow unauthenticated access for local dev`,
+      ``,
+      `# Database testing (optional)`,
+      `# DB_URL=postgresql://user:pass@localhost:5432/mydb`,
+      `# DB_URL=sqlite://./data/test.db`,
+      ``,
+    ].join("\n"));
+
+    // ── .gitignore ────────────────────────────────────────────────────────────────
+    const gitignorePath = path.join(root, ".gitignore");
+    if (!fs.existsSync(gitignorePath)) {
+      fs.writeFileSync(gitignorePath, [
+        `node_modules/`,
+        `.env`,
+        `.aiqa/`,
+        `results/`,
+        `dist/`,
+        ``,
+      ].join("\n"));
+    }
+
+    console.log(`\n✅ Project scaffolded: ${root}`);
+    console.log(`\n   📁 Structure:`);
+    console.log(`   ${project}/`);
+    console.log(`   ├── tests/smoke.yaml              ← starter test`);
+    console.log(`   ├── config/environments/dev.yaml  ← environment config`);
+    console.log(`   ├── .env.example                  ← API key template (copy to .env)`);
+    console.log(`   ├── .gitignore`);
+    console.log(`   └── results/                      ← run output (gitignored)`);
+    console.log(`\n   ⚡ Quick start:`);
+    console.log(`   cd ${project}`);
+    console.log(`   cp .env.example .env              # add your API keys`);
+    console.log(`   aiqa run tests/smoke.yaml --env dev`);
+    console.log(`\n   🔍 Auto-generate tests:`);
+    console.log(`   aiqa explore ${baseUrl} --out .`);
+    console.log(`   aiqa run-all tests/ --env dev --headless`);
   });
 
 // ── demo ──────────────────────────────────────────────────────────────────────
