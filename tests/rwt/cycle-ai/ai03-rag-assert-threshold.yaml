@@ -1,0 +1,9 @@
+test:
+  name: "RWT-AI03: rag_assert — irrelevant query returns below min_chunks"
+  tags: [rwt, ai, rag]
+  steps:
+    - rag_assert:
+        query:      "playwright browser automation assertions"
+        min_chunks: 1
+        min_score:  0.2
+        store_as:   playwrightResult

@@ -89,7 +89,7 @@ export class JiraClient {
     fields: string[] = ["summary", "status", "priority", "issuetype", "description"],
   ): Promise<JiraSearchResult> {
     const qs = `jql=${encodeURIComponent(jql)}&fields=${fields.join(",")}&maxResults=50`;
-    return this.request<JiraSearchResult>("GET", `/rest/api/3/search?${qs}`);
+    return this.request<JiraSearchResult>("GET", `/rest/api/3/search/jql?${qs}`);
   }
 
   // Paginates through all results — use this instead of searchIssues when the
@@ -105,7 +105,7 @@ export class JiraClient {
 
     while (startAt < total) {
       const qs   = `jql=${encodeURIComponent(jql)}&fields=${fields.join(",")}&maxResults=${PAGE_SIZE}&startAt=${startAt}`;
-      const page = await this.request<JiraSearchResult>("GET", `/rest/api/3/search?${qs}`);
+      const page = await this.request<JiraSearchResult>("GET", `/rest/api/3/search/jql?${qs}`);
       allIssues.push(...page.issues);
       total    = page.total;
       startAt += page.issues.length;

@@ -1,0 +1,9 @@
+test:
+  name: "RWT-AI02: rag_assert — retrieves chunks for AIQA knowledge query"
+  tags: [rwt, ai, rag]
+  steps:
+    - rag_assert:
+        query:      "knowledge ingestion connectors"
+        min_chunks: 1
+        min_score:  0.3
+        store_as:   knowledgeResult

@@ -1,0 +1,9 @@
+test:
+  name: "RWT-AI06: knowledge readiness — index health via API"
+  tags: [rwt, ai, knowledge, ops]
+  steps:
+    - api:
+        method:        GET
+        url:           "http://localhost:7432/api/health"
+        assert_status: 200
+        store_as:      health

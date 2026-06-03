@@ -1,0 +1,9 @@
+test:
+  name: "RWT-OPS01: portal health endpoint returns 200 (no auth required)"
+  tags: [rwt, ops, portal]
+  steps:
+    - api:
+        method:        GET
+        url:           "http://localhost:7432/api/health"
+        assert_status: 200
+        store_as:      health

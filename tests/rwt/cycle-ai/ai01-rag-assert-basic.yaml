@@ -1,0 +1,9 @@
+test:
+  name: "RWT-AI01: rag_assert — retrieves chunks for test automation query"
+  tags: [rwt, ai, rag]
+  steps:
+    - rag_assert:
+        query:      "test automation DSL steps"
+        min_chunks: 1
+        min_score:  0.3
+        store_as:   ragResult
