@@ -607,11 +607,12 @@ program
   .option("--retain-runs <n>",      "Delete screenshots and allure artifacts older than last N runs (default: from config)")
   .option("--jira-defects",         "Auto-create Jira bug for every failed test (reads JIRA_API_TOKEN from env)")
   .option("--dry-run",              "List tests that would run without executing them")
+  .option("--show-cost",            "With --dry-run: estimate LLM token usage and API cost per step type")
   .option("--impact-only [base]",   "Only run tests impacted by git changes since <base> (default: origin/main). Requires a full clone (fetch-depth: 0 in CI).")
   .option("--junit <file>",         "Write JUnit XML report to <file> (for CI test result parsers)")
   .action(async (dir: string | undefined, opts: {
     headless?: boolean; slowMo?: string; out?: string; report?: string; results?: string; baseUrl?: string; workers?: string; tags?: string; circuitBreaker?: string;
-    allure?: string | boolean; slack?: boolean; alertWebhook?: string; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean;
+    allure?: string | boolean; slack?: boolean; alertWebhook?: string; email?: string; retainRuns?: string; jiraDefects?: boolean; dryRun?: boolean; showCost?: boolean;
     impactOnly?: string | boolean; junit?: string;
   }) => {
     const config       = cfg();
@@ -706,10 +707,14 @@ program
     }
 
     if (opts.dryRun) {
+      const { estimateCost, formatCostTable } = await import("./utils/CostEstimator");
+      const parsed: import("./dsl/types").TestDefinition[] = [];
+
       console.log(`\n🔍 AIQA Dry Run — ${files.length} test(s) would run:\n`);
       for (const f of files) {
         try {
           const def = parseTestFile(f);
+          parsed.push(def);
           const tags = def.tags?.length ? `  [${def.tags.join(", ")}]` : "";
           console.log(`   • ${def.name}${tags}`);
           console.log(`     ${f}`);
@@ -717,11 +722,20 @@ program
           console.log(`   ⚠️  ${path.basename(f)} — parse error`);
         }
       }
+
       console.log(`\n─────────────────────────────────────────`);
       console.log(`   Would run : ${files.length} test(s)`);
-      if (filterTags.length)          console.log(`   Tag filter    : [${filterTags.join(", ")}]`);
-      if (opts.impactOnly !== undefined) console.log(`   Impact filter : [${typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main"}]`);
-      if (outRoot)                    console.log(`   Out           : ${outRoot}`);
+      if (filterTags.length)             console.log(`   Tag filter    : [${filterTags.join(", ")}]`);
+      if (opts.impactOnly !== undefined)  console.log(`   Impact filter : [${typeof opts.impactOnly === "string" ? opts.impactOnly : "origin/main"}]`);
+      if (outRoot)                        console.log(`   Out           : ${outRoot}`);
+
+      if (opts.showCost) {
+        const provider = config.llm?.provider ?? "mock";
+        const est = estimateCost(parsed, provider);
+        console.log(`\n💰 Cost Estimate  [provider: ${est.provider}]`);
+        console.log(formatCostTable(est));
+      }
+
       console.log(`─────────────────────────────────────────\n`);
       process.exit(0);
     }

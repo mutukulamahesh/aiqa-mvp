@@ -1,4 +1,3 @@
-import * as crypto from "crypto";
 import { StepHandler } from "../execution/HandlerRegistry";
 import { StepAction } from "../dsl/types";
 import { ExecutionContext } from "../execution/ExecutionContext";
@@ -9,6 +8,10 @@ import { KnowledgeRetriever } from "../knowledge/KnowledgeRetriever";
 import { RetrievedChunk } from "../knowledge/types";
 import { wwrite, wlog } from "../execution/WorkerContext";
 import { scoreByCriteria, parsePassIf, applyOp, formatACContext } from "./judgeUtils";
+import { JudgeCacheStore, NoopJudgeCacheStore } from "../cache/JudgeCacheStore";
+import { getConfig } from "../config/ConfigLoader";
+
+type AnyJudgeCache = Pick<JudgeCacheStore, "cacheKey" | "get" | "set">;
 
 const MAX_VALUE_LENGTH = (() => {
   const n = parseInt(process.env.AIQA_JUDGE_MAX_LENGTH ?? "", 10);
@@ -20,15 +23,22 @@ const MAX_AC_CHUNKS = 3;
 export class JudgeHandler implements StepHandler {
   readonly handles = ["judge"];
 
-  private readonly resultCache = new Map<string, { score: number; reason: string }>();
+  private readonly runCache:     Map<string, { score: number; reason: string }>;
+  private readonly persistCache: AnyJudgeCache;
 
   constructor(
     private readonly llm:       LLMProvider,
     private readonly retriever?: KnowledgeRetriever,
-  ) {}
-
-  private cacheKey(value: string, prompt: string, acContext: string): string {
-    return crypto.createHash("sha256").update(`${value}\x00${prompt}\x00${acContext}`).digest("hex");
+    persistCache?: AnyJudgeCache,
+  ) {
+    this.runCache = new Map();
+    if (persistCache) {
+      this.persistCache = persistCache;
+    } else {
+      // Use noop when no config loaded (unit tests) — avoids bleeding real cached scores into stubs
+      const indexPath = (() => { try { return getConfig().knowledge.indexPath; } catch { return null; } })();
+      this.persistCache = indexPath ? new JudgeCacheStore(indexPath) : new NoopJudgeCacheStore();
+    }
   }
 
   async execute(step: StepAction, _adapter: AdapterActions, ctx: ExecutionContext): Promise<void> {
@@ -47,16 +57,22 @@ export class JudgeHandler implements StepHandler {
     if (this.retriever) acChunks = await this.retriever.retrieve(prompt, MAX_AC_CHUNKS);
     const acContext = acChunks.length > 0 ? formatACContext(acChunks) : "";
 
-    const key    = this.cacheKey(safeValue, safePrompt, acContext);
-    const cached = this.resultCache.get(key);
+    const key          = this.persistCache.cacheKey(safeValue, safePrompt, acContext);
+    const runHit       = this.runCache.get(key);
+    const persistHit   = runHit ? undefined : this.persistCache.get(key);
 
     let score:  number;
     let reason: string;
 
-    if (cached) {
+    if (runHit) {
       wwrite(`  ▶ judge      → cache hit (skipping LLM call)`);
-      score  = cached.score;
-      reason = cached.reason;
+      score  = runHit.score;
+      reason = runHit.reason;
+    } else if (persistHit) {
+      wwrite(`  ▶ judge      → cross-run cache hit (skipping LLM call)`);
+      score  = persistHit.score;
+      reason = persistHit.reason;
+      this.runCache.set(key, { score, reason });
     } else {
       const acLabel = acChunks.length > 0 ? ` + ${acChunks.length} AC chunk(s) from knowledge` : "";
       wwrite(`  ▶ judge      → evaluating via ${this.llm.name}${acLabel}`);
@@ -69,7 +85,8 @@ export class JudgeHandler implements StepHandler {
       }
 
       ({ score, reason } = await scoreByCriteria(this.llm, safeValue, safePrompt, acContext));
-      this.resultCache.set(key, { score, reason });
+      this.runCache.set(key, { score, reason });
+      this.persistCache.set(key, score, reason);
     }
 
     const { op, threshold } = parsePassIf(step.pass_if);
