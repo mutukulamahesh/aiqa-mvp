@@ -1,4 +1,4 @@
-import { Page }                           from "playwright";
+import type { Page }                      from "playwright";
 import { LLMProvider, createLLMProvider } from "../llm/LLMProvider";
 import { HealerCache }                    from "./HealerCache";
 import { contextHash, pageContextKey }    from "./contextKey";

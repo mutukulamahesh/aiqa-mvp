@@ -1399,7 +1399,8 @@ program
 program
   .command("dephealth")
   .description("Probe each external dependency adapter in isolation — catches breaking changes before a test run")
-  .action(async () => {
+  .option("--heal", "Pass failures to DepHealerAgent — diagnoses via LLM and attempts an auto-fix")
+  .action(async (opts: { heal?: boolean }) => {
     console.log(`\n🔬 AIQA Dep Health — adapter probes`);
     console.log(`─────────────────────────────────────────`);
 
@@ -1423,6 +1424,7 @@ program
     }
 
     let allOk = true;
+    const failures = new Map<string, string>();  // package → error message
 
     async function probe(
       name: string,
@@ -1437,6 +1439,7 @@ program
         const msg = err instanceof Error ? err.message.split("\n")[0] : String(err);
         console.log(`   ❌  ${name.padEnd(24)} ${msg}`);
         allOk = false;
+        failures.set(name, msg);
       }
     }
 
@@ -1522,8 +1525,46 @@ program
     console.log(`─────────────────────────────────────────`);
     if (allOk) {
       console.log(`   All adapters healthy.\n`);
+    } else if (!opts.heal) {
+      console.log(`   One or more adapters failed — see ❌ above.`);
+      console.log(`   Tip: re-run with --heal to attempt LLM-assisted auto-fix.\n`);
+      process.exit(1);
     } else {
-      console.log(`   One or more adapters failed — see ❌ above.\n`);
+      console.log(`   One or more adapters failed — invoking DepHealerAgent...\n`);
+
+      // Map package names to their primary adapter files (mirrors ADAPTER_OWNERS in audit test)
+      const ADAPTER_FILE: Record<string, string> = {
+        "@anthropic-ai/sdk": "src/llm/AnthropicLLMProvider.ts",
+        "openai":            "src/llm/OpenAILLMProvider.ts",
+        "sql.js":            "src/db/SqliteDBAdapter.ts",
+        "tesseract.js":      "src/vision/OcrEngine.ts",
+        "pngjs":             "src/vision/VisualRegression.ts",
+        "pixelmatch":        "src/vision/VisualRegression.ts",
+        "vectra":            "src/knowledge/VectorIndex.ts",
+        "@xenova/transformers": "src/knowledge/Embedder.ts",
+        "@nut-tree-fork/nut-js": "src/desktop/DesktopAdapter.ts",
+        "playwright":        "src/adapter/PlaywrightAdapter.ts",
+        "@playwright/test":  "src/adapter/PlaywrightAdapter.ts",
+      };
+
+      const { DepHealerAgent } = await import("./agents/DepHealerAgent");
+      const healer = new DepHealerAgent(process.cwd());
+
+      for (const [pkg, err] of failures) {
+        const adapterFile = ADAPTER_FILE[pkg];
+        if (!adapterFile) {
+          console.log(`   ⚠️  No adapter file mapped for "${pkg}" — skipping heal.`);
+          continue;
+        }
+        console.log(`   🔧  Healing ${pkg}...`);
+        const result = await healer.heal({ package: pkg, adapterFile, error: err });
+        const icon = result.status === "fixed" ? "✅" : result.status === "suggested" ? "💡" : "❌";
+        console.log(`   ${icon}  ${pkg}: ${result.status}`);
+        console.log(`       ${result.diagnosis}`);
+        if (result.status === "suggested") {
+          console.log(`\n   Suggested fix:\n${result.suggestion.split("\n").map(l => "   " + l).join("\n")}\n`);
+        }
+      }
       process.exit(1);
     }
   });
