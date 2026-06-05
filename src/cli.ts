@@ -1532,26 +1532,14 @@ program
     } else {
       console.log(`   One or more adapters failed — invoking DepHealerAgent...\n`);
 
-      // Map package names to their primary adapter files (mirrors ADAPTER_OWNERS in audit test)
-      const ADAPTER_FILE: Record<string, string> = {
-        "@anthropic-ai/sdk": "src/llm/AnthropicLLMProvider.ts",
-        "openai":            "src/llm/OpenAILLMProvider.ts",
-        "sql.js":            "src/db/SqliteDBAdapter.ts",
-        "tesseract.js":      "src/vision/OcrEngine.ts",
-        "pngjs":             "src/vision/VisualRegression.ts",
-        "pixelmatch":        "src/vision/VisualRegression.ts",
-        "vectra":            "src/knowledge/VectorIndex.ts",
-        "@xenova/transformers": "src/knowledge/Embedder.ts",
-        "@nut-tree-fork/nut-js": "src/desktop/DesktopAdapter.ts",
-        "playwright":        "src/adapter/PlaywrightAdapter.ts",
-        "@playwright/test":  "src/adapter/PlaywrightAdapter.ts",
-      };
+      // Adapter file map sourced from the shared registry — single source of truth
+      const { ADAPTER_REGISTRY } = await import("./config/adapterRegistry");
 
       const { DepHealerAgent } = await import("./agents/DepHealerAgent");
       const healer = new DepHealerAgent(process.cwd());
 
       for (const [pkg, err] of failures) {
-        const adapterFile = ADAPTER_FILE[pkg];
+        const adapterFile = ADAPTER_REGISTRY[pkg]?.primary;
         if (!adapterFile) {
           console.log(`   ⚠️  No adapter file mapped for "${pkg}" — skipping heal.`);
           continue;
