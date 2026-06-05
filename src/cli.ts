@@ -94,7 +94,20 @@ program
       }
     }
 
-    const baseUrl    = opts.baseUrl ?? "https://example.com";
+    const rawBaseUrl = opts.baseUrl ?? "https://example.com";
+
+    // M1 fix: validate URL before touching the filesystem
+    let baseUrl: string;
+    let baseHostname: string;
+    try {
+      const parsed = new URL(rawBaseUrl);
+      baseUrl      = rawBaseUrl;
+      baseHostname = parsed.hostname;
+    } catch {
+      console.error(`❌ Invalid --base-url "${rawBaseUrl}" — must be a full URL including protocol, e.g. https://myapp.com`);
+      process.exit(1);
+    }
+
     const root       = path.resolve(process.cwd(), project);
     const testsDir   = path.join(root, "tests");
     const configDir  = path.join(root, "config", "environments");
@@ -103,73 +116,86 @@ program
 
     [root, testsDir, configDir, resultsDir, screensDir].forEach(ensureDir);
 
-    // ── tests/smoke.yaml ────────────────────────────────────────────────────────
-    fs.writeFileSync(path.join(testsDir, "smoke.yaml"), [
-      `test:`,
-      `  name: "Smoke — page load"`,
-      `  tags: [smoke]`,
-      `  steps:`,
-      `    - navigate: "${baseUrl}"`,
-      `    - assert:`,
-      `        url: "${new URL(baseUrl).hostname}"`,
-      ``,
-    ].join("\n"));
+    // ── tests/smoke.yaml — M2: only write if not already present ────────────────
+    const smokePath = path.join(testsDir, "smoke.yaml");
+    if (!fs.existsSync(smokePath)) {
+      fs.writeFileSync(smokePath, [
+        `test:`,
+        `  name: "Smoke — page load"`,
+        `  tags: [smoke]`,
+        `  steps:`,
+        `    - navigate: "${baseUrl}"`,
+        `    - assert:`,
+        `        url: "${baseHostname}"`,
+        ``,
+      ].join("\n"));
+    }
 
-    // ── config/environments/dev.yaml ────────────────────────────────────────────
-    fs.writeFileSync(path.join(configDir, "dev.yaml"), [
-      `environment: dev`,
-      ``,
-      `urls:`,
-      `  base: "${baseUrl}"`,
-      `  api:  "${baseUrl}/api"`,
-      ``,
-      `timeouts:`,
-      `  action:     10000`,
-      `  navigation: 30000`,
-      `  api:        15000`,
-      ``,
-      `execution:`,
-      `  workers:  1`,
-      `  retries:  0`,
-      `  headless: false`,
-      ``,
-      `screenshots:`,
-      `  onFailure: true`,
-      `  dir:       "results/screenshots"`,
-      ``,
-      `results:`,
-      `  dir: "results"`,
-      ``,
-      `# LLM provider — set to mock for free local runs, or anthropic/openai/nvidia for real evaluation`,
-      `llm:`,
-      `  provider: mock`,
-      `  fallback: []`,
-      ``,
-      `# API allowlist — add your app's API base URL here`,
-      `api:`,
-      `  allowlist:`,
-      `    - "${baseUrl}"`,
-      `  denylist: []`,
-      ``,
-      `# Jira integration — fill in when connecting to a real project`,
-      `# jira:`,
-      `#   baseUrl:    "https://your-org.atlassian.net"`,
-      `#   projectKey: "PROJ"`,
-      `#   email:      "you@example.com"`,
-      `#   createDefectsOnFailure: false`,
-      ``,
-      `# RAG knowledge layer — enable after running: aiqa knowledge ingest`,
-      `knowledge:`,
-      `  enabled: false`,
-      `  indexPath: ".aiqa/knowledge"`,
-      `  topK: 5`,
-      `  chunker: naive`,
-      `  connectors: []`,
-      ``,
-    ].join("\n"));
+    // ── config/environments/dev.yaml — M2 + C1: add all required fields ─────────
+    const devYamlPath = path.join(configDir, "dev.yaml");
+    if (!fs.existsSync(devYamlPath)) {
+      fs.writeFileSync(devYamlPath, [
+        `environment: dev`,
+        ``,
+        `urls:`,
+        `  base: "${baseUrl}"`,
+        `  api:  "${baseUrl}/api"`,
+        ``,
+        `timeouts:`,
+        `  action:     10000`,
+        `  navigation: 30000`,
+        `  api:        15000`,
+        ``,
+        `execution:`,
+        `  workers:        1`,
+        `  retries:        0`,
+        `  headless:       false`,
+        `  maxPages:       20`,
+        `  maxDepth:       3`,
+        `  circuitBreaker: 5`,
+        ``,
+        `screenshots:`,
+        `  onFailure: true`,
+        `  dir:       "results/screenshots"`,
+        ``,
+        `results:`,
+        `  dir: "results"`,
+        ``,
+        `features:`,
+        `  llmEnabled: false`,
+        ``,
+        `# LLM provider — set to mock for free local runs, or anthropic/openai/nvidia for real evaluation`,
+        `llm:`,
+        `  provider: mock`,
+        `  fallback: []`,
+        ``,
+        `# API allowlist — add your app's API base URL here`,
+        `api:`,
+        `  allowlist:`,
+        `    - "${baseUrl}"`,
+        `  denylist: []`,
+        ``,
+        `# Jira integration — fill in when connecting to a real project`,
+        `# jira:`,
+        `#   baseUrl:    "https://your-org.atlassian.net"`,
+        `#   projectKey: "PROJ"`,
+        `#   email:      "you@example.com"`,
+        `#   createDefectsOnFailure: false`,
+        ``,
+        `# RAG knowledge layer — enable after running: aiqa knowledge ingest`,
+        `knowledge:`,
+        `  enabled: false`,
+        `  indexPath: ".aiqa/knowledge"`,
+        `  topK: 5`,
+        `  chunker: naive`,
+        `  connectors: []`,
+        ``,
+      ].join("\n"));
+    }
 
-    // ── .env.example ─────────────────────────────────────────────────────────────
-    fs.writeFileSync(path.join(root, ".env.example"), [
+    // ── .env.example — M2: only write if not already present ────────────────────
+    const envExamplePath = path.join(root, ".env.example");
+    if (!fs.existsSync(envExamplePath)) fs.writeFileSync(envExamplePath, [
       `# AIQA environment variables — copy to .env and fill in your values`,
       `# Never commit .env to version control`,
       ``,
