@@ -1,9 +1,6 @@
 import * as childProcess from "child_process";
 import type { ChildProcess } from "child_process";
 
-// Windows-only (EPIC-15 scope). macOS requires Accessibility permissions
-// granted manually and is not supported in this release.
-
 export interface IDesktopAdapter {
   launch(appPath: string): Promise<void>;
   waitForWindow(titlePattern: string | RegExp, timeout?: number): Promise<void>;
@@ -16,9 +13,9 @@ export interface IDesktopAdapter {
   close(): Promise<void>;
 }
 
-// Win32 API call via PowerShell — reads foreground window title without any
-// third-party dependency. Spawned with array args to avoid shell-escaping issues.
-const GET_TITLE_SCRIPT = [
+// ── Platform-specific foreground window title helpers ─────────────────────────
+
+const WIN32_TITLE_SCRIPT = [
   "Add-Type @'",
   "using System.Runtime.InteropServices;",
   "public class WinTitle {",
@@ -31,6 +28,38 @@ const GET_TITLE_SCRIPT = [
   "[WinTitle]::GetWindowText($h, $s, 512) | Out-Null",
   "$s.ToString()",
 ].join("; ");
+
+function spawnAndCapture(cmd: string, args: string[]): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const ps = childProcess.spawn(cmd, args, { timeout: 3000 });
+    let out = "";
+    ps.stdout.on("data", (d: Buffer) => { out += d.toString(); });
+    ps.on("close", code => {
+      if (code !== 0) { reject(new Error(`[DesktopAdapter] getWindowTitle failed (exit ${code})`)); return; }
+      resolve(out.trim());
+    });
+    ps.on("error", reject);
+  });
+}
+
+function getWindowTitleForPlatform(): Promise<string> {
+  switch (process.platform) {
+    case "win32":
+      return spawnAndCapture("powershell", ["-NonInteractive", "-Command", WIN32_TITLE_SCRIPT]);
+    case "darwin":
+      // Requires Accessibility permissions granted in System Settings → Privacy & Security
+      return spawnAndCapture("osascript", [
+        "-e", "tell application \"System Events\" to get name of first process whose frontmost is true",
+      ]);
+    case "linux":
+      // Requires xdotool: apt install xdotool / dnf install xdotool
+      return spawnAndCapture("xdotool", ["getactivewindow", "getwindowname"]);
+    default:
+      return Promise.reject(
+        new Error(`[DesktopAdapter] getWindowTitle is not supported on platform: ${process.platform}`)
+      );
+  }
+}
 
 export class DesktopAdapter implements IDesktopAdapter {
   private proc:        ChildProcess | null = null;
@@ -127,20 +156,7 @@ export class DesktopAdapter implements IDesktopAdapter {
   }
 
   async getWindowTitle(): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
-      const ps = childProcess.spawn(
-        "powershell",
-        ["-NonInteractive", "-Command", GET_TITLE_SCRIPT],
-        { timeout: 3000 },
-      );
-      let out = "";
-      ps.stdout.on("data", (d: Buffer) => { out += d.toString(); });
-      ps.on("close", code => {
-        if (code !== 0) { reject(new Error(`[DesktopAdapter] getWindowTitle failed (exit ${code})`)); return; }
-        resolve(out.trim());
-      });
-      ps.on("error", reject);
-    });
+    return getWindowTitleForPlatform();
   }
 
   async close(): Promise<void> {

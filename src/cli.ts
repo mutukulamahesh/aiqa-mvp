@@ -1394,6 +1394,139 @@ program
     }
   });
 
+// ── dephealth ─────────────────────────────────────────────────────────────────
+
+program
+  .command("dephealth")
+  .description("Probe each external dependency adapter in isolation — catches breaking changes before a test run")
+  .action(async () => {
+    console.log(`\n🔬 AIQA Dep Health — adapter probes`);
+    console.log(`─────────────────────────────────────────`);
+
+    // Reads package version without touching the exports field —
+    // walks up from the resolved main entry to find the package.json.
+    function pkgVersion(name: string): string {
+      try {
+        let dir = path.dirname(require.resolve(name));
+        while (true) {
+          const pkgPath = path.join(dir, "package.json");
+          if (fs.existsSync(pkgPath)) {
+            const raw = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { name?: string; version?: string };
+            if (raw.name === name) return raw.version ?? "installed";
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) break;
+          dir = parent;
+        }
+      } catch { /* not installed */ }
+      return "installed";
+    }
+
+    let allOk = true;
+
+    async function probe(
+      name: string,
+      fn: () => Promise<string>,
+    ): Promise<void> {
+      const t0 = Date.now();
+      try {
+        const detail = await fn();
+        const ms = Date.now() - t0;
+        console.log(`   ✅  ${name.padEnd(24)} ${detail}  (${ms}ms)`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.split("\n")[0] : String(err);
+        console.log(`   ❌  ${name.padEnd(24)} ${msg}`);
+        allOk = false;
+      }
+    }
+
+    async function probeOptional(
+      name: string,
+      fn: () => Promise<string>,
+    ): Promise<void> {
+      const t0 = Date.now();
+      try {
+        const detail = await fn();
+        const ms = Date.now() - t0;
+        console.log(`   ✅  ${name.padEnd(24)} ${detail}  (${ms}ms)`);
+      } catch {
+        console.log(`   ⚠️   ${name.padEnd(24)} not installed (optional)`);
+      }
+    }
+
+    // ── Core adapters ────────────────────────────────────────────────────────
+
+    await probe("playwright", async () => {
+      const { chromium } = require("@playwright/test") as typeof import("@playwright/test");
+      const browser = await chromium.launch({ headless: true });
+      await browser.close();
+      return `v${pkgVersion("@playwright/test")} — launch + close: ok`;
+    });
+
+    await probe("@anthropic-ai/sdk", async () => {
+      require("@anthropic-ai/sdk");
+      return `v${pkgVersion("@anthropic-ai/sdk")} — import: ok`;
+    });
+
+    await probe("openai", async () => {
+      require("openai");
+      return `v${pkgVersion("openai")} — import: ok`;
+    });
+
+    await probe("sql.js", async () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const initSqlJs = require("sql.js") as () => Promise<{ Database: new () => { run: (s: string) => void; close: () => void } }>;
+      const SQL = await initSqlJs();
+      const db  = new SQL.Database();
+      db.run("SELECT 1");
+      db.close();
+      return `v${pkgVersion("sql.js")} — WASM load + SELECT 1: ok`;
+    });
+
+    await probe("tesseract.js", async () => {
+      require("tesseract.js");
+      return `v${pkgVersion("tesseract.js")} — import: ok`;
+    });
+
+    await probe("pngjs", async () => {
+      const { PNG } = require("pngjs") as typeof import("pngjs");
+      new PNG({ width: 1, height: 1 });
+      return `v${pkgVersion("pngjs")} — import: ok`;
+    });
+
+    // ── Optional adapters ────────────────────────────────────────────────────
+
+    await probeOptional("@nut-tree-fork/nut-js", async () => {
+      require("@nut-tree-fork/nut-js");
+      return `v${pkgVersion("@nut-tree-fork/nut-js")} — import: ok`;
+    });
+
+    // ── External connectivity (only when configured) ──────────────────────────
+
+    let cfg: EnvConfig | null = null;
+    try { cfg = loadConfig(process.env.AIQA_ENV ?? "dev"); } catch { /* config not found — skip connectivity probes */ }
+
+    if (cfg?.jira?.baseUrl) {
+      await probe("Jira connectivity", async () => {
+        const url  = `${cfg!.jira!.baseUrl}/rest/api/3/myself`;
+        const token = process.env.JIRA_API_TOKEN ?? "";
+        const email = cfg!.jira!.email ?? "";
+        const auth  = Buffer.from(`${email}:${token}`).toString("base64");
+        const res   = await fetch(url, { headers: { Authorization: `Basic ${auth}`, Accept: "application/json" } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return `GET /rest/api/3/myself → ${res.status}`;
+      });
+    }
+
+    console.log(`─────────────────────────────────────────`);
+    if (allOk) {
+      console.log(`   All adapters healthy.\n`);
+    } else {
+      console.log(`   One or more adapters failed — see ❌ above.\n`);
+      process.exit(1);
+    }
+  });
+
 // ── uptime ────────────────────────────────────────────────────────────────────
 
 program
