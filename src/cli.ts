@@ -1412,14 +1412,14 @@ program
           const pkgPath = path.join(dir, "package.json");
           if (fs.existsSync(pkgPath)) {
             const raw = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { name?: string; version?: string };
-            if (raw.name === name) return raw.version ?? "installed";
+            if (raw.name === name) return raw.version ?? "(unknown)";
           }
           const parent = path.dirname(dir);
           if (parent === dir) break;
           dir = parent;
         }
       } catch { /* not installed */ }
-      return "installed";
+      return "(unknown)";
     }
 
     let allOk = true;
@@ -1449,8 +1449,9 @@ program
         const detail = await fn();
         const ms = Date.now() - t0;
         console.log(`   ✅  ${name.padEnd(24)} ${detail}  (${ms}ms)`);
-      } catch {
-        console.log(`   ⚠️   ${name.padEnd(24)} not installed (optional)`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message.split("\n")[0] : String(err);
+        console.log(`   ⚠️   ${name.padEnd(24)} not installed or failed to load: ${msg}`);
       }
     }
 

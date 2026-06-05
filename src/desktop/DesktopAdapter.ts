@@ -47,9 +47,18 @@ function getWindowTitleForPlatform(): Promise<string> {
     case "win32":
       return spawnAndCapture("powershell", ["-NonInteractive", "-Command", WIN32_TITLE_SCRIPT]);
     case "darwin":
-      // Requires Accessibility permissions granted in System Settings → Privacy & Security
+      // Requires Accessibility permissions granted in System Settings → Privacy & Security.
+      // Prefers the front window title; falls back to process name for apps without a named window.
       return spawnAndCapture("osascript", [
-        "-e", "tell application \"System Events\" to get name of first process whose frontmost is true",
+        "-e",
+        "tell application \"System Events\"\n" +
+        "  set p to first process whose frontmost is true\n" +
+        "  try\n" +
+        "    return name of front window of p\n" +
+        "  on error\n" +
+        "    return name of p\n" +
+        "  end try\n" +
+        "end tell",
       ]);
     case "linux":
       // Requires xdotool: apt install xdotool / dnf install xdotool
