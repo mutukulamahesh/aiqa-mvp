@@ -99,6 +99,8 @@ function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
     ? (Array.isArray(rawSource) ? rawSource : [rawSource]).map(s => String(s).trim()).filter(Boolean)
     : [];
 
+  warnContextIssues(steps, raw.test.name);
+
   return {
     name:      raw.test.name,
     ...(raw.test.mode === "desktop" ? { mode: "desktop" as const } : {}),
@@ -109,6 +111,38 @@ function buildDefinition(raw: RawTestFile, location: string): TestDefinition {
     ...(source.length          ? { source }          : {}),
     steps,
   };
+}
+
+function warnContextIssues(steps: StepAction[], testName: string, hasPage = false): boolean {
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (step.action === "navigate") { hasPage = true; continue; }
+
+    if (!hasPage) {
+      if (step.action === "assert") {
+        const kind = (step as { kind: string }).kind;
+        if (kind === "text" || kind === "visible" || kind === "element_not_visible") {
+          process.stderr.write(
+            `  ⚠️  [${testName}] Step ${i + 1}: assert "${kind}" with no prior navigate — did you forget a navigate: step?\n`
+          );
+        }
+      }
+      if (step.action === "store") {
+        process.stderr.write(
+          `  ⚠️  [${testName}] Step ${i + 1}: store: with no prior navigate — did you forget a navigate: step?\n`
+        );
+      }
+    }
+
+    // Recurse into branching steps — page state can propagate through them
+    if (step.action === "if" && "steps" in step) {
+      hasPage = warnContextIssues((step as { steps: StepAction[] }).steps, testName, hasPage);
+    }
+    if (step.action === "for_each" && "steps" in step) {
+      warnContextIssues((step as { steps: StepAction[] }).steps, testName, hasPage);
+    }
+  }
+  return hasPage;
 }
 
 function parseStep(raw: Record<string, unknown>, idx: number): StepAction {

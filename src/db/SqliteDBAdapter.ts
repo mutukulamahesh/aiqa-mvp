@@ -2,6 +2,20 @@ import * as fs   from "fs";
 import * as path from "path";
 import { DBAdapter, QueryResult } from "./DBAdapter";
 
+// Module-level singleton — WASM loads once per process, shared across all SqliteDBAdapter instances.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _sqlJsPromise: Promise<any> | null = null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSqlJs(): Promise<any> {
+  if (!_sqlJsPromise) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const initSqlJs = require("sql.js") as (opts?: unknown) => Promise<unknown>;
+    _sqlJsPromise = initSqlJs();
+  }
+  return _sqlJsPromise;
+}
+
 export class SqliteDBAdapter implements DBAdapter {
   readonly name = "sqlite";
 
@@ -16,9 +30,7 @@ export class SqliteDBAdapter implements DBAdapter {
   }
 
   private async _init(source: string): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const initSqlJs = require("sql.js") as (opts?: unknown) => Promise<{ Database: new (data?: Uint8Array) => unknown }>;
-    const SQL = await initSqlJs();
+    const SQL = await getSqlJs();
 
     if (this.filePath && fs.existsSync(this.filePath)) {
       const buf = fs.readFileSync(this.filePath);
