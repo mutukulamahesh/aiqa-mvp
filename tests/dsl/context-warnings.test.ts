@@ -72,4 +72,15 @@ describe("DSL context warnings (POL-05)", () => {
     parseTestDefinition(yaml(`    - db:\n        query: "SELECT 1"`));
     expect(stderrLines.filter(l => l.includes("⚠️"))).toHaveLength(0);
   });
+
+  // ── if: propagation — intentionally optimistic ────────────────────────────────
+  // navigate inside an if: branch propagates page state to outer steps.
+  // This is optimistic: reduces false positives even when the condition may be false.
+
+  test("no warning: navigate inside if branch suppresses subsequent assert warning", () => {
+    parseTestDefinition(yaml(
+      `    - if:\n        variable: "{{ x }}"\n        equals: "y"\n        steps:\n          - navigate: "https://example.com"\n    - assert:\n        visible: "#btn"`
+    ));
+    expect(stderrLines.filter(l => l.includes("⚠️"))).toHaveLength(0);
+  });
 });
