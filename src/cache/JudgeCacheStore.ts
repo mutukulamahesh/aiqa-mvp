@@ -2,6 +2,13 @@ import * as fs   from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 
+/** Pure SHA-256 hash — no I/O. Shared by JudgeCacheStore and NoopJudgeCacheStore. */
+export function computeJudgeCacheKey(value: string, prompt: string, acContext: string): string {
+  return crypto.createHash("sha256")
+    .update(`${value}\x00${prompt}\x00${acContext}`)
+    .digest("hex");
+}
+
 interface CacheEntry {
   score:     number;
   reason:    string;
@@ -28,9 +35,7 @@ export class JudgeCacheStore {
   }
 
   cacheKey(value: string, prompt: string, acContext: string): string {
-    return crypto.createHash("sha256")
-      .update(`${value}\x00${prompt}\x00${acContext}`)
-      .digest("hex");
+    return computeJudgeCacheKey(value, prompt, acContext);
   }
 
   get(key: string): { score: number; reason: string } | undefined {
@@ -83,10 +88,11 @@ export class JudgeCacheStore {
   get size(): number { return this.entries.size; }
 }
 
-/** No-op cache — used in unit tests and when AIQA_JUDGE_CACHE_DISABLED=true. */
+/** No-op cache — used in unit tests and when config is not loaded.
+ *  cacheKey delegates to the module-level pure function — no filesystem I/O. */
 export class NoopJudgeCacheStore {
   cacheKey(value: string, prompt: string, acContext: string): string {
-    return new JudgeCacheStore().cacheKey(value, prompt, acContext);
+    return computeJudgeCacheKey(value, prompt, acContext);
   }
   get(_key: string): undefined { return undefined; }
   set(_key: string, _score: number, _reason: string): void { /* no-op */ }

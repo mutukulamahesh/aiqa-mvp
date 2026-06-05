@@ -732,6 +732,10 @@ program
       process.exit(1);
     }
 
+    if (opts.showCost && !opts.dryRun) {
+      console.warn(`  ⚠️  --show-cost has no effect without --dry-run — add --dry-run to see the cost estimate.`);
+    }
+
     if (opts.dryRun) {
       const { estimateCost, formatCostTable } = await import("./utils/CostEstimator");
       const parsed: import("./dsl/types").TestDefinition[] = [];

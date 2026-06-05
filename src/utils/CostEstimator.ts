@@ -19,7 +19,7 @@ export interface CostEstimate {
 const TOKEN_EST: Record<string, number> = {
   judge:            600,   // ~350 input (system+value+prompt) + ~100 output
   llm_eval:        1400,   // ~500 target call + ~600 judge call + ~300 output
-  llm_consistency: 1500,   // 3 runs × ~500 tokens (scaled by runs field)
+  llm_consistency: 1500,   // ~1500 tokens per run (prompt + prior context); multiplied by runs at call time
   vision_assert:   2000,   // ~1500 image tokens + ~500 prompt/output
 };
 
